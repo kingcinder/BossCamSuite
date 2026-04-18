@@ -7,7 +7,6 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Windows;
-using System.Windows.Controls;
 using BossCam.Contracts;
 
 namespace BossCam.Desktop;
@@ -16,20 +15,26 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 {
     private static readonly JsonSerializerOptions SerializerOptions = CreateSerializerOptions();
     private readonly HttpClient _httpClient = new() { BaseAddress = new Uri("http://127.0.0.1:5317") };
+    private readonly Dictionary<string, TypedFieldRow> _fieldByKey = new(StringComparer.OrdinalIgnoreCase);
 
     private DeviceIdentity? _selectedDevice;
     private string _diagnosticsText = "Load store to begin.";
     private string _healthBadgeText = "Health: unknown";
+    private string _capabilityBadgeText = "Capabilities: unknown";
     private string _transcriptPreview = string.Empty;
     private ProbeStageMode _selectedProbeMode = ProbeStageMode.SafeReadOnly;
     private TypedFieldRow? _selectedTypedField;
+    private string _videoEditorNotice = "Video editor follows endpoint-aware parser mappings. Unsupported fields remain disabled.";
+    private string _networkRecoveryHint = "Recovery hint: if IP/port changes, update control URL to the new endpoint and rerun probe.";
+    private string _maintenanceState = "No maintenance action executed.";
+    private string _passwordChangeUsername = string.Empty;
+    private string _passwordChangeValue = string.Empty;
+    private string _wirelessApPsk = string.Empty;
 
     public ObservableCollection<DeviceIdentity> Devices { get; } = [];
-    public ObservableCollection<TypedFieldRow> VideoFields { get; } = [];
-    public ObservableCollection<TypedFieldRow> NetworkFields { get; } = [];
-    public ObservableCollection<TypedFieldRow> UserFields { get; } = [];
     public ObservableCollection<EndpointValidationResult> ValidationMatrix { get; } = [];
     public ObservableCollection<ProbeStageMode> ProbeModes { get; } = new(Enum.GetValues<ProbeStageMode>());
+    public ObservableCollection<string> UserList { get; } = [];
 
     public DeviceIdentity? SelectedDevice
     {
@@ -96,6 +101,19 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
     }
 
+    public string CapabilityBadgeText
+    {
+        get => _capabilityBadgeText;
+        set
+        {
+            if (_capabilityBadgeText != value)
+            {
+                _capabilityBadgeText = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
     public string TranscriptPreview
     {
         get => _transcriptPreview;
@@ -108,6 +126,119 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             }
         }
     }
+
+    public string VideoEditorNotice
+    {
+        get => _videoEditorNotice;
+        set
+        {
+            if (_videoEditorNotice != value)
+            {
+                _videoEditorNotice = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public string NetworkRecoveryHint
+    {
+        get => _networkRecoveryHint;
+        set
+        {
+            if (_networkRecoveryHint != value)
+            {
+                _networkRecoveryHint = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public string MaintenanceState
+    {
+        get => _maintenanceState;
+        set
+        {
+            if (_maintenanceState != value)
+            {
+                _maintenanceState = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public string PasswordChangeUsername
+    {
+        get => _passwordChangeUsername;
+        set
+        {
+            if (_passwordChangeUsername != value)
+            {
+                _passwordChangeUsername = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    // Video/image typed bindings
+    public string VideoCodec { get => GetValue("codec"); set => SetValue("codec", value); }
+    public string VideoProfile { get => GetValue("profile"); set => SetValue("profile", value); }
+    public string VideoDayNight { get => GetValue("dayNight"); set => SetValue("dayNight", value); }
+    public string VideoWdr { get => GetValue("wdr"); set => SetValue("wdr", value); }
+    public string VideoIrCut { get => GetValue("irCut"); set => SetValue("irCut", value); }
+    public string VideoBitrate { get => GetValue("bitrate"); set => SetValue("bitrate", value); }
+    public double VideoBitrateSlider
+    {
+        get => ParseDouble(VideoBitrate, 512);
+        set
+        {
+            VideoBitrate = ((int)value).ToString();
+            OnPropertyChanged();
+        }
+    }
+    public string VideoFrameRate { get => GetValue("frameRate"); set => SetValue("frameRate", value); }
+    public string ImageBrightness { get => GetValue("brightness"); set => SetValue("brightness", value); }
+    public double ImageBrightnessSlider
+    {
+        get => ParseDouble(ImageBrightness, 50);
+        set
+        {
+            ImageBrightness = ((int)value).ToString();
+            OnPropertyChanged();
+        }
+    }
+    public string ImageContrast { get => GetValue("contrast"); set => SetValue("contrast", value); }
+    public string ImageSaturation { get => GetValue("saturation"); set => SetValue("saturation", value); }
+    public string ImageHue { get => GetValue("hue"); set => SetValue("hue", value); }
+    public string ImageSharpness { get => GetValue("sharpness"); set => SetValue("sharpness", value); }
+
+    // Network/wireless typed bindings
+    public string NetworkIp { get => GetValue("ip"); set => SetValue("ip", value); }
+    public string NetworkNetmask { get => GetValue("netmask"); set => SetValue("netmask", value); }
+    public string NetworkGateway { get => GetValue("gateway"); set => SetValue("gateway", value); }
+    public string NetworkDns { get => GetValue("dns"); set => SetValue("dns", value); }
+    public string NetworkPort { get => GetValue("ports"); set => SetValue("ports", value); }
+    public string WirelessApSsid { get => GetValue("apSsid"); set => SetValue("apSsid", value); }
+    public string WirelessApChannel { get => GetValue("apChannel"); set => SetValue("apChannel", value); }
+
+    // state labels
+    public string VideoCodecState => FieldState("codec");
+    public string VideoProfileState => FieldState("profile");
+    public string NetworkIpState => FieldState("ip");
+    public string WirelessApPskState => FieldState("apPsk");
+
+    // enable flags capability-driven
+    public bool CanEditVideoCodec => CanEdit("codec");
+    public bool CanEditVideoProfile => CanEdit("profile");
+    public bool CanEditVideoDayNight => CanEdit("dayNight");
+    public bool CanEditVideoWdr => CanEdit("wdr");
+    public bool CanEditVideoIrCut => CanEdit("irCut");
+    public bool CanEditNetworkIp => CanEdit("ip");
+    public bool CanEditNetworkNetmask => CanEdit("netmask");
+    public bool CanEditNetworkGateway => CanEdit("gateway");
+    public bool CanEditNetworkDns => CanEdit("dns");
+    public bool CanEditNetworkPort => CanEdit("ports");
+    public bool CanEditWirelessApSsid => CanEdit("apSsid");
+    public bool CanEditWirelessApChannel => CanEdit("apChannel");
 
     public MainWindow()
     {
@@ -124,9 +255,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private async void ProbeKnownIps_Click(object sender, RoutedEventArgs e) => await RunAsync(ProbeKnownIpsAsync);
     private async void LoadSessions_Click(object sender, RoutedEventArgs e) => await RunAsync(LoadSessionsAsync);
     private async void LoadTranscripts_Click(object sender, RoutedEventArgs e) => await RunAsync(LoadTranscriptsAsync);
-    private async void ApplyValidated_Click(object sender, RoutedEventArgs e) => await RunAsync(() => ApplyFieldAsync(expertOverride: false));
-    private async void ApplyExpert_Click(object sender, RoutedEventArgs e) => await RunAsync(() => ApplyFieldAsync(expertOverride: true));
+    private async void ApplyValidated_Click(object sender, RoutedEventArgs e) => await RunAsync(() => ApplyPendingEditsAsync(expertOverride: false));
+    private async void ApplyExpert_Click(object sender, RoutedEventArgs e) => await RunAsync(() => ApplyPendingEditsAsync(expertOverride: true));
     private async void VerifyPersistence_Click(object sender, RoutedEventArgs e) => await RunAsync(VerifyPersistenceAsync);
+    private async void RebootCamera_Click(object sender, RoutedEventArgs e) => await RunAsync(() => ExecuteMaintenanceAsync("Reboot"));
+    private async void FactoryDefault_Click(object sender, RoutedEventArgs e) => await RunAsync(() => ExecuteMaintenanceAsync("FactoryReset"));
+    private async void ApplyPasswordChange_Click(object sender, RoutedEventArgs e) => await RunAsync(ApplyPasswordChangeAsync);
 
     private async Task RunAsync(Func<Task> action)
     {
@@ -212,22 +346,39 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             return;
         }
 
+        _fieldByKey.Clear();
         var groups = await GetAsync<List<TypedSettingGroupSnapshot>>($"/api/devices/{SelectedDevice.Id}/settings/typed") ?? [];
-        var fields = groups.SelectMany(static group => group.Fields).ToList();
-
-        ReplaceCollection(VideoFields, fields.Where(field => field.GroupKind == TypedSettingGroupKind.VideoImage).Select(ToRow));
-        ReplaceCollection(NetworkFields, fields.Where(field => field.GroupKind == TypedSettingGroupKind.NetworkWireless).Select(ToRow));
-        ReplaceCollection(UserFields, fields.Where(field => field.GroupKind == TypedSettingGroupKind.UsersMaintenance).Select(ToRow));
-
-        var proven = fields.Count(field => field.ReadVerified && field.WriteVerified);
-        var inferred = fields.Count(field => field.ReadVerified && !field.WriteVerified);
-        var unverified = fields.Count - proven - inferred;
-        HealthBadgeText = $"Health: proven={proven} inferred={inferred} unverified={unverified}";
-
-        if (DiagnosticsText.Length < 10 || DiagnosticsText.Contains("Select a device", StringComparison.OrdinalIgnoreCase))
+        foreach (var field in groups.SelectMany(static group => group.Fields))
         {
-            DiagnosticsText = JsonSerializer.Serialize(groups, SerializerOptions);
+            _fieldByKey[field.FieldKey] = TypedFieldRow.FromField(field);
         }
+
+        var proven = _fieldByKey.Values.Count(field => field.ReadVerified && field.WriteVerified);
+        var inferred = _fieldByKey.Values.Count(field => field.ReadVerified && !field.WriteVerified);
+        var unverified = _fieldByKey.Count - proven - inferred;
+        HealthBadgeText = $"Health: proven={proven} inferred={inferred} unverified={unverified}";
+        await LoadCapabilityProfileAsync(groups.Select(static group => group.FirmwareFingerprint).FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value)));
+
+        PopulateUserList();
+        NotifyAllEditorProperties();
+    }
+
+    private async Task LoadCapabilityProfileAsync(string? firmwareFingerprint)
+    {
+        var profiles = await GetAsync<List<FirmwareCapabilityProfile>>("/api/firmware/capabilities") ?? [];
+        var profile = string.IsNullOrWhiteSpace(firmwareFingerprint)
+            ? profiles.FirstOrDefault()
+            : profiles.FirstOrDefault(item => item.FirmwareFingerprint.Equals(firmwareFingerprint, StringComparison.OrdinalIgnoreCase));
+        if (profile is null)
+        {
+            CapabilityBadgeText = "Capabilities: no firmware profile";
+            return;
+        }
+
+        CapabilityBadgeText = $"Capabilities: {profile.FirmwareFingerprint} groups={profile.SupportedSettingGroups.Count} writable={profile.VerifiedWritableFields.Count}";
+        NetworkRecoveryHint = profile.DangerousFields.Any(field => field.Equals("ip", StringComparison.OrdinalIgnoreCase))
+            ? "Recovery hint: IP changes are dangerous; if control is lost, reconnect using last known and new candidate URL."
+            : "Recovery hint: rerun probe after network writes.";
     }
 
     private async Task LoadValidationAsync()
@@ -249,57 +400,240 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             return;
         }
 
-        var transcripts = await GetAsync<List<EndpointTranscript>>($"/api/devices/{SelectedDevice.Id}/validation/transcripts?limit=150") ?? [];
-        TranscriptPreview = JsonSerializer.Serialize(transcripts.Take(20), SerializerOptions);
+        var transcripts = await GetAsync<List<EndpointTranscript>>($"/api/devices/{SelectedDevice.Id}/validation/transcripts?limit=200") ?? [];
+        TranscriptPreview = JsonSerializer.Serialize(transcripts.Take(25), SerializerOptions);
         DiagnosticsText = $"Loaded {transcripts.Count} transcripts.";
     }
 
-    private async Task ApplyFieldAsync(bool expertOverride)
+    private async Task ApplyPendingEditsAsync(bool expertOverride)
     {
-        if (SelectedDevice is null || SelectedTypedField is null)
+        if (SelectedDevice is null)
         {
-            DiagnosticsText = "Select a field first.";
+            DiagnosticsText = "Select a device first.";
             return;
         }
 
-        if (!expertOverride && !SelectedTypedField.WriteVerified)
+        var targets = new[]
         {
-            DiagnosticsText = "Field is not write-verified. Use Apply Expert for separated override path.";
-            return;
+            ("codec", VideoCodec),
+            ("profile", VideoProfile),
+            ("dayNight", VideoDayNight),
+            ("wdr", VideoWdr),
+            ("irCut", VideoIrCut),
+            ("bitrate", VideoBitrate),
+            ("frameRate", VideoFrameRate),
+            ("brightness", ImageBrightness),
+            ("contrast", ImageContrast),
+            ("saturation", ImageSaturation),
+            ("hue", ImageHue),
+            ("sharpness", ImageSharpness),
+            ("ip", NetworkIp),
+            ("netmask", NetworkNetmask),
+            ("gateway", NetworkGateway),
+            ("dns", NetworkDns),
+            ("ports", NetworkPort),
+            ("apSsid", WirelessApSsid),
+            ("apPsk", _wirelessApPsk),
+            ("apChannel", WirelessApChannel)
+        };
+
+        var applied = new List<WriteResult>();
+        foreach (var target in targets)
+        {
+            if (!_fieldByKey.TryGetValue(target.Item1, out var field))
+            {
+                continue;
+            }
+
+            if (!expertOverride && !field.WriteVerified)
+            {
+                continue;
+            }
+
+            if (field.EditableValue == target.Item2)
+            {
+                continue;
+            }
+
+            var result = await PostAsync<WriteResult>($"/api/devices/{SelectedDevice.Id}/settings/typed/apply",
+                new TypedSettingApplyRequest(field.FieldKey, ParseNode(target.Item2), expertOverride));
+            if (result is not null)
+            {
+                applied.Add(result);
+            }
         }
 
-        var payload = new TypedSettingApplyRequest(SelectedTypedField.FieldKey, ParseNode(SelectedTypedField.EditableValue), expertOverride);
-        var result = await PostAsync<WriteResult>($"/api/devices/{SelectedDevice.Id}/settings/typed/apply", payload);
-        DiagnosticsText = JsonSerializer.Serialize(result, SerializerOptions);
+        DiagnosticsText = JsonSerializer.Serialize(applied, SerializerOptions);
         await LoadTypedAsync();
         await LoadValidationAsync();
     }
 
     private async Task VerifyPersistenceAsync()
     {
-        if (SelectedDevice is null || SelectedTypedField is null)
+        if (SelectedDevice is null)
         {
-            DiagnosticsText = "Select a field first.";
+            DiagnosticsText = "Select a device first.";
+            return;
+        }
+
+        if (!_fieldByKey.TryGetValue("bitrate", out var field))
+        {
+            DiagnosticsText = "No endpoint-aware bitrate field available for persistence check.";
             return;
         }
 
         var payload = new PersistenceVerificationRequest
         {
             DeviceId = SelectedDevice.Id,
-            AdapterName = SelectedTypedField.AdapterName,
-            Endpoint = SelectedTypedField.SourceEndpoint,
+            AdapterName = field.AdapterName,
+            Endpoint = field.SourceEndpoint,
             Method = "PUT",
-            Payload = new JsonObject { [SelectedTypedField.FieldKey] = ParseNode(SelectedTypedField.EditableValue) },
-            RebootForVerification = SelectedTypedField.DisruptionClass == DisruptionClass.Reboot.ToString()
+            Payload = new JsonObject { ["bitrate"] = ParseNode(VideoBitrate) },
+            RebootForVerification = false
         };
-
         var result = await PostAsync<PersistenceVerificationResult>($"/api/devices/{SelectedDevice.Id}/persistence/verify", payload);
         DiagnosticsText = JsonSerializer.Serialize(result, SerializerOptions);
         await LoadValidationAsync();
-        await LoadTypedAsync();
     }
 
-    private static JsonNode? ParseNode(string raw)
+    private async Task ExecuteMaintenanceAsync(string operation)
+    {
+        if (SelectedDevice is null)
+        {
+            return;
+        }
+
+        var prompt = operation.Equals("FactoryReset", StringComparison.OrdinalIgnoreCase)
+            ? "Factory default is destructive. Continue?"
+            : "Reboot camera now?";
+        if (MessageBox.Show(prompt, "Confirm Maintenance", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        var result = await PostAsync<MaintenanceResult>($"/api/devices/{SelectedDevice.Id}/maintenance/{operation}", new JsonObject());
+        MaintenanceState = result is null ? $"Failed {operation}" : $"{operation}: {(result.Success ? "ok" : "failed")}";
+        DiagnosticsText = JsonSerializer.Serialize(result, SerializerOptions);
+    }
+
+    private async Task ApplyPasswordChangeAsync()
+    {
+        if (SelectedDevice is null)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(PasswordChangeUsername) || string.IsNullOrWhiteSpace(_passwordChangeValue))
+        {
+            MaintenanceState = "Username and new password are required.";
+            return;
+        }
+
+        var payload = new JsonObject
+        {
+            ["username"] = PasswordChangeUsername,
+            ["newPassword"] = _passwordChangeValue
+        };
+        var result = await PostAsync<MaintenanceResult>($"/api/devices/{SelectedDevice.Id}/maintenance/PasswordReset", payload);
+        MaintenanceState = result is null ? "Password change failed." : $"Password change: {(result.Success ? "ok" : "failed")}";
+        DiagnosticsText = JsonSerializer.Serialize(result, SerializerOptions);
+    }
+
+    private void PopulateUserList()
+    {
+        UserList.Clear();
+        if (_fieldByKey.TryGetValue("userList", out var users))
+        {
+            if (users.EditableValue.StartsWith("[", StringComparison.Ordinal))
+            {
+                try
+                {
+                    var node = JsonNode.Parse(users.EditableValue);
+                    if (node is JsonArray arr)
+                    {
+                        foreach (var item in arr)
+                        {
+                            UserList.Add(item?.ToJsonString() ?? string.Empty);
+                        }
+                    }
+                }
+                catch
+                {
+                    UserList.Add(users.EditableValue);
+                }
+            }
+            else
+            {
+                UserList.Add(users.EditableValue);
+            }
+        }
+    }
+
+    private string GetValue(string key)
+        => _fieldByKey.TryGetValue(key, out var field) ? field.EditableValue : string.Empty;
+
+    private void SetValue(string key, string value)
+    {
+        if (_fieldByKey.TryGetValue(key, out var field))
+        {
+            field.EditableValue = value;
+        }
+    }
+
+    private bool CanEdit(string key)
+    {
+        if (!_fieldByKey.TryGetValue(key, out var field))
+        {
+            return false;
+        }
+
+        // Proven behavior: normal editor only enabled for verified writes and non-expert fields.
+        return field.WriteVerified && !field.ExpertOnly;
+    }
+
+    private string FieldState(string key)
+    {
+        if (!_fieldByKey.TryGetValue(key, out var field))
+        {
+            return "unsupported";
+        }
+
+        if (field.WriteVerified && field.PersistsAfterReboot)
+        {
+            return "proven";
+        }
+
+        if (field.WriteVerified)
+        {
+            return "verified";
+        }
+
+        return field.ReadVerified ? "read-only" : "unverified";
+    }
+
+    private static double ParseDouble(string raw, double fallback)
+        => double.TryParse(raw, out var parsed) ? parsed : fallback;
+
+    private void NotifyAllEditorProperties()
+    {
+        foreach (var name in new[]
+        {
+            nameof(VideoCodec), nameof(VideoProfile), nameof(VideoDayNight), nameof(VideoWdr), nameof(VideoIrCut),
+            nameof(VideoBitrate), nameof(VideoBitrateSlider), nameof(VideoFrameRate), nameof(ImageBrightness), nameof(ImageBrightnessSlider),
+            nameof(ImageContrast), nameof(ImageSaturation), nameof(ImageHue), nameof(ImageSharpness),
+            nameof(NetworkIp), nameof(NetworkNetmask), nameof(NetworkGateway), nameof(NetworkDns), nameof(NetworkPort),
+            nameof(WirelessApSsid), nameof(WirelessApChannel),
+            nameof(VideoCodecState), nameof(VideoProfileState), nameof(NetworkIpState), nameof(WirelessApPskState),
+            nameof(CanEditVideoCodec), nameof(CanEditVideoProfile), nameof(CanEditVideoDayNight), nameof(CanEditVideoWdr), nameof(CanEditVideoIrCut),
+            nameof(CanEditNetworkIp), nameof(CanEditNetworkNetmask), nameof(CanEditNetworkGateway), nameof(CanEditNetworkDns), nameof(CanEditNetworkPort),
+            nameof(CanEditWirelessApSsid), nameof(CanEditWirelessApChannel)
+        })
+        {
+            OnPropertyChanged(name);
+        }
+    }
+
+    private static JsonNode? ParseNode(string? raw)
     {
         var trimmed = (raw ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(trimmed))
@@ -326,22 +660,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         return JsonValue.Create(raw);
     }
 
-    private static TypedFieldRow ToRow(NormalizedSettingField field)
-        => new()
-        {
-            FieldKey = field.FieldKey,
-            DisplayName = field.DisplayName,
-            EditableValue = field.TypedValue?.ToJsonString() ?? string.Empty,
-            AdapterName = field.AdapterName,
-            SourceEndpoint = field.SourceEndpoint,
-            ReadVerified = field.ReadVerified,
-            WriteVerified = field.WriteVerified,
-            PersistsAfterReboot = field.PersistsAfterReboot,
-            DisruptionClass = field.DisruptionClass.ToString(),
-            FirmwareFingerprint = field.FirmwareFingerprint ?? string.Empty
-        };
-
-    private void Devices_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void Devices_SelectionChanged(object sender, RoutedEventArgs e)
     {
         _ = RunAsync(async () =>
         {
@@ -352,6 +671,22 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 await LoadTranscriptsAsync();
             }
         });
+    }
+
+    private void WirelessPskPasswordChanged(object sender, RoutedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.PasswordBox box)
+        {
+            _wirelessApPsk = box.Password;
+        }
+    }
+
+    private void PasswordChangePasswordChanged(object sender, RoutedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.PasswordBox box)
+        {
+            _passwordChangeValue = box.Password;
+        }
     }
 
     private async Task<T?> GetAsync<T>(string path)
@@ -402,34 +737,39 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 }
 
-public sealed class TypedFieldRow : INotifyPropertyChanged
+public sealed class TypedFieldRow
 {
-    private string _editableValue = string.Empty;
-
     public string FieldKey { get; init; } = string.Empty;
     public string DisplayName { get; init; } = string.Empty;
     public string AdapterName { get; init; } = string.Empty;
     public string SourceEndpoint { get; init; } = string.Empty;
+    public string RawSourcePath { get; init; } = string.Empty;
     public bool ReadVerified { get; init; }
     public bool WriteVerified { get; init; }
     public bool PersistsAfterReboot { get; init; }
+    public bool ExpertOnly { get; init; }
     public string DisruptionClass { get; init; } = string.Empty;
     public string FirmwareFingerprint { get; init; } = string.Empty;
+    public string Validity { get; init; } = string.Empty;
+    public string EditableValue { get; set; } = string.Empty;
 
-    public string EditableValue
-    {
-        get => _editableValue;
-        set
+    public static TypedFieldRow FromField(NormalizedSettingField field)
+        => new()
         {
-            if (_editableValue != value)
-            {
-                _editableValue = value;
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(EditableValue)));
-            }
-        }
-    }
-
-    public event PropertyChangedEventHandler? PropertyChanged;
+            FieldKey = field.FieldKey,
+            DisplayName = field.DisplayName,
+            AdapterName = field.AdapterName,
+            SourceEndpoint = field.SourceEndpoint,
+            RawSourcePath = field.RawSourcePath,
+            ReadVerified = field.ReadVerified,
+            WriteVerified = field.WriteVerified,
+            PersistsAfterReboot = field.PersistsAfterReboot,
+            ExpertOnly = field.ExpertOnly,
+            DisruptionClass = field.DisruptionClass.ToString(),
+            FirmwareFingerprint = field.FirmwareFingerprint ?? string.Empty,
+            Validity = field.Validity.ToString(),
+            EditableValue = field.TypedValue?.ToJsonString() ?? string.Empty
+        };
 }
 
 public sealed record TypedSettingApplyRequest(string FieldKey, JsonNode? Value, bool ExpertOverride);

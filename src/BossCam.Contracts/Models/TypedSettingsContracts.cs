@@ -51,6 +51,7 @@ public sealed record NormalizedSettingField
     public JsonNode? TypedValue { get; init; }
     public JsonNode? RawValue { get; init; }
     public string SourceEndpoint { get; init; } = string.Empty;
+    public string RawSourcePath { get; init; } = string.Empty;
     public string? FirmwareFingerprint { get; init; }
     public FieldValidityState Validity { get; init; } = FieldValidityState.Unverified;
     public string Confidence { get; init; } = "unverified";

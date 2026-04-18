@@ -5,8 +5,8 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="BossCamSuite"
-        Height="960"
-        Width="1680"
+        Height="980"
+        Width="1700"
         Background="#101820"
         Foreground="#F2EAD3">
     <Grid Margin="14">
@@ -60,6 +60,7 @@
                         <TextBlock Text="{Binding SelectedDevice.FirmwareVersion, StringFormat=Firmware: {0}, TargetNullValue=Firmware: -}"/>
                         <TextBlock Text="{Binding SelectedDevice.HardwareModel, StringFormat=Model: {0}, TargetNullValue=Model: -}"/>
                         <TextBlock Text="{Binding HealthBadgeText}" FontWeight="SemiBold" Margin="0,6,0,0"/>
+                        <TextBlock Text="{Binding CapabilityBadgeText}" FontWeight="SemiBold"/>
                     </StackPanel>
                     <WrapPanel Grid.Column="1" VerticalAlignment="Top">
                         <Button Margin="0,0,8,8" Padding="10,5" Click="ApplyValidated_Click">Apply Validated</Button>
@@ -71,7 +72,7 @@
 
             <Grid Grid.Row="2">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="1.6*"/>
+                    <RowDefinition Height="1.65*"/>
                     <RowDefinition Height="8"/>
                     <RowDefinition Height="1*"/>
                 </Grid.RowDefinitions>
@@ -79,41 +80,157 @@
                 <Border Grid.Row="0" Padding="10" CornerRadius="12" Background="#17232E">
                     <TabControl>
                         <TabItem Header="Video/Image">
-                            <DataGrid ItemsSource="{Binding VideoFields}" SelectedItem="{Binding SelectedTypedField}" AutoGenerateColumns="False" Background="#0E171E" BorderThickness="0">
-                                <DataGrid.Columns>
-                                    <DataGridTextColumn Header="Field" Binding="{Binding DisplayName}" Width="2*" IsReadOnly="True"/>
-                                    <DataGridTextColumn Header="Value" Binding="{Binding EditableValue, UpdateSourceTrigger=PropertyChanged}" Width="2*"/>
-                                    <DataGridCheckBoxColumn Header="Read" Binding="{Binding ReadVerified}" Width="*"/>
-                                    <DataGridCheckBoxColumn Header="Write" Binding="{Binding WriteVerified}" Width="*"/>
-                                    <DataGridCheckBoxColumn Header="Persist" Binding="{Binding PersistsAfterReboot}" Width="*"/>
-                                    <DataGridTextColumn Header="Risk" Binding="{Binding DisruptionClass}" Width="*"/>
-                                    <DataGridTextColumn Header="Endpoint" Binding="{Binding SourceEndpoint}" Width="2*" IsReadOnly="True"/>
-                                </DataGrid.Columns>
-                            </DataGrid>
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <StackPanel Margin="4">
+                                    <TextBlock Text="{Binding VideoEditorNotice}" Foreground="#E5D9BF" Margin="0,0,0,10"/>
+                                    <WrapPanel Margin="0,0,0,8">
+                                        <TextBlock Width="140" Text="Codec" VerticalAlignment="Center"/>
+                                        <ComboBox Width="180" SelectedValuePath="Content" SelectedValue="{Binding VideoCodec}" IsEnabled="{Binding CanEditVideoCodec}">
+                                            <ComboBoxItem Content="H264"/>
+                                            <ComboBoxItem Content="H265"/>
+                                        </ComboBox>
+                                        <TextBlock Margin="12,0,0,0" Text="{Binding VideoCodecState}" VerticalAlignment="Center"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8">
+                                        <TextBlock Width="140" Text="Profile" VerticalAlignment="Center"/>
+                                        <ComboBox Width="180" SelectedValuePath="Content" SelectedValue="{Binding VideoProfile}" IsEnabled="{Binding CanEditVideoProfile}">
+                                            <ComboBoxItem Content="Baseline"/>
+                                            <ComboBoxItem Content="Main"/>
+                                            <ComboBoxItem Content="High"/>
+                                        </ComboBox>
+                                        <TextBlock Margin="12,0,0,0" Text="{Binding VideoProfileState}" VerticalAlignment="Center"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8">
+                                        <TextBlock Width="140" Text="Day/Night" VerticalAlignment="Center"/>
+                                        <ComboBox Width="180" SelectedValuePath="Content" SelectedValue="{Binding VideoDayNight}" IsEnabled="{Binding CanEditVideoDayNight}">
+                                            <ComboBoxItem Content="Auto"/>
+                                            <ComboBoxItem Content="Day"/>
+                                            <ComboBoxItem Content="Night"/>
+                                        </ComboBox>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8">
+                                        <TextBlock Width="140" Text="WDR" VerticalAlignment="Center"/>
+                                        <ComboBox Width="180" SelectedValuePath="Content" SelectedValue="{Binding VideoWdr}" IsEnabled="{Binding CanEditVideoWdr}">
+                                            <ComboBoxItem Content="Off"/>
+                                            <ComboBoxItem Content="On"/>
+                                        </ComboBox>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8">
+                                        <TextBlock Width="140" Text="IR Cut" VerticalAlignment="Center"/>
+                                        <ComboBox Width="180" SelectedValuePath="Content" SelectedValue="{Binding VideoIrCut}" IsEnabled="{Binding CanEditVideoIrCut}">
+                                            <ComboBoxItem Content="Auto"/>
+                                            <ComboBoxItem Content="Day"/>
+                                            <ComboBoxItem Content="Night"/>
+                                        </ComboBox>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8">
+                                        <TextBlock Width="140" Text="Bitrate (kbps)" VerticalAlignment="Center"/>
+                                        <TextBox Width="110" Text="{Binding VideoBitrate}"/>
+                                        <Slider Width="200" Margin="10,0,0,0" Minimum="64" Maximum="16384" Value="{Binding VideoBitrateSlider}" TickFrequency="64" IsSnapToTickEnabled="False"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8">
+                                        <TextBlock Width="140" Text="Frame Rate" VerticalAlignment="Center"/>
+                                        <TextBox Width="110" Text="{Binding VideoFrameRate}"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8">
+                                        <TextBlock Width="140" Text="Brightness" VerticalAlignment="Center"/>
+                                        <TextBox Width="110" Text="{Binding ImageBrightness}"/>
+                                        <Slider Width="200" Margin="10,0,0,0" Minimum="0" Maximum="100" Value="{Binding ImageBrightnessSlider}" />
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8">
+                                        <TextBlock Width="140" Text="Contrast" VerticalAlignment="Center"/>
+                                        <TextBox Width="110" Text="{Binding ImageContrast}"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8">
+                                        <TextBlock Width="140" Text="Saturation" VerticalAlignment="Center"/>
+                                        <TextBox Width="110" Text="{Binding ImageSaturation}"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8">
+                                        <TextBlock Width="140" Text="Hue" VerticalAlignment="Center"/>
+                                        <TextBox Width="110" Text="{Binding ImageHue}"/>
+                                    </WrapPanel>
+                                    <WrapPanel>
+                                        <TextBlock Width="140" Text="Sharpness" VerticalAlignment="Center"/>
+                                        <TextBox Width="110" Text="{Binding ImageSharpness}"/>
+                                    </WrapPanel>
+                                </StackPanel>
+                            </ScrollViewer>
                         </TabItem>
+
                         <TabItem Header="Network/Wireless">
-                            <DataGrid ItemsSource="{Binding NetworkFields}" SelectedItem="{Binding SelectedTypedField}" AutoGenerateColumns="False" Background="#0E171E" BorderThickness="0">
-                                <DataGrid.Columns>
-                                    <DataGridTextColumn Header="Field" Binding="{Binding DisplayName}" Width="2*" IsReadOnly="True"/>
-                                    <DataGridTextColumn Header="Value" Binding="{Binding EditableValue, UpdateSourceTrigger=PropertyChanged}" Width="2*"/>
-                                    <DataGridCheckBoxColumn Header="Write" Binding="{Binding WriteVerified}" Width="*"/>
-                                    <DataGridCheckBoxColumn Header="Persist" Binding="{Binding PersistsAfterReboot}" Width="*"/>
-                                    <DataGridTextColumn Header="Risk" Binding="{Binding DisruptionClass}" Width="*"/>
-                                    <DataGridTextColumn Header="Endpoint" Binding="{Binding SourceEndpoint}" Width="2*" IsReadOnly="True"/>
-                                </DataGrid.Columns>
-                            </DataGrid>
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <StackPanel Margin="4">
+                                    <TextBlock Text="Network-changing writes can break control connectivity. Reconnect hints are shown after apply." Foreground="#FFD27A" Margin="0,0,0,10"/>
+                                    <WrapPanel Margin="0,0,0,8">
+                                        <TextBlock Width="140" Text="IP" VerticalAlignment="Center"/>
+                                        <TextBox Width="180" Text="{Binding NetworkIp}" IsEnabled="{Binding CanEditNetworkIp}"/>
+                                        <TextBlock Margin="12,0,0,0" Text="{Binding NetworkIpState}" VerticalAlignment="Center"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8">
+                                        <TextBlock Width="140" Text="Netmask" VerticalAlignment="Center"/>
+                                        <TextBox Width="180" Text="{Binding NetworkNetmask}" IsEnabled="{Binding CanEditNetworkNetmask}"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8">
+                                        <TextBlock Width="140" Text="Gateway" VerticalAlignment="Center"/>
+                                        <TextBox Width="180" Text="{Binding NetworkGateway}" IsEnabled="{Binding CanEditNetworkGateway}"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8">
+                                        <TextBlock Width="140" Text="DNS" VerticalAlignment="Center"/>
+                                        <TextBox Width="180" Text="{Binding NetworkDns}" IsEnabled="{Binding CanEditNetworkDns}"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8">
+                                        <TextBlock Width="140" Text="HTTP Port" VerticalAlignment="Center"/>
+                                        <TextBox Width="180" Text="{Binding NetworkPort}" IsEnabled="{Binding CanEditNetworkPort}"/>
+                                    </WrapPanel>
+                                    <Separator Margin="0,8,0,8"/>
+                                    <WrapPanel Margin="0,0,0,8">
+                                        <TextBlock Width="140" Text="AP SSID" VerticalAlignment="Center"/>
+                                        <TextBox Width="180" Text="{Binding WirelessApSsid}" IsEnabled="{Binding CanEditWirelessApSsid}"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8">
+                                        <TextBlock Width="140" Text="AP PSK" VerticalAlignment="Center"/>
+                                        <PasswordBox Width="180" PasswordChanged="WirelessPskPasswordChanged"/>
+                                        <TextBlock Margin="12,0,0,0" Text="{Binding WirelessApPskState}" VerticalAlignment="Center"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8">
+                                        <TextBlock Width="140" Text="AP Channel" VerticalAlignment="Center"/>
+                                        <TextBox Width="180" Text="{Binding WirelessApChannel}" IsEnabled="{Binding CanEditWirelessApChannel}"/>
+                                    </WrapPanel>
+                                    <TextBlock Text="{Binding NetworkRecoveryHint}" Foreground="#FFD27A" Margin="0,8,0,0"/>
+                                </StackPanel>
+                            </ScrollViewer>
                         </TabItem>
+
                         <TabItem Header="Users/Maintenance">
-                            <DataGrid ItemsSource="{Binding UserFields}" SelectedItem="{Binding SelectedTypedField}" AutoGenerateColumns="False" Background="#0E171E" BorderThickness="0">
-                                <DataGrid.Columns>
-                                    <DataGridTextColumn Header="Field" Binding="{Binding DisplayName}" Width="2*" IsReadOnly="True"/>
-                                    <DataGridTextColumn Header="Value" Binding="{Binding EditableValue, UpdateSourceTrigger=PropertyChanged}" Width="2*"/>
-                                    <DataGridCheckBoxColumn Header="Write" Binding="{Binding WriteVerified}" Width="*"/>
-                                    <DataGridTextColumn Header="Risk" Binding="{Binding DisruptionClass}" Width="*"/>
-                                    <DataGridTextColumn Header="Endpoint" Binding="{Binding SourceEndpoint}" Width="2*" IsReadOnly="True"/>
-                                </DataGrid.Columns>
-                            </DataGrid>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="1.1*"/>
+                                    <ColumnDefinition Width="8"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="Users" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                    <ListBox ItemsSource="{Binding UserList}" Height="180" Background="#0E171E" BorderThickness="0"/>
+                                    <TextBlock Text="Password Change" FontWeight="SemiBold" Margin="0,10,0,6"/>
+                                    <WrapPanel Margin="0,0,0,6">
+                                        <TextBlock Width="120" Text="Username" VerticalAlignment="Center"/>
+                                        <TextBox Width="180" Text="{Binding PasswordChangeUsername}"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,6">
+                                        <TextBlock Width="120" Text="New Password" VerticalAlignment="Center"/>
+                                        <PasswordBox Width="180" PasswordChanged="PasswordChangePasswordChanged"/>
+                                    </WrapPanel>
+                                    <Button Width="160" Margin="0,6,0,0" Click="ApplyPasswordChange_Click">Apply Password Change</Button>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="Maintenance Actions" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                    <Button Width="180" Margin="0,0,0,8" Click="RebootCamera_Click">Reboot Camera</Button>
+                                    <Button Width="180" Margin="0,0,0,8" Click="FactoryDefault_Click">Factory Default</Button>
+                                    <TextBlock Text="{Binding MaintenanceState}" Foreground="#FFD27A" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Grid>
                         </TabItem>
+
                         <TabItem Header="Diagnostics/Expert">
                             <Grid>
                                 <Grid.ColumnDefinitions>
