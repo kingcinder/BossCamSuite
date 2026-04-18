@@ -81,6 +81,7 @@ public sealed class CapabilityProbeService(
 public sealed class SettingsService(
     IEnumerable<IControlAdapter> controlAdapters,
     IApplicationStore store,
+    ProtocolValidationService protocolValidationService,
     ILogger<SettingsService> logger)
 {
     public async Task<SettingsSnapshot?> ReadAsync(Guid deviceId, CancellationToken cancellationToken)
@@ -119,6 +120,20 @@ public sealed class SettingsService(
             return new WriteResult { Success = false, AdapterName = plan.AdapterName ?? string.Empty, Message = "No control adapter matched the device." };
         }
 
+        if (plan.RequireWriteVerification)
+        {
+            var isWriteVerified = await protocolValidationService.IsEndpointWriteVerifiedAsync(device.Id, adapter.Name, plan.Endpoint, cancellationToken);
+            if (!isWriteVerified)
+            {
+                return new WriteResult
+                {
+                    Success = false,
+                    AdapterName = adapter.Name,
+                    Message = $"Endpoint '{plan.Endpoint}' is not write-verified for adapter '{adapter.Name}'. Run protocol validation first."
+                };
+            }
+        }
+
         SettingsSnapshot? beforeSnapshot = null;
         if (plan.SnapshotBeforeWrite)
         {
@@ -126,8 +141,58 @@ public sealed class SettingsService(
             await store.SaveSettingsSnapshotAsync(beforeSnapshot, cancellationToken);
         }
 
+        var preReadResult = await adapter.ApplyAsync(device, new WritePlan
+        {
+            AdapterName = adapter.Name,
+            GroupName = plan.GroupName,
+            Endpoint = plan.Endpoint,
+            Method = "GET",
+            SnapshotBeforeWrite = false,
+            RequireWriteVerification = false
+        }, cancellationToken);
+
+        var preReadVerified = preReadResult.Success;
         var result = await adapter.ApplyAsync(device, plan, cancellationToken);
-        var finalResult = result with { SnapshotBeforeWrite = beforeSnapshot ?? result.SnapshotBeforeWrite };
+        var postReadResult = await adapter.ApplyAsync(device, new WritePlan
+        {
+            AdapterName = adapter.Name,
+            GroupName = plan.GroupName,
+            Endpoint = plan.Endpoint,
+            Method = "GET",
+            SnapshotBeforeWrite = false,
+            RequireWriteVerification = false
+        }, cancellationToken);
+
+        var postReadVerified = postReadResult.Success;
+        var rollbackAttempted = false;
+        var rollbackSucceeded = false;
+
+        if (result.Success && preReadResult.Response is JsonObject preObject && postReadResult.Response is JsonNode postNode && !JsonNode.DeepEquals(preReadResult.Response, postNode))
+        {
+            rollbackAttempted = true;
+            var rollbackResult = await adapter.ApplyAsync(device, new WritePlan
+            {
+                AdapterName = adapter.Name,
+                GroupName = plan.GroupName,
+                Endpoint = plan.Endpoint,
+                Method = plan.Method,
+                Payload = preObject,
+                SnapshotBeforeWrite = false,
+                RequireWriteVerification = false
+            }, cancellationToken);
+            rollbackSucceeded = rollbackResult.Success;
+        }
+
+        var finalResult = result with
+        {
+            SnapshotBeforeWrite = beforeSnapshot ?? result.SnapshotBeforeWrite,
+            PreReadVerified = preReadVerified,
+            PostReadVerified = postReadVerified,
+            RollbackAttempted = rollbackAttempted,
+            RollbackSucceeded = rollbackSucceeded,
+            PreWriteValue = preReadResult.Response?.DeepClone(),
+            PostWriteValue = postReadResult.Response?.DeepClone()
+        };
 
         await store.AddAuditEntryAsync(new WriteAuditEntry
         {
@@ -136,7 +201,16 @@ public sealed class SettingsService(
             Operation = plan.Method,
             Endpoint = plan.Endpoint,
             RequestContent = plan.Payload?.ToJsonString(),
-            ResponseContent = finalResult.Response?.ToJsonString(),
+            ResponseContent = new JsonObject
+            {
+                ["write"] = finalResult.Response?.DeepClone(),
+                ["preRead"] = preReadResult.Response?.DeepClone(),
+                ["postRead"] = postReadResult.Response?.DeepClone(),
+                ["preReadVerified"] = preReadVerified,
+                ["postReadVerified"] = postReadVerified,
+                ["rollbackAttempted"] = rollbackAttempted,
+                ["rollbackSucceeded"] = rollbackSucceeded
+            }.ToJsonString(),
             Success = finalResult.Success
         }, cancellationToken);
 

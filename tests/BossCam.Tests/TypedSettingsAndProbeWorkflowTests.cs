@@ -1,0 +1,257 @@
+using System.Text.Json.Nodes;
+using BossCam.Contracts;
+using BossCam.Core;
+using BossCam.Infrastructure.Persistence;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+
+namespace BossCam.Tests;
+
+public sealed class TypedSettingsAndProbeWorkflowTests : IDisposable
+{
+    private readonly string _tempDirectory = Path.Combine(Path.GetTempPath(), $"bosscam-tests-{Guid.NewGuid():N}");
+    private readonly string _dbPath;
+
+    public TypedSettingsAndProbeWorkflowTests()
+    {
+        Directory.CreateDirectory(_tempDirectory);
+        _dbPath = Path.Combine(_tempDirectory, "test.db");
+    }
+
+    [Fact]
+    public async Task Normalizes_Typed_Settings_From_Snapshot_And_Validation()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync(CancellationToken.None);
+
+        var device = new DeviceIdentity { IpAddress = "10.0.0.4", Name = "cam1" };
+        await store.UpsertDevicesAsync([device], CancellationToken.None);
+        await store.SaveEndpointValidationResultsAsync(
+        [
+            new EndpointValidationResult
+            {
+                DeviceId = device.Id,
+                AdapterName = "Fake",
+                Endpoint = "/NetSDK/Video/input/channel/0",
+                Method = "PUT",
+                ReadVerified = true,
+                WriteVerified = true,
+                DisruptionClass = DisruptionClass.Safe
+            }
+        ], CancellationToken.None);
+
+        var snapshot = new SettingsSnapshot
+        {
+            DeviceId = device.Id,
+            AdapterName = "Fake",
+            Groups =
+            [
+                new SettingGroup
+                {
+                    Name = "Video",
+                    DisplayName = "Video",
+                    Values = new Dictionary<string, SettingValue>
+                    {
+                        ["/NetSDK/Video/input/channel/0"] = new()
+                        {
+                            Key = "/NetSDK/Video/input/channel/0",
+                            SourceEndpoint = "/NetSDK/Video/input/channel/0",
+                            Value = JsonNode.Parse("{\"codec\":\"H264\",\"bitrate\":1024,\"frameRate\":20}")
+                        }
+                    }
+                }
+            ]
+        };
+        await store.SaveSettingsSnapshotAsync(snapshot, CancellationToken.None);
+
+        var settingsService = BuildSettingsService(store, [new NoopControlAdapter()]);
+        var typed = new TypedSettingsService(store, settingsService, NullLogger<TypedSettingsService>.Instance);
+        var groups = await typed.NormalizeDeviceAsync(device.Id, refreshFromDevice: false, CancellationToken.None);
+
+        Assert.Contains(groups, group => group.GroupKind == TypedSettingGroupKind.VideoImage);
+        var fields = groups.SelectMany(static group => group.Fields).ToList();
+        Assert.Contains(fields, field => field.FieldKey == "codec" && field.WriteVerified);
+        Assert.Contains(fields, field => field.FieldKey == "bitrate");
+    }
+
+    [Fact]
+    public async Task Blocks_Unverified_Typed_Field_Write_Without_Expert_Override()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync(CancellationToken.None);
+
+        var device = new DeviceIdentity { IpAddress = "10.0.0.29", Name = "cam2" };
+        await store.UpsertDevicesAsync([device], CancellationToken.None);
+        await store.SaveNormalizedSettingFieldsAsync(
+        [
+            new NormalizedSettingField
+            {
+                DeviceId = device.Id,
+                GroupKind = TypedSettingGroupKind.NetworkWireless,
+                GroupName = "Network / Wireless",
+                FieldKey = "ip",
+                DisplayName = "IP",
+                AdapterName = "Fake",
+                SourceEndpoint = "/NetSDK/Network/interfaces",
+                TypedValue = JsonValue.Create("10.0.0.29"),
+                ReadVerified = true,
+                WriteVerified = false
+            }
+        ], CancellationToken.None);
+
+        var settingsService = BuildSettingsService(store, [new NoopControlAdapter()]);
+        var typed = new TypedSettingsService(store, settingsService, NullLogger<TypedSettingsService>.Instance);
+        var result = await typed.ApplyTypedFieldAsync(device.Id, "ip", JsonValue.Create("10.0.0.31"), expertOverride: false, CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.False(result!.Success);
+        Assert.Contains("not write-verified", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Persists_Persistence_Verification_Result()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync(CancellationToken.None);
+        var device = new DeviceIdentity { IpAddress = "10.0.0.227", Name = "cam3" };
+        await store.UpsertDevicesAsync([device], CancellationToken.None);
+
+        var adapter = new StatefulTestAdapter();
+        var service = new PersistenceVerificationService([adapter], store, NullLogger<PersistenceVerificationService>.Instance);
+        var result = await service.VerifyAsync(new PersistenceVerificationRequest
+        {
+            DeviceId = device.Id,
+            AdapterName = adapter.Name,
+            Endpoint = "/NetSDK/Video/input/channel/0",
+            Method = "PUT",
+            Payload = new JsonObject { ["bitrate"] = 2048 },
+            RebootForVerification = false
+        }, CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.True(result!.ImmediateVerifyPassed);
+        var stored = await service.GetResultsAsync(device.Id, 10, CancellationToken.None);
+        Assert.NotEmpty(stored);
+    }
+
+    [Fact]
+    public async Task Promotes_Firmware_Capability_Profile()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync(CancellationToken.None);
+        var deviceId = Guid.NewGuid();
+        await store.SaveNormalizedSettingFieldsAsync(
+        [
+            new NormalizedSettingField
+            {
+                DeviceId = deviceId,
+                GroupKind = TypedSettingGroupKind.VideoImage,
+                GroupName = "Video / Image",
+                FieldKey = "codec",
+                DisplayName = "Codec",
+                AdapterName = "Fake",
+                SourceEndpoint = "/NetSDK/Video/input/channel/0",
+                FirmwareFingerprint = "5523|1.0.0|ipc",
+                ReadVerified = true,
+                WriteVerified = true,
+                Validity = FieldValidityState.Proven
+            },
+            new NormalizedSettingField
+            {
+                DeviceId = deviceId,
+                GroupKind = TypedSettingGroupKind.NetworkWireless,
+                GroupName = "Network / Wireless",
+                FieldKey = "ip",
+                DisplayName = "IP",
+                AdapterName = "Fake",
+                SourceEndpoint = "/NetSDK/Network/interfaces",
+                FirmwareFingerprint = "5523|1.0.0|ipc",
+                DisruptionClass = DisruptionClass.NetworkChanging,
+                Validity = FieldValidityState.Inferred
+            }
+        ], CancellationToken.None);
+
+        var capability = new CapabilityPromotionService(store);
+        var profile = await capability.PromoteForDeviceAsync(deviceId, CancellationToken.None);
+
+        Assert.NotNull(profile);
+        Assert.Contains("codec", profile!.VerifiedWritableFields);
+        Assert.Contains("ip", profile.DangerousFields);
+        Assert.Contains("ip", profile.UncertainFields);
+    }
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_tempDirectory))
+        {
+            for (var attempt = 0; attempt < 5; attempt++)
+            {
+                try
+                {
+                    Directory.Delete(_tempDirectory, true);
+                    break;
+                }
+                catch (IOException) when (attempt < 4)
+                {
+                    Thread.Sleep(50);
+                }
+                catch (UnauthorizedAccessException) when (attempt < 4)
+                {
+                    Thread.Sleep(50);
+                }
+                catch
+                {
+                    break;
+                }
+            }
+        }
+    }
+
+    private SqliteApplicationStore CreateStore()
+        => new(Options.Create(new BossCamRuntimeOptions { DatabasePath = _dbPath }));
+
+    private static SettingsService BuildSettingsService(IApplicationStore store, IEnumerable<IControlAdapter> adapters)
+    {
+        var validation = new ProtocolValidationService(adapters, store, NullLogger<ProtocolValidationService>.Instance);
+        return new SettingsService(adapters, store, validation, NullLogger<SettingsService>.Instance);
+    }
+
+    private sealed class NoopControlAdapter : IControlAdapter
+    {
+        public string Name => "Fake";
+        public int Priority => 1;
+        public TransportKind TransportKind => TransportKind.LanRest;
+        public Task<bool> CanHandleAsync(DeviceIdentity device, CancellationToken cancellationToken) => Task.FromResult(true);
+        public Task<CapabilityMap> ProbeAsync(DeviceIdentity device, CancellationToken cancellationToken) => Task.FromResult(new CapabilityMap { DeviceId = device.Id });
+        public Task<SettingsSnapshot> ReadAsync(DeviceIdentity device, CancellationToken cancellationToken) => Task.FromResult(new SettingsSnapshot { DeviceId = device.Id, AdapterName = Name });
+        public Task<SettingsSnapshot> SnapshotAsync(DeviceIdentity device, CancellationToken cancellationToken) => ReadAsync(device, cancellationToken);
+        public Task<WriteResult> ApplyAsync(DeviceIdentity device, WritePlan plan, CancellationToken cancellationToken) => Task.FromResult(new WriteResult { Success = true, AdapterName = Name, Response = plan.Payload });
+        public Task<MaintenanceResult> ExecuteMaintenanceAsync(DeviceIdentity device, MaintenanceOperation operation, JsonObject? payload, CancellationToken cancellationToken) => Task.FromResult(new MaintenanceResult { Success = true, AdapterName = Name, Operation = operation });
+    }
+
+    private sealed class StatefulTestAdapter : IControlAdapter
+    {
+        private JsonNode? _value = JsonNode.Parse("{\"bitrate\":1024}");
+        public string Name => "Stateful";
+        public int Priority => 1;
+        public TransportKind TransportKind => TransportKind.LanRest;
+        public Task<bool> CanHandleAsync(DeviceIdentity device, CancellationToken cancellationToken) => Task.FromResult(true);
+        public Task<CapabilityMap> ProbeAsync(DeviceIdentity device, CancellationToken cancellationToken) => Task.FromResult(new CapabilityMap { DeviceId = device.Id });
+        public Task<SettingsSnapshot> ReadAsync(DeviceIdentity device, CancellationToken cancellationToken) => Task.FromResult(new SettingsSnapshot { DeviceId = device.Id, AdapterName = Name });
+        public Task<SettingsSnapshot> SnapshotAsync(DeviceIdentity device, CancellationToken cancellationToken) => ReadAsync(device, cancellationToken);
+
+        public Task<WriteResult> ApplyAsync(DeviceIdentity device, WritePlan plan, CancellationToken cancellationToken)
+        {
+            if (plan.Method.Equals("GET", StringComparison.OrdinalIgnoreCase))
+            {
+                return Task.FromResult(new WriteResult { Success = true, AdapterName = Name, Response = _value?.DeepClone() });
+            }
+
+            _value = plan.Payload?.DeepClone();
+            return Task.FromResult(new WriteResult { Success = true, AdapterName = Name, Response = _value?.DeepClone() });
+        }
+
+        public Task<MaintenanceResult> ExecuteMaintenanceAsync(DeviceIdentity device, MaintenanceOperation operation, JsonObject? payload, CancellationToken cancellationToken)
+            => Task.FromResult(new MaintenanceResult { Success = true, AdapterName = Name, Operation = operation });
+    }
+}

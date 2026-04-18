@@ -29,6 +29,13 @@ public sealed class SqliteApplicationStore(IOptions<BossCamRuntimeOptions> optio
                 "CREATE TABLE IF NOT EXISTS settings_snapshots (device_id TEXT PRIMARY KEY, payload TEXT NOT NULL, updated_at TEXT NOT NULL)",
                 "CREATE TABLE IF NOT EXISTS audit_entries (id TEXT PRIMARY KEY, device_id TEXT NOT NULL, payload TEXT NOT NULL, timestamp TEXT NOT NULL)",
                 "CREATE TABLE IF NOT EXISTS protocol_manifests (manifest_id TEXT PRIMARY KEY, payload TEXT NOT NULL, updated_at TEXT NOT NULL)",
+                "CREATE TABLE IF NOT EXISTS endpoint_validation_results (result_key TEXT PRIMARY KEY, device_id TEXT NOT NULL, endpoint TEXT NOT NULL, method TEXT NOT NULL, adapter_name TEXT NOT NULL, payload TEXT NOT NULL, captured_at TEXT NOT NULL)",
+                "CREATE TABLE IF NOT EXISTS endpoint_transcripts (id TEXT PRIMARY KEY, device_id TEXT NOT NULL, endpoint TEXT NOT NULL, method TEXT NOT NULL, adapter_name TEXT NOT NULL, payload TEXT NOT NULL, timestamp TEXT NOT NULL)",
+                "CREATE TABLE IF NOT EXISTS probe_sessions (id TEXT PRIMARY KEY, device_id TEXT NOT NULL, payload TEXT NOT NULL, started_at TEXT NOT NULL)",
+                "CREATE TABLE IF NOT EXISTS probe_stage_results (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, device_id TEXT NOT NULL, payload TEXT NOT NULL, captured_at TEXT NOT NULL)",
+                "CREATE TABLE IF NOT EXISTS normalized_setting_fields (field_key TEXT PRIMARY KEY, device_id TEXT NOT NULL, payload TEXT NOT NULL, captured_at TEXT NOT NULL)",
+                "CREATE TABLE IF NOT EXISTS firmware_capability_profiles (firmware_fingerprint TEXT PRIMARY KEY, payload TEXT NOT NULL, updated_at TEXT NOT NULL)",
+                "CREATE TABLE IF NOT EXISTS persistence_verification_results (id TEXT PRIMARY KEY, device_id TEXT NOT NULL, payload TEXT NOT NULL, timestamp TEXT NOT NULL)",
                 "CREATE TABLE IF NOT EXISTS firmware_artifacts (id TEXT PRIMARY KEY, payload TEXT NOT NULL, analyzed_at TEXT NOT NULL)",
                 "CREATE TABLE IF NOT EXISTS recording_profiles (id TEXT PRIMARY KEY, device_id TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL)"
             };
@@ -112,6 +119,151 @@ public sealed class SqliteApplicationStore(IOptions<BossCamRuntimeOptions> optio
     public async Task<IReadOnlyCollection<ProtocolManifest>> GetProtocolManifestsAsync(CancellationToken cancellationToken)
         => await QueryPayloadListAsync<ProtocolManifest>("SELECT payload FROM protocol_manifests ORDER BY updated_at DESC", null, cancellationToken);
 
+    public async Task SaveEndpointValidationResultsAsync(IEnumerable<EndpointValidationResult> results, CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            await using var connection = OpenConnection();
+            await connection.OpenAsync(cancellationToken);
+            foreach (var result in results)
+            {
+                await using var command = connection.CreateCommand();
+                command.CommandText = "INSERT INTO endpoint_validation_results (result_key, device_id, endpoint, method, adapter_name, payload, captured_at) VALUES ($result_key, $device_id, $endpoint, $method, $adapter_name, $payload, $captured_at) ON CONFLICT(result_key) DO UPDATE SET payload = excluded.payload, captured_at = excluded.captured_at";
+                command.Parameters.AddWithValue("$result_key", BuildValidationKey(result));
+                command.Parameters.AddWithValue("$device_id", result.DeviceId.ToString());
+                command.Parameters.AddWithValue("$endpoint", result.Endpoint);
+                command.Parameters.AddWithValue("$method", result.Method);
+                command.Parameters.AddWithValue("$adapter_name", result.AdapterName);
+                command.Parameters.AddWithValue("$payload", JsonSerializer.Serialize(result, _serializerOptions));
+                command.Parameters.AddWithValue("$captured_at", result.CapturedAt.ToString("O"));
+                await command.ExecuteNonQueryAsync(cancellationToken);
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task<IReadOnlyCollection<EndpointValidationResult>> GetEndpointValidationResultsAsync(Guid deviceId, CancellationToken cancellationToken)
+        => await QueryPayloadListAsync<EndpointValidationResult>("SELECT payload FROM endpoint_validation_results WHERE device_id = $id ORDER BY captured_at DESC", parameters => parameters.AddWithValue("$id", deviceId.ToString()), cancellationToken);
+
+    public async Task SaveEndpointTranscriptsAsync(IEnumerable<EndpointTranscript> transcripts, CancellationToken cancellationToken)
+    {
+        foreach (var transcript in transcripts)
+        {
+            await InsertPayloadAsync("endpoint_transcripts", transcript.Id.ToString(), transcript, transcript.Timestamp, cancellationToken, deviceId: transcript.DeviceId.ToString(), endpoint: transcript.Endpoint, method: transcript.Method, adapterName: transcript.AdapterName);
+        }
+    }
+
+    public async Task<IReadOnlyCollection<EndpointTranscript>> GetEndpointTranscriptsAsync(Guid? deviceId, int limit, CancellationToken cancellationToken)
+    {
+        if (deviceId is null)
+        {
+            return await QueryPayloadListAsync<EndpointTranscript>($"SELECT payload FROM endpoint_transcripts ORDER BY timestamp DESC LIMIT {Math.Max(1, limit)}", null, cancellationToken);
+        }
+
+        return await QueryPayloadListAsync<EndpointTranscript>($"SELECT payload FROM endpoint_transcripts WHERE device_id = $id ORDER BY timestamp DESC LIMIT {Math.Max(1, limit)}", parameters => parameters.AddWithValue("$id", deviceId.Value.ToString()), cancellationToken);
+    }
+
+    public async Task SaveProbeSessionAsync(ProbeSession session, CancellationToken cancellationToken)
+        => await UpsertPayloadAsync("probe_sessions", "id", session.Id.ToString(), session, session.StartedAt, cancellationToken, deviceId: session.DeviceId.ToString());
+
+    public async Task<IReadOnlyCollection<ProbeSession>> GetProbeSessionsAsync(Guid? deviceId, int limit, CancellationToken cancellationToken)
+    {
+        if (deviceId is null)
+        {
+            return await QueryPayloadListAsync<ProbeSession>($"SELECT payload FROM probe_sessions ORDER BY started_at DESC LIMIT {Math.Max(1, limit)}", null, cancellationToken);
+        }
+
+        return await QueryPayloadListAsync<ProbeSession>($"SELECT payload FROM probe_sessions WHERE device_id = $id ORDER BY started_at DESC LIMIT {Math.Max(1, limit)}", parameters => parameters.AddWithValue("$id", deviceId.Value.ToString()), cancellationToken);
+    }
+
+    public async Task SaveProbeStageResultsAsync(IEnumerable<ProbeStageResult> stages, CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            await using var connection = OpenConnection();
+            await connection.OpenAsync(cancellationToken);
+            foreach (var stage in stages)
+            {
+                await using var command = connection.CreateCommand();
+                command.CommandText = "INSERT OR REPLACE INTO probe_stage_results (id, session_id, device_id, payload, captured_at) VALUES ($id, $session_id, $device_id, $payload, $captured_at)";
+                command.Parameters.AddWithValue("$id", stage.Id.ToString());
+                command.Parameters.AddWithValue("$session_id", stage.SessionId.ToString());
+                command.Parameters.AddWithValue("$device_id", stage.DeviceId.ToString());
+                command.Parameters.AddWithValue("$payload", JsonSerializer.Serialize(stage, _serializerOptions));
+                command.Parameters.AddWithValue("$captured_at", stage.CapturedAt.ToString("O"));
+                await command.ExecuteNonQueryAsync(cancellationToken);
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task<IReadOnlyCollection<ProbeStageResult>> GetProbeStageResultsAsync(Guid sessionId, CancellationToken cancellationToken)
+        => await QueryPayloadListAsync<ProbeStageResult>("SELECT payload FROM probe_stage_results WHERE session_id = $id ORDER BY captured_at ASC", parameters => parameters.AddWithValue("$id", sessionId.ToString()), cancellationToken);
+
+    public async Task SaveNormalizedSettingFieldsAsync(IEnumerable<NormalizedSettingField> fields, CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            await using var connection = OpenConnection();
+            await connection.OpenAsync(cancellationToken);
+            foreach (var field in fields)
+            {
+                await using var command = connection.CreateCommand();
+                command.CommandText = "INSERT INTO normalized_setting_fields (field_key, device_id, payload, captured_at) VALUES ($field_key, $device_id, $payload, $captured_at) ON CONFLICT(field_key) DO UPDATE SET payload = excluded.payload, captured_at = excluded.captured_at";
+                command.Parameters.AddWithValue("$field_key", BuildFieldKey(field));
+                command.Parameters.AddWithValue("$device_id", field.DeviceId.ToString());
+                command.Parameters.AddWithValue("$payload", JsonSerializer.Serialize(field, _serializerOptions));
+                command.Parameters.AddWithValue("$captured_at", field.CapturedAt.ToString("O"));
+                await command.ExecuteNonQueryAsync(cancellationToken);
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task<IReadOnlyCollection<NormalizedSettingField>> GetNormalizedSettingFieldsAsync(Guid deviceId, CancellationToken cancellationToken)
+        => await QueryPayloadListAsync<NormalizedSettingField>("SELECT payload FROM normalized_setting_fields WHERE device_id = $id ORDER BY captured_at DESC", parameters => parameters.AddWithValue("$id", deviceId.ToString()), cancellationToken);
+
+    public async Task SaveFirmwareCapabilityProfileAsync(FirmwareCapabilityProfile profile, CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            await using var connection = OpenConnection();
+            await connection.OpenAsync(cancellationToken);
+            await using var command = connection.CreateCommand();
+            command.CommandText = "INSERT INTO firmware_capability_profiles (firmware_fingerprint, payload, updated_at) VALUES ($id, $payload, $updated_at) ON CONFLICT(firmware_fingerprint) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at";
+            command.Parameters.AddWithValue("$id", profile.FirmwareFingerprint);
+            command.Parameters.AddWithValue("$payload", JsonSerializer.Serialize(profile, _serializerOptions));
+            command.Parameters.AddWithValue("$updated_at", profile.UpdatedAt.ToString("O"));
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task<IReadOnlyCollection<FirmwareCapabilityProfile>> GetFirmwareCapabilityProfilesAsync(CancellationToken cancellationToken)
+        => await QueryPayloadListAsync<FirmwareCapabilityProfile>("SELECT payload FROM firmware_capability_profiles ORDER BY updated_at DESC", null, cancellationToken);
+
+    public async Task SavePersistenceVerificationResultAsync(PersistenceVerificationResult result, CancellationToken cancellationToken)
+        => await InsertPayloadAsync("persistence_verification_results", result.Id.ToString(), result, result.Timestamp, cancellationToken, deviceId: result.DeviceId.ToString());
+
+    public async Task<IReadOnlyCollection<PersistenceVerificationResult>> GetPersistenceVerificationResultsAsync(Guid deviceId, int limit, CancellationToken cancellationToken)
+        => await QueryPayloadListAsync<PersistenceVerificationResult>($"SELECT payload FROM persistence_verification_results WHERE device_id = $id ORDER BY timestamp DESC LIMIT {Math.Max(1, limit)}", parameters => parameters.AddWithValue("$id", deviceId.ToString()), cancellationToken);
+
     public async Task AddFirmwareArtifactAsync(FirmwareArtifact artifact, CancellationToken cancellationToken)
         => await InsertPayloadAsync("firmware_artifacts", artifact.Id.ToString(), artifact, artifact.AnalyzedAt, cancellationToken);
 
@@ -150,6 +302,7 @@ public sealed class SqliteApplicationStore(IOptions<BossCamRuntimeOptions> optio
                 "settings_snapshots" => "updated_at",
                 "protocol_manifests" => "updated_at",
                 "recording_profiles" => "updated_at",
+                "probe_sessions" => "started_at",
                 _ => "updated_at"
             };
             var deviceIdClause = deviceId is null ? string.Empty : ", device_id = excluded.device_id";
@@ -171,7 +324,7 @@ public sealed class SqliteApplicationStore(IOptions<BossCamRuntimeOptions> optio
         }
     }
 
-    private async Task InsertPayloadAsync<T>(string tableName, string id, T payload, DateTimeOffset timestamp, CancellationToken cancellationToken, string? deviceId = null)
+    private async Task InsertPayloadAsync<T>(string tableName, string id, T payload, DateTimeOffset timestamp, CancellationToken cancellationToken, string? deviceId = null, string? endpoint = null, string? method = null, string? adapterName = null)
     {
         await _gate.WaitAsync(cancellationToken);
         try
@@ -183,9 +336,19 @@ public sealed class SqliteApplicationStore(IOptions<BossCamRuntimeOptions> optio
             {
                 "audit_entries" => "timestamp",
                 "firmware_artifacts" => "analyzed_at",
+                "endpoint_transcripts" => "timestamp",
+                "persistence_verification_results" => "timestamp",
                 _ => "updated_at"
             };
-            if (deviceId is null)
+            if (tableName.Equals("endpoint_transcripts", StringComparison.OrdinalIgnoreCase))
+            {
+                command.CommandText = $"INSERT OR REPLACE INTO {tableName} (id, device_id, endpoint, method, adapter_name, payload, {timestampColumn}) VALUES ($id, $device_id, $endpoint, $method, $adapter_name, $payload, $timestamp)";
+                command.Parameters.AddWithValue("$device_id", deviceId ?? string.Empty);
+                command.Parameters.AddWithValue("$endpoint", endpoint ?? string.Empty);
+                command.Parameters.AddWithValue("$method", method ?? "GET");
+                command.Parameters.AddWithValue("$adapter_name", adapterName ?? string.Empty);
+            }
+            else if (deviceId is null)
             {
                 command.CommandText = $"INSERT OR REPLACE INTO {tableName} (id, payload, {timestampColumn}) VALUES ($id, $payload, $timestamp)";
             }
@@ -245,6 +408,12 @@ public sealed class SqliteApplicationStore(IOptions<BossCamRuntimeOptions> optio
 
     private static string BuildDedupeKey(DeviceIdentity device)
         => device.DeviceId ?? device.EseeId ?? device.IpAddress ?? device.Id.ToString("N");
+
+    private static string BuildValidationKey(EndpointValidationResult result)
+        => $"{result.DeviceId:N}:{result.AdapterName}:{result.Method}:{result.Endpoint}:{result.FirmwareFingerprint}";
+
+    private static string BuildFieldKey(NormalizedSettingField field)
+        => $"{field.DeviceId:N}:{field.GroupKind}:{field.FieldKey}:{field.SourceEndpoint}:{field.FirmwareFingerprint}";
 
     private static JsonSerializerOptions CreateSerializerOptions()
     {

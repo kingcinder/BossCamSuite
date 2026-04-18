@@ -10,6 +10,7 @@ public sealed record WritePlan
     public JsonObject? Payload { get; init; }
     public string? AdapterName { get; init; }
     public bool SnapshotBeforeWrite { get; init; } = true;
+    public bool RequireWriteVerification { get; init; } = true;
 }
 
 public sealed record WriteResult
@@ -20,6 +21,12 @@ public sealed record WriteResult
     public int? StatusCode { get; init; }
     public JsonNode? Response { get; init; }
     public SettingsSnapshot? SnapshotBeforeWrite { get; init; }
+    public bool PreReadVerified { get; init; }
+    public bool PostReadVerified { get; init; }
+    public bool RollbackAttempted { get; init; }
+    public bool RollbackSucceeded { get; init; }
+    public JsonNode? PreWriteValue { get; init; }
+    public JsonNode? PostWriteValue { get; init; }
 }
 
 public sealed record WriteAuditEntry

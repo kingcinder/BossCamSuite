@@ -4,73 +4,141 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="BossCamSuite" Height="900" Width="1500" Background="#101820" Foreground="#F2EAD3">
-    <Grid Margin="16">
+        Title="BossCamSuite"
+        Height="960"
+        Width="1680"
+        Background="#101820"
+        Foreground="#F2EAD3">
+    <Grid Margin="14">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="360" />
-            <ColumnDefinition Width="16" />
-            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="360"/>
+            <ColumnDefinition Width="10"/>
+            <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
-        <Border Grid.Column="0" Padding="14" CornerRadius="18" Background="#17232E">
+
+        <Border Grid.Column="0" Padding="12" CornerRadius="12" Background="#17232E">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Top">
-                    <TextBlock Text="BossCamSuite" FontSize="28" FontWeight="SemiBold" />
-                    <TextBlock Margin="0,6,0,16" Text="5523-w control suite / VMS shell" Foreground="#D8C7A7" />
-                    <WrapPanel Margin="0,0,0,16">
-                        <Button Margin="0,0,8,8" Padding="12,6" Click="RefreshDevices_Click">Load Store</Button>
-                        <Button Margin="0,0,8,8" Padding="12,6" Click="DiscoverDevices_Click">Discover</Button>
-                        <Button Margin="0,0,8,8" Padding="12,6" Click="ProbeSelected_Click">Probe</Button>
-                        <Button Margin="0,0,8,8" Padding="12,6" Click="LoadProtocols_Click">Protocols</Button>
+                    <TextBlock Text="BossCamSuite" FontSize="28" FontWeight="SemiBold"/>
+                    <TextBlock Text="5523-w settings/control operator console" Foreground="#D8C7A7" Margin="0,4,0,12"/>
+                    <WrapPanel Margin="0,0,0,8">
+                        <Button Margin="0,0,8,8" Padding="10,5" Click="LoadStore_Click">Load Store</Button>
+                        <Button Margin="0,0,8,8" Padding="10,5" Click="Discover_Click">Discover</Button>
+                        <Button Margin="0,0,8,8" Padding="10,5" Click="RefreshTyped_Click">Refresh Typed</Button>
                     </WrapPanel>
-                    <TextBlock Text="Devices" FontSize="18" FontWeight="Medium" Margin="0,0,0,8" />
+                    <WrapPanel Margin="0,0,0,8">
+                        <ComboBox Width="180" Margin="0,0,8,8" ItemsSource="{Binding ProbeModes}" SelectedItem="{Binding SelectedProbeMode}" />
+                        <Button Margin="0,0,8,8" Padding="10,5" Click="ProbeSelected_Click">Run Probe</Button>
+                        <Button Margin="0,0,8,8" Padding="10,5" Click="ProbeKnownIps_Click">Probe 3 Live IPs</Button>
+                    </WrapPanel>
+                    <WrapPanel Margin="0,0,0,8">
+                        <Button Margin="0,0,8,8" Padding="10,5" Click="LoadSessions_Click">Probe Sessions</Button>
+                        <Button Margin="0,0,8,8" Padding="10,5" Click="LoadTranscripts_Click">Transcripts</Button>
+                    </WrapPanel>
+                    <TextBlock Text="Devices" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,8"/>
                 </StackPanel>
-                <ListBox ItemsSource="{Binding Devices}" SelectedItem="{Binding SelectedDevice}" DisplayMemberPath="DisplayName" SelectionChanged="Devices_SelectionChanged" Background="#0E171E" BorderThickness="0" />
+                <ListBox ItemsSource="{Binding Devices}" SelectedItem="{Binding SelectedDevice}" DisplayMemberPath="DisplayName" SelectionChanged="Devices_SelectionChanged" Background="#0E171E" BorderThickness="0"/>
             </DockPanel>
         </Border>
+
         <Grid Grid.Column="2">
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="12" />
-                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="10"/>
+                <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
-            <Border Padding="16" CornerRadius="18" Background="#A53D2C">
+
+            <Border Grid.Row="0" Padding="12" CornerRadius="12" Background="#A53D2C">
                 <Grid>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <StackPanel>
-                        <TextBlock Text="Selected Device" FontSize="16" FontWeight="Medium" />
-                        <TextBlock Margin="0,8,0,2" Text="{Binding SelectedDevice.DisplayName, TargetNullValue=No device selected}" FontSize="22" FontWeight="SemiBold" />
-                        <TextBlock Text="{Binding SelectedDevice.IpAddress, StringFormat=IP: {0}, TargetNullValue=IP: -}" />
-                        <TextBlock Text="{Binding SelectedDevice.EseeId, StringFormat=ESEE: {0}, TargetNullValue=ESEE: -}" />
-                        <TextBlock Text="{Binding SelectedDevice.DeviceType, StringFormat=Type: {0}, TargetNullValue=Type: -}" />
+                        <TextBlock Text="{Binding SelectedDevice.DisplayName, TargetNullValue=No device selected}" FontSize="24" FontWeight="Bold"/>
+                        <TextBlock Text="{Binding SelectedDevice.IpAddress, StringFormat=IP: {0}, TargetNullValue=IP: -}"/>
+                        <TextBlock Text="{Binding SelectedDevice.FirmwareVersion, StringFormat=Firmware: {0}, TargetNullValue=Firmware: -}"/>
+                        <TextBlock Text="{Binding SelectedDevice.HardwareModel, StringFormat=Model: {0}, TargetNullValue=Model: -}"/>
+                        <TextBlock Text="{Binding HealthBadgeText}" FontWeight="SemiBold" Margin="0,6,0,0"/>
                     </StackPanel>
                     <WrapPanel Grid.Column="1" VerticalAlignment="Top">
-                        <Button Margin="0,0,8,8" Padding="12,6" Click="LoadSettings_Click">Settings</Button>
-                        <Button Margin="0,0,8,8" Padding="12,6" Click="LoadSources_Click">Sources</Button>
-                        <Button Margin="0,0,8,8" Padding="12,6" Click="LoadAudit_Click">Audit</Button>
-                        <Button Margin="0,0,8,8" Padding="12,6" Click="LoadFirmware_Click">Firmware</Button>
+                        <Button Margin="0,0,8,8" Padding="10,5" Click="ApplyValidated_Click">Apply Validated</Button>
+                        <Button Margin="0,0,8,8" Padding="10,5" Click="ApplyExpert_Click">Apply Expert</Button>
+                        <Button Margin="0,0,8,8" Padding="10,5" Click="VerifyPersistence_Click">Verify Persistence</Button>
                     </WrapPanel>
                 </Grid>
             </Border>
+
             <Grid Grid.Row="2">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="340" />
-                    <ColumnDefinition Width="12" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <Border Grid.Column="0" Padding="16" CornerRadius="18" Background="#17232E">
-                    <DockPanel>
-                        <TextBlock DockPanel.Dock="Top" Text="Video Sources" FontSize="18" FontWeight="Medium" Margin="0,0,0,8" />
-                        <ListBox ItemsSource="{Binding Sources}" DisplayMemberPath="Url" Background="#0E171E" BorderThickness="0" />
-                    </DockPanel>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="1.6*"/>
+                    <RowDefinition Height="8"/>
+                    <RowDefinition Height="1*"/>
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0" Padding="10" CornerRadius="12" Background="#17232E">
+                    <TabControl>
+                        <TabItem Header="Video/Image">
+                            <DataGrid ItemsSource="{Binding VideoFields}" SelectedItem="{Binding SelectedTypedField}" AutoGenerateColumns="False" Background="#0E171E" BorderThickness="0">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Field" Binding="{Binding DisplayName}" Width="2*" IsReadOnly="True"/>
+                                    <DataGridTextColumn Header="Value" Binding="{Binding EditableValue, UpdateSourceTrigger=PropertyChanged}" Width="2*"/>
+                                    <DataGridCheckBoxColumn Header="Read" Binding="{Binding ReadVerified}" Width="*"/>
+                                    <DataGridCheckBoxColumn Header="Write" Binding="{Binding WriteVerified}" Width="*"/>
+                                    <DataGridCheckBoxColumn Header="Persist" Binding="{Binding PersistsAfterReboot}" Width="*"/>
+                                    <DataGridTextColumn Header="Risk" Binding="{Binding DisruptionClass}" Width="*"/>
+                                    <DataGridTextColumn Header="Endpoint" Binding="{Binding SourceEndpoint}" Width="2*" IsReadOnly="True"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </TabItem>
+                        <TabItem Header="Network/Wireless">
+                            <DataGrid ItemsSource="{Binding NetworkFields}" SelectedItem="{Binding SelectedTypedField}" AutoGenerateColumns="False" Background="#0E171E" BorderThickness="0">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Field" Binding="{Binding DisplayName}" Width="2*" IsReadOnly="True"/>
+                                    <DataGridTextColumn Header="Value" Binding="{Binding EditableValue, UpdateSourceTrigger=PropertyChanged}" Width="2*"/>
+                                    <DataGridCheckBoxColumn Header="Write" Binding="{Binding WriteVerified}" Width="*"/>
+                                    <DataGridCheckBoxColumn Header="Persist" Binding="{Binding PersistsAfterReboot}" Width="*"/>
+                                    <DataGridTextColumn Header="Risk" Binding="{Binding DisruptionClass}" Width="*"/>
+                                    <DataGridTextColumn Header="Endpoint" Binding="{Binding SourceEndpoint}" Width="2*" IsReadOnly="True"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </TabItem>
+                        <TabItem Header="Users/Maintenance">
+                            <DataGrid ItemsSource="{Binding UserFields}" SelectedItem="{Binding SelectedTypedField}" AutoGenerateColumns="False" Background="#0E171E" BorderThickness="0">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Field" Binding="{Binding DisplayName}" Width="2*" IsReadOnly="True"/>
+                                    <DataGridTextColumn Header="Value" Binding="{Binding EditableValue, UpdateSourceTrigger=PropertyChanged}" Width="2*"/>
+                                    <DataGridCheckBoxColumn Header="Write" Binding="{Binding WriteVerified}" Width="*"/>
+                                    <DataGridTextColumn Header="Risk" Binding="{Binding DisruptionClass}" Width="*"/>
+                                    <DataGridTextColumn Header="Endpoint" Binding="{Binding SourceEndpoint}" Width="2*" IsReadOnly="True"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </TabItem>
+                        <TabItem Header="Diagnostics/Expert">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="1.2*"/>
+                                    <ColumnDefinition Width="8"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <DataGrid ItemsSource="{Binding ValidationMatrix}" AutoGenerateColumns="False" Background="#0E171E" BorderThickness="0">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Endpoint" Binding="{Binding Endpoint}" Width="3*" IsReadOnly="True"/>
+                                        <DataGridCheckBoxColumn Header="Read" Binding="{Binding ReadVerified}" Width="*"/>
+                                        <DataGridCheckBoxColumn Header="Write" Binding="{Binding WriteVerified}" Width="*"/>
+                                        <DataGridCheckBoxColumn Header="Persist" Binding="{Binding PersistsAfterReboot}" Width="*"/>
+                                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="*"/>
+                                        <DataGridTextColumn Header="Risk" Binding="{Binding DisruptionClass}" Width="*"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                                <TextBox Grid.Column="2" Text="{Binding TranscriptPreview}" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextWrapping="NoWrap" Background="#0E171E" BorderThickness="0" Foreground="#F2EAD3" FontFamily="Consolas"/>
+                            </Grid>
+                        </TabItem>
+                    </TabControl>
                 </Border>
-                <Border Grid.Column="2" Padding="16" CornerRadius="18" Background="#17232E">
-                    <DockPanel>
-                        <TextBlock DockPanel.Dock="Top" Text="Diagnostics" FontSize="18" FontWeight="Medium" Margin="0,0,0,8" />
-                        <TextBox Text="{Binding DiagnosticsText}" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextWrapping="NoWrap" Background="#0E171E" BorderThickness="0" Foreground="#F2EAD3" FontFamily="Consolas" />
-                    </DockPanel>
+
+                <Border Grid.Row="2" Padding="10" CornerRadius="12" Background="#17232E">
+                    <TextBox Text="{Binding DiagnosticsText}" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextWrapping="NoWrap" Background="#0E171E" BorderThickness="0" Foreground="#F2EAD3" FontFamily="Consolas"/>
                 </Border>
             </Grid>
         </Grid>
