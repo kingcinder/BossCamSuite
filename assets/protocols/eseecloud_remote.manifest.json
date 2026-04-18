@@ -1,0 +1,29 @@
+{
+  "manifestId": "eseecloud-remote",
+  "name": "EseeCloud Remote Capability Groups",
+  "source": "EseeCloud fns_remote_settings.js",
+  "family": "ESEE/Juan remote command envelope",
+  "authMode": "authorization-object",
+  "endpoints": [
+    {
+      "path": "remote:IPCam",
+      "tag": "RemoteCommand",
+      "methods": ["POST"],
+      "description": "JSON envelope for IPC remote settings.",
+      "requestSchema": "Version, Method, CapabilitySet, IPCam, Authorization.",
+      "responseSchema": "Vendor JSON response.",
+      "safety": "safe-write",
+      "notes": ["Capability groups include DeviceInfo, AlarmSetting.MotionDetection, devCoverSetting, Osd.Title, SystemOperation.TimeSync, SystemOperation.DaylightSavingTime, videoManager, PromptSounds, TfcardManager, WirelessManager, RecordManager, DoorbellManager, FisheyeSetting, ledPwm, ChannelManager, UserManager."]
+    },
+    {
+      "path": "remote:XVR",
+      "tag": "RemoteCommand",
+      "methods": ["POST"],
+      "description": "JSON envelope for XVR/NVR command families.",
+      "requestSchema": "DEV, Version, API, Method, Authorization.",
+      "responseSchema": "Vendor JSON response.",
+      "safety": "service-impacting",
+      "notes": ["Observed with G.GetLocalTime and general API calls in EseeCloud."]
+    }
+  ]
+}

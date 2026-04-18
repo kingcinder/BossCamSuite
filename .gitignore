@@ -1,0 +1,16 @@
+bin/
+obj/
+.vs/
+TestResults/
+
+*.user
+*.suo
+*.cache
+
+*.db
+*.db-shm
+*.db-wal
+
+*.log
+
+src/BossCam.Service/appsettings.Development.json

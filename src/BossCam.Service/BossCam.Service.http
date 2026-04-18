@@ -1,0 +1,6 @@
+@BossCam.Service_HostAddress = http://localhost:5165
+
+GET {{BossCam.Service_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

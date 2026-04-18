@@ -1,0 +1,169 @@
+{
+  "manifestId": "ipcamsuite-private",
+  "name": "IPCamSuite Private Endpoints",
+  "source": "IPCamSuite.exe strings + MAINSET.INI evidence",
+  "family": "5523-w / Juan IPC OEM private HTTP",
+  "authMode": "basic-or-digest",
+  "endpoints": [
+    {
+      "path": "/NetSDK/System/operation/reboot",
+      "tag": "Maintenance",
+      "methods": ["PUT"],
+      "description": "Reboot device.",
+      "requestSchema": "None or minimal JSON body depending on firmware.",
+      "responseSchema": "Response JSON form.",
+      "safety": "reboot",
+      "notes": ["Observed in IPCamSuite string inventory."]
+    },
+    {
+      "path": "/NetSDK/System/operation/default",
+      "tag": "Maintenance",
+      "methods": ["PUT"],
+      "description": "Factory default device.",
+      "requestSchema": "None or minimal JSON body depending on firmware.",
+      "responseSchema": "Response JSON form.",
+      "safety": "factory-reset",
+      "notes": ["Observed in IPCamSuite string inventory."]
+    },
+    {
+      "path": "/NetSDK/Factory?cmd=WhiteLightCtrl",
+      "tag": "OEM",
+      "methods": ["GET", "PUT"],
+      "description": "OEM white light control.",
+      "requestSchema": "Firmware-specific query or JSON payload.",
+      "responseSchema": "Response JSON or plain text.",
+      "safety": "safe-write",
+      "notes": ["Observed in IPCamSuite AdvancedOEM settings."]
+    },
+    {
+      "path": "/NetSDK/Factory?cmd=InfraRedCtrl",
+      "tag": "OEM",
+      "methods": ["GET", "PUT"],
+      "description": "OEM infrared control.",
+      "requestSchema": "Firmware-specific query or JSON payload.",
+      "responseSchema": "Response JSON or plain text.",
+      "safety": "safe-write",
+      "notes": ["Observed in IPCamSuite AdvancedOEM settings."]
+    },
+    {
+      "path": "/NetSDK/Image/irCutfilter",
+      "tag": "Image",
+      "methods": ["GET", "PUT"],
+      "description": "IR cut filter control with vendor-private capitalization.",
+      "requestSchema": "IRCut mode config JSON.",
+      "responseSchema": "Response JSON form.",
+      "safety": "safe-write",
+      "notes": ["Observed in IPCamSuite strings and MAINSET.INI OEM settings."]
+    },
+    {
+      "path": "/user/user_list.xml",
+      "tag": "Users",
+      "methods": ["GET"],
+      "description": "Get user list XML.",
+      "requestSchema": "None.",
+      "responseSchema": "XML user list.",
+      "safety": "read-only",
+      "notes": ["Observed in IPCamSuite strings."]
+    },
+    {
+      "path": "/user/add_user.xml",
+      "tag": "Users",
+      "methods": ["POST"],
+      "description": "Add user using XML payload.",
+      "requestSchema": "XML user add request.",
+      "responseSchema": "XML or plain-text status.",
+      "safety": "safe-write",
+      "notes": ["Observed in IPCamSuite strings."]
+    },
+    {
+      "path": "/user/del_user.xml",
+      "tag": "Users",
+      "methods": ["POST"],
+      "description": "Delete user using XML payload.",
+      "requestSchema": "XML delete request.",
+      "responseSchema": "XML or plain-text status.",
+      "safety": "safe-write",
+      "notes": ["Observed in IPCamSuite strings."]
+    },
+    {
+      "path": "/user/set_pass.xml",
+      "tag": "Users",
+      "methods": ["POST"],
+      "description": "Change user password.",
+      "requestSchema": "XML password update request.",
+      "responseSchema": "XML or plain-text status.",
+      "safety": "safe-write",
+      "notes": ["Observed in IPCamSuite strings."]
+    },
+    {
+      "path": "/user/user_reset",
+      "tag": "Users",
+      "methods": ["POST"],
+      "description": "Vendor password-reset style operation.",
+      "requestSchema": "Firmware-specific form or XML.",
+      "responseSchema": "XML or plain-text status.",
+      "safety": "service-impacting",
+      "notes": ["Observed in IPCamSuite strings."]
+    },
+    {
+      "path": "/user/get_sn_num",
+      "tag": "Users",
+      "methods": ["GET"],
+      "description": "Read serial number via XML endpoint.",
+      "requestSchema": "None.",
+      "responseSchema": "XML response with serial number.",
+      "safety": "read-only",
+      "notes": ["Observed in IPCamSuite strings."]
+    },
+    {
+      "path": "/cgi-bin/upload.cgi",
+      "tag": "Maintenance",
+      "methods": ["POST"],
+      "description": "Firmware upload endpoint.",
+      "requestSchema": "Multipart upload body.",
+      "responseSchema": "Plain-text or JSON status.",
+      "safety": "firmware-upgrade",
+      "notes": ["Observed in IPCamSuite strings."]
+    },
+    {
+      "path": "/cgi-bin/upgrade_rate.cgi?cmd=upgrade_rate",
+      "tag": "Maintenance",
+      "methods": ["GET"],
+      "description": "Get firmware upgrade progress.",
+      "requestSchema": "None.",
+      "responseSchema": "Progress payload.",
+      "safety": "read-only",
+      "notes": ["Observed in IPCamSuite strings."]
+    },
+    {
+      "path": "/cgi-bin/hi3510/ptzctrl.cgi",
+      "tag": "PTZ",
+      "methods": ["GET"],
+      "description": "Legacy hi3510 PTZ control.",
+      "requestSchema": "Query string PTZ command.",
+      "responseSchema": "Plain-text status.",
+      "safety": "safe-write",
+      "notes": ["Observed in IPCamSuite strings."]
+    },
+    {
+      "path": "/cgi-bin/hi3510/preset.cgi",
+      "tag": "PTZ",
+      "methods": ["GET"],
+      "description": "Legacy hi3510 PTZ preset operations.",
+      "requestSchema": "Query string preset command.",
+      "responseSchema": "Plain-text status.",
+      "safety": "safe-write",
+      "notes": ["Observed in IPCamSuite strings."]
+    },
+    {
+      "path": "/cgi-bin/gw2.cgi",
+      "tag": "Gateway",
+      "methods": ["GET", "POST"],
+      "description": "Vendor XML gateway used by IPCamSuite.",
+      "requestSchema": "XML gateway request.",
+      "responseSchema": "XML response.",
+      "safety": "service-impacting",
+      "notes": ["Observed in IPCamSuite strings."]
+    }
+  ]
+}

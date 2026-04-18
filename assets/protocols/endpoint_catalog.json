@@ -1,0 +1,1687 @@
+[
+  {
+    "title": "5.1.1 Device Information",
+    "tag": "System",
+    "endpoint": "/NetSDK/System/deviceInfo",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取设备信息。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "DeviceInfo JSON Form.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "用于设置设备信息。",
+        "query": "None.",
+        "content": "DeviceInfo JSON Form.",
+        "success_return": "Response JSON Form",
+        "notes": ":"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.1.2 System Local Time",
+    "tag": "System",
+    "endpoint": "/NetSDK/System/time/localTime",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取系统本地时间信息。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "ISO8601 Date-Time Format String.",
+        "notes": "2"
+      },
+      "PUT": {
+        "description": "用于更新系统本地时间信息。",
+        "query": "None.",
+        "content": "ISO8601 Date-Time Format String.",
+        "success_return": "Response JSON Form",
+        "notes": ": 如北京时间 2013 年 8 月 16 日下午 5 点 30 分 8 秒，可以表示为 2004-05-03T17:30:08+08:00。"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.1.3 System Time Ntp",
+    "tag": "System",
+    "endpoint": "/NetSDK/System/time/ntp[/properties]",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于请求同步国际标准时间。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "TimeNtp JSON Form",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "用于设置 ntp 配置信息。",
+        "query": "None.",
+        "content": "TimeNtp JSON Form",
+        "success_return": "Response JSON Form",
+        "notes": ":"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.2.1 Audio Input Channel List",
+    "tag": "Audio",
+    "endpoint": "/NetSDK/Audio/input/channels[/properties]",
+    "methods": [
+      "GET"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取所有音频输入通道配置。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "AudioInputChannel Array JSON Form.",
+        "notes": ":"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.2.2 Audio Input Channel",
+    "tag": "Audio",
+    "endpoint": "/NetSDK/Audio/input/channel/ID[/properties]",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取指定音频输入通道配置。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "AudioInputChannel JSON Form.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "用于更新指定音频输入通道配置。",
+        "query": "None.",
+        "content": "AudioInputChannel JSON Form.",
+        "success_return": "Response JSON Form.",
+        "notes": ":"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.2.3 Audio Encode Channel List",
+    "tag": "Audio",
+    "endpoint": "/NetSDK/Audio/encode/channels[/properties]",
+    "methods": [
+      "GET"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取音频编码通道配置列表。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "AudioEncodeChannel Array JSON Form.",
+        "notes": ":"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.2.4 Audio Encode Channel",
+    "tag": "Audio",
+    "endpoint": "/NetSDK/Audio/encode/channel/ID[/properties]",
+    "methods": [
+      "GET",
+      "PUT",
+      "POST"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取指定音频编码通道配置。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "AudioEncodeChannel JSON Form.",
+        "notes": ""
+      },
+      "PUT/POST": {
+        "description": "用于更新指定音频编码通道配置。",
+        "query": "None.",
+        "content": "AudioEncodeChannel JSON Form.",
+        "success_return": "Response JSON Form.",
+        "notes": ": 4"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.3.1 Video Input Channel List",
+    "tag": "Video",
+    "endpoint": "/NetSDK/Video/input/channles[/properties]",
+    "methods": [
+      "GET"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取视频输入通道配置列表。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "VideoInputChannel Array JSON Form.",
+        "notes": ":"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.3.2 Video Input Channel",
+    "tag": "Video",
+    "endpoint": "/NetSDK/Video/input/channel/ID[/properties]",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取视频输入通道配置列表。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "VideoInputChannel JSON Form.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "用于更新视频输入通道配置列表。",
+        "query": "None.",
+        "content": "VideoInputChannel JSON Form.",
+        "success_return": "Response JSON Form.",
+        "notes": ":"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.3.3 Video Input Channel Sharpness Level",
+    "tag": "Video",
+    "endpoint": "/NetSDK/Video/input/channel/ID/sharpnessLevel",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取视频输入通道锐度配置值。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "Interger.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "用于更新视频输入通道锐度配置值。",
+        "query": "None.",
+        "content": "Interger.",
+        "success_return": "Response JSON Form.",
+        "notes": ": 5 Range from 0 to 100."
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.3.4 Video Input Channel brightness Level",
+    "tag": "Video",
+    "endpoint": "/NetSDK/Video/input/channel/ID/brightnessLevel",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取视频输入通道亮度配置值。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "Interger.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "用于更新视频输入通道亮度配置值。",
+        "query": "None.",
+        "content": "Interger.",
+        "success_return": "Response JSON Form.",
+        "notes": ":"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.3.5 Video Input Channel flipEnabled",
+    "tag": "Video",
+    "endpoint": "/NetSDK/Video/input/channel/ID/flip",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取视频输入通道 flip 配置值。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "Boolean",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "用于更新视频输入通道 flip 配置值。",
+        "query": "None.",
+        "content": "Boolean",
+        "success_return": "Response JSON Form.",
+        "notes": ":"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.3.6 Video Input Channel mirrorEnabled",
+    "tag": "Video",
+    "endpoint": "/NetSDK/Video/input/channel/ID/mirror",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取视频输入通道 mirror 配置值。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "Boolean",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "用于更新视频输入通道 mirror 配置值。",
+        "query": "None.",
+        "content": "Boolean",
+        "success_return": "Response JSON Form.",
+        "notes": "6 :"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.3.7 Video Input Channel Saturation Level",
+    "tag": "Video",
+    "endpoint": "/NetSDK/Video/input/channel/ID/saturationLevel",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取视频输入通道饱和度配置值。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "Interger.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "用于更新视频输入通道饱和度配置值。",
+        "query": "None.",
+        "content": "Interger.",
+        "success_return": "Response JSON Form.",
+        "notes": ": Range from 0 to 100."
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.3.8 Video Input Channel Hue Level",
+    "tag": "Video",
+    "endpoint": "/NetSDK/Video/input/channel/ID/hueLevel",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取视频输入通道色度配置值。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "Interger.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "用于更新视频输入通道色度配置值。",
+        "query": "None.",
+        "content": "Interger.",
+        "success_return": "Response JSON Form.",
+        "notes": ": Range from 0 to 100."
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.3.9 Video Input Channel Contrast Level",
+    "tag": "Video",
+    "endpoint": "/NetSDK/Video/input/channel/ID/contrastLevel",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取视频输入通道对比度配置值。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "Interger.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "用于更新视频输入通道对比度配置值。",
+        "query": "None.",
+        "content": "Interger.",
+        "success_return": "Response JSON Form.",
+        "notes": "7 : Range from 0 to 100."
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.3.10 Video Input Channel Privacy Mask List",
+    "tag": "Video",
+    "endpoint": "/NetSDK/Video/input/channel/ID/privacyMasks[/properties]",
+    "methods": [
+      "GET"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取指定视频输入通道隐私区域配置列表。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "VideoPrivacyMask Array JSON Form.",
+        "notes": ":"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.3.11 Video Input Channel Privacy Mask",
+    "tag": "Video",
+    "endpoint": "/NetSDK/Video/input/channel/ID/privacyMask/ID[/properties]",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取指定视频输入通道上指定隐私区域配置。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "VideoPrivacyMask JSON Form.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "用于更新指定视频输入通道上指定隐私区域配置。",
+        "query": "None.",
+        "content": "VideoPrivacyMask JSON Form.",
+        "success_return": "Response JSON Form.",
+        "notes": ":"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.3.12 Video Encode Channel List",
+    "tag": "Video",
+    "endpoint": "/NetSDK/Video/encode/channels[/properties]",
+    "methods": [
+      "GET"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取视频编码通道配置列表。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "VideoEncodeChannel Array JSON Form.",
+        "notes": ": 8"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.3.13 Video Encode Channel",
+    "tag": "Video",
+    "endpoint": "/NetSDK/Video/encode/channel/ID[/properties]",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取指定视频编码通道配置。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "VideoEncodeChannel JSON Form.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "用于更新指定视频编码通道配置。",
+        "query": "None.",
+        "content": "VideoEncodeChannel JSON Form.",
+        "success_return": "Response JSON Form.",
+        "notes": ": 为了支持多个视频输入设备，在 URL 中的视频输入通道 ID 需要包含视频输入通道 ID，因 此定义为：视频编码码流 ID+视频输入通道 ID*100，例如，视频输入通道 1 的第一个视频 编码码流对应的 URL 应该为/NetSDK/Video/encode/channel/101，第二个视频编码码流对应 的 URL 应该为/NetSDK/Video/encode/channel/102。"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.3.14 Video Encode Channel Name Overlay",
+    "tag": "Video",
+    "endpoint": "/NetSDK/Video/encode/channel/ID/channelNameOverlay[/properties]",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取指定视频编码通道上通道名称叠加层配置。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "VideoChanelNameOverlay JSON Form.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "用于更新指定视频编码通道上通道名称叠加层配置。",
+        "query": "None.",
+        "content": "VideoChanelNameOverlay JSON Form.",
+        "success_return": "Response JSON Form.",
+        "notes": ":"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.3.15 Video Encode Datetime Overlay",
+    "tag": "Video",
+    "endpoint": "/NetSDK/Video/encode/channel/ID/datetimeOverlay[/properties]",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取指定视频编码通道上日期时间叠加层配置。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "VideoDatetimeOverlay JSON Form.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "用于更新指定视频编码通道上日期时间叠加层配置。",
+        "query": "None.",
+        "content": "VideoDatetimeOverlay JSON Form.",
+        "success_return": "Response JSON Form.",
+        "notes": "9 :"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.3.16 Video Encode Deivce ID Overlay",
+    "tag": "Video",
+    "endpoint": "/NetSDK/Video/encode/channel/ID/deviceIDOverlays[/properties]",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取指定视频编码通道上设备序号叠加层配置列表。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "VideoDeviceIDOverlay JSON Form.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "用于更新指定视频编码通道上设备序号叠加层配置列表。",
+        "query": "None.",
+        "content": "VideoDeviceIDOverlay JSON Form.",
+        "success_return": "Response JSON Form.",
+        "notes": ":"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.3.17 Video Encode Text Overlay List",
+    "tag": "Video",
+    "endpoint": "/NetSDK/Video/encode/channel/ID/textOverlays[/properties]",
+    "methods": [
+      "GET"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取指定视频编码通道上文本叠加层配置列表。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "VideoTextOverlay Array JSON Form.",
+        "notes": ": 该接口保留。"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.3.18 Video Encode Text Overlay",
+    "tag": "Video",
+    "endpoint": "/NetSDK/Video/encode/channel/ID/textOverlay/ID[/properties]",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取指定视频编码通道上指定文本叠加层配置。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "VideoTextOverlay JSON Form.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "用于更新指定视频编码通道上指定文本叠加层配置。",
+        "query": "None.",
+        "content": "VideoTextOverlay JSON Form.",
+        "success_return": "Response JSON Form.",
+        "notes": "10 : 该接口保留。"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.3.19 Video Encode Request Key Frame",
+    "tag": "Video",
+    "endpoint": "/NetSDK/Video/encode/channel/ID/requestKeyFrame",
+    "methods": [
+      "PUT"
+    ],
+    "details": {
+      "PUT": {
+        "description": "用于对指定视频编码通道请求一个关键帧。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "Response JSON Form.",
+        "notes": ":"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.3.20 Video Encode Snap Shot",
+    "tag": "Video",
+    "endpoint": "/NetSDK/Video/encode/channel/ID/snapShot",
+    "methods": [
+      "GET"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取指定视频编码通道快照图片。",
+        "query": "resolutionWidth integer",
+        "content": "None.",
+        "success_return": "JPEG over HTTP。",
+        "notes": "resolutionHeight integer :"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.3.21 Video Motion Detection Channel List",
+    "tag": "Video",
+    "endpoint": "/NetSDK/Video/motionDetection/channels[/properties]",
+    "methods": [
+      "GET"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取视频运动侦测通道配置列表。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "VideoMotionDetectionChannel Array JSON Form.",
+        "notes": ":"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.3.22 Video Motion Detection Channel",
+    "tag": "Video",
+    "endpoint": "/NetSDK/Video/motionDetection/channel/ID[/properties]",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取指定视频运动侦测通道配置。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "VideoMotionDetectionChannel JSON Form.",
+        "notes": "11"
+      },
+      "PUT": {
+        "description": "用于更新指定视频运动侦测通道配置。",
+        "query": "None.",
+        "content": "VideoMotionDetectionChannel JSON Form.",
+        "success_return": "Response JSON Form.",
+        "notes": ":"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.3.23 Video Motion Detection Channel Status",
+    "tag": "Video",
+    "endpoint": "/NetSDK/Video/motionDetection/channel/ID/status",
+    "methods": [
+      "GET",
+      "DELETE"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取指定视频运动侦测通道状态。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "Boolean",
+        "notes": ""
+      },
+      "DELETE": {
+        "description": "用于清除指定视频运动侦测通道状态。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "Response JSON Form.",
+        "notes": ":"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.4.1 IO Alarm Input Channel List",
+    "tag": "IO",
+    "endpoint": "/NetSDK/IO/alarmInput/channels[/properties]",
+    "methods": [
+      "GET"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取报警输入通道配置列表。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "AlarmInputChannel Array JSON Form.",
+        "notes": ": 12"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.4.2 IO Alarm Input Channel",
+    "tag": "IO",
+    "endpoint": "/NetSDK/IO/alarmInput/channel/ID[/properties]",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取指定报警输入通道配置。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "AlarmInputChannel JSON Form.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "用于更新指定报警输入通道配置。",
+        "query": "None.",
+        "content": "AlarmInputChannel JSON Form.",
+        "success_return": "Response JSON Form.",
+        "notes": ":"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.4.3 IO Alarm Input Channel Port Status",
+    "tag": "IO",
+    "endpoint": "/NetSDK/IO/alarmInput/channel/ID/portStatus",
+    "methods": [
+      "GET"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取指定报警输入通道状态。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "AlarmIOPortStatus JSON Form.",
+        "notes": ":"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.4.4 IO Alarm Output Channel List",
+    "tag": "IO",
+    "endpoint": "/NetSDK/IO/alarmOutput/channels[/properties]",
+    "methods": [
+      "GET"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取报警输出通道配置列表。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "AlarmOutputChannel Array JSON Form.",
+        "notes": ":"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.4.5 IO Alarm Output Channel",
+    "tag": "IO",
+    "endpoint": "/NetSDK/IO/alarmOutput/channel/ID[/properties]",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取指定报警输出通道配置。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "AlarmOutputChannel JSON Form.",
+        "notes": "13"
+      },
+      "PUT": {
+        "description": "用于更新指定报警输出通道配置。",
+        "query": "None.",
+        "content": "AlarmOutputChannel JSON Form.",
+        "success_return": "Response JSON Form.",
+        "notes": ":"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.4.6 IO Alarm Output Channel Port Status",
+    "tag": "IO",
+    "endpoint": "/NetSDK/IO/alarmOutput/channel/ID/portStatus",
+    "methods": [
+      "GET",
+      "DELETE"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取指定报警输出通道状态。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "AlarmIOPortStatus JSON Form.",
+        "notes": ""
+      },
+      "DELETE": {
+        "description": "用于清除指定报警输出通道状态。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "Response JSON Form.",
+        "notes": ":"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.4.8 IO Alarm Output Channel Trigger",
+    "tag": "IO",
+    "endpoint": "/NetSDK/IO/alarmOutput/channel/ID/trigger",
+    "methods": [
+      "PUT"
+    ],
+    "details": {
+      "PUT": {
+        "description": "用于手动触发指定报警输出通道输出。",
+        "query": "outputState low",
+        "content": "None.",
+        "success_return": "Response JSON Form.",
+        "notes": "high pulse : 14"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.5.1 PTZ Channel List",
+    "tag": "PTZ",
+    "endpoint": "/NetSDK/PTZ/channels[/properties]",
+    "methods": [
+      "GET"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取云台通道配置列表。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "PTZChannel Array JSON Form.",
+        "notes": ":"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.5.2 PTZ Channel",
+    "tag": "PTZ",
+    "endpoint": "/NetSDK/ PTZ/channel/ID[/properties]",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取指定云台通道配置。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "PTZChannel JSON Form.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "用于更新指定云台通道配置。",
+        "query": "None.",
+        "content": "PTZChannel JSON Form.",
+        "success_return": "Response JSON Form.",
+        "notes": ":"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.5.3 PTZ Channel Control",
+    "tag": "PTZ",
+    "endpoint": "/NetSDK/ PTZ/channel/ID/control",
+    "methods": [
+      "PUT"
+    ],
+    "details": {
+      "PUT": {
+        "description": "用于控制指定云台通道。",
+        "query": "command:string pan_left",
+        "content": "None.",
+        "success_return": "Response JSON Form.",
+        "notes": "pan_right tilt_up tilt_down up_left up_right down_left down_right zoom_in zoom_out focus_near focus_far iris_open 15 iris_close auto_pan set_preset clear_preset goto_preset mode:string start stop speed:integer 0-100 presetNo:integer :"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.6.1 Network Transport Stream Channel List",
+    "tag": "Stream",
+    "endpoint": "/NetSDK/Stream/channles",
+    "methods": [
+      "GET"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取网络传输码流通道配置列表。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "StreamChannel Array JSON Form.",
+        "notes": ":"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.6.2 Network Transport Stream Channel",
+    "tag": "Stream",
+    "endpoint": "/NetSDK/Stream/channel/ID",
+    "methods": [
+      "GET"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取指定网络传输码流通道配置。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "StreamChannel JSON Form.",
+        "notes": ": 16"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.7.1 Network Interface List",
+    "tag": "Network",
+    "endpoint": "/NetSDK/Network/interfaces[/properties]",
+    "methods": [
+      "GET"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取网络接口配置列表。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "NetworkInterfaceList JSON Form.",
+        "notes": ":"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.7.2 Network Interface",
+    "tag": "Network",
+    "endpoint": "/NetSDK/Network/interfaces/ID[/properties]",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取指定网络接口配置。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "NetworkInterfaceList JSON Form.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "用于更新指定网络接口配置。",
+        "query": "None.",
+        "content": "NetworkInterfaceList JSON Form.",
+        "success_return": "Response JSON Form.",
+        "notes": ":列表有 4 个网络接口，其中 id 为 1 的是本地 IP 配置，id 为 2 的是保留接口，id 为 3 的是默认 IP 配置，id 为 4 的是 wifi 配置，请留意 interfaceName 属性"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.7.3 Network Interface Lan",
+    "tag": "Network",
+    "endpoint": "/NetSDK/Network/interfaces/ID/lan[/properties]",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取指定网络接口 LAN 配置。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "NetworkInterfaceLan JSON Form.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "用于更新指定网络接口 LAN 配置。",
+        "query": "None.",
+        "content": "NetworkInterfaceLan JSON Form.",
+        "success_return": "Response JSON Form.",
+        "notes": ": 17"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.7.4 Network Interface Pppoe",
+    "tag": "Network",
+    "endpoint": "/NetSDK/Network/interfaces/ID/pppoe[/properties]",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取指定网络接口配置。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "NetworkInterfacePppoe JSON Form.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "用于更新指定网络接口配置。",
+        "query": "None.",
+        "content": "NetworkInterfacePppoe JSON Form.",
+        "success_return": "Response JSON Form.",
+        "notes": ":"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.7.5 Network Interface Dns",
+    "tag": "Network",
+    "endpoint": "/NetSDK/Network/interfaces/ID/ddns[/properties]",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取指定网络接口 DDNS 配置。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "NetworkInterfaceDdns JSON Form.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "用于更新指定网络接口 DDNS 配置。",
+        "query": "None.",
+        "content": "NetworkInterfaceDdns JSON Form.",
+        "success_return": "Response JSON Form.",
+        "notes": ":"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.7.6 Network Interface Wireless",
+    "tag": "Network",
+    "endpoint": "NetSDK/Network/interfaces/ID/wireless[/properties]",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取指定网络接口 WIRELESS 配置。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "NetworkInterfaceWireless JSON Form.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "用于更新指定网络接口 WIRELESS 配置。",
+        "query": "None.",
+        "content": "NetworkInterfaceWireless JSON Form.",
+        "success_return": "Response JSON Form.",
+        "notes": "18 :"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.7.7 Network Port List",
+    "tag": "Network",
+    "endpoint": "/NetSDK/Network/Ports[/properties]",
+    "methods": [
+      "GET"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取所有网络端口配置列表。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "NetworkPortListJSON Form.",
+        "notes": ": web/data 端口只是用 ID 为 1 的，其余为保留接口"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.7.8 Network Port",
+    "tag": "Network",
+    "endpoint": "/NetSDK/Network/Port/ID[/properties]",
+    "methods": [
+      "GET",
+      "PUT",
+      "POST"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取指定网络端口配置。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "NetworkPortListJSON Form.",
+        "notes": ""
+      },
+      "PUT/POST": {
+        "description": "用于更新指定网络端口配置。",
+        "query": "None.",
+        "content": "NetworkPortList JSON Form.",
+        "success_return": "Response JSON Form.",
+        "notes": ":"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.7.9 Network Dns",
+    "tag": "Network",
+    "endpoint": "/NetSDK/Network/Dns[/properties]",
+    "methods": [
+      "GET",
+      "PUT",
+      "POST"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取网络 DNS 配置。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "NetworkDns JSON Form.",
+        "notes": ""
+      },
+      "PUT/POST": {
+        "description": "用于更新网络 DNS 配置。",
+        "query": "None.",
+        "content": "NetworkDns JSON Form.",
+        "success_return": "Response JSON Form.",
+        "notes": ": 19"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.7.10 Network Esee",
+    "tag": "Network",
+    "endpoint": "/NetSDK/Network/Esee",
+    "methods": [
+      "GET",
+      "PUT",
+      "POST"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取 ESEE 配置。",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "NetworkEsee JSON Form.",
+        "notes": ""
+      },
+      "PUT/POST": {
+        "description": "用于更新 ESEE 配置。",
+        "query": "None.",
+        "content": "NetworkEsee JSON Form.",
+        "success_return": "Response JSON Form.",
+        "notes": ":"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.8.1 SDCard media search",
+    "tag": "SDCard",
+    "endpoint": "/NetSDK/SDCard/media/search",
+    "methods": [
+      "GET"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取 SDCard media",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "SDCardDbMedia JSON Form.",
+        "notes": ": 按 beginUTC, endUTC 获取 SDCsrd db media"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.8.2 SDCard media playbackFLV",
+    "tag": "SDCard",
+    "endpoint": "/NetSDK/SDCard/media/playbackFLV",
+    "methods": [
+      "GET"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于回放 SDCard media",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "Integer 0.",
+        "notes": ":"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.8.3 SDCard format",
+    "tag": "SDCard",
+    "endpoint": "/NetSDK/SDCard/format",
+    "methods": [
+      "GET"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于格式化 SDCard",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "Integer 0.",
+        "notes": "20 :"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.8.4 SDCard status",
+    "tag": "SDCard",
+    "endpoint": "/NetSDK/SDCard/status",
+    "methods": [
+      "GET"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取 SDCard 状态",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "Sdcard status.",
+        "notes": ": Sdcard status:1、work 2、ejected 3、fserror 4、formatting 5、zombie"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.9.1 Image",
+    "tag": "Image",
+    "endpoint": "/NetSDK/Image[/properties]",
+    "methods": [
+      "GET",
+      "PUT",
+      "POST"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取图像处理配置",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "Image JSON Form.",
+        "notes": ""
+      },
+      "PUT/POST": {
+        "description": "用于设置图像处理配置",
+        "query": "None.",
+        "content": "Image JSON Form.",
+        "success_return": "Response JSON Form.",
+        "notes": ": 查询用get，设置用put，设置成功后返回ok的json信息。"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.9.2 IrCutFilter",
+    "tag": "Image",
+    "endpoint": "/NetSDK/Image/irCutFilter[/properties]",
+    "methods": [
+      "GET",
+      "PUT",
+      "POST"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取红外配置",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "IrCutFilter JSON Form.",
+        "notes": ""
+      },
+      "PUT/POST": {
+        "description": "用于设置红外配置",
+        "query": "None.",
+        "content": "IrCutFilter JSON Form.",
+        "success_return": "Response JSON Form.",
+        "notes": "21 : 查询用 get，设置用 put，设置成功后返回 ok 的 json 信息。"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.9.3 ManualSharpness",
+    "tag": "Image",
+    "endpoint": "/NetSDK/Image/manualSharpness[/properties]",
+    "methods": [
+      "GET",
+      "PUT",
+      "POST"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取手动锐度配置",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "ManualSharpness JSON Form.",
+        "notes": ""
+      },
+      "PUT/POST": {
+        "description": "用于设置手动锐度配置",
+        "query": "None.",
+        "content": "ManualSharpness JSON Form.",
+        "success_return": "Response JSON Form.",
+        "notes": ": 查询用 get，设置用 put，设置成功后返回 ok 的 json 信息。"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.9.4 Denoise3D",
+    "tag": "Image",
+    "endpoint": "/NetSDK/Image/denoise3d[/properties]",
+    "methods": [
+      "GET",
+      "PUT",
+      "POST"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取 3D 去噪配置",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "Denoise3D JSON Form.",
+        "notes": ""
+      },
+      "PUT/POST": {
+        "description": "用于设置 3D 去噪配置",
+        "query": "None.",
+        "content": "Denoise3D JSON Form.",
+        "success_return": "Response JSON Form.",
+        "notes": ": 查询用 get，设置用 put，设置成功后返回 ok 的 json 信息。"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.9.5 WDR",
+    "tag": "Image",
+    "endpoint": "/NetSDK/Image/wdr[/properties]",
+    "methods": [
+      "GET",
+      "PUT",
+      "POST"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取宽动态配置",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "WDR JSON Form.",
+        "notes": "22"
+      },
+      "PUT/POST": {
+        "description": "用于设置宽动态配置",
+        "query": "None.",
+        "content": "WDR JSON Form.",
+        "success_return": "Response JSON Form.",
+        "notes": ": 查询用 get，设置用 put，设置成功后返回 ok 的 json 信息。"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  },
+  {
+    "title": "5.9.6 AF",
+    "tag": "Image",
+    "endpoint": "/NetSDK/Image/AF",
+    "methods": [
+      "GET",
+      "DELETE"
+    ],
+    "details": {
+      "GET": {
+        "description": "用于获取自动对焦统计",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "Unsigned short: Focus Metries Value（text/html）",
+        "notes": ""
+      },
+      "DELETE": {
+        "description": "用于清除自动对焦统计推送",
+        "query": "None.",
+        "content": "None",
+        "success_return": "Response JSON Form",
+        "notes": ": 查询用 get，get 后设备会对该 socket 进行主动推送 HTTP 数据包，推送失败 100 次会自动 清除推送状态。主动清除用 delete，清除成功后返回 ok 的 json 信息。 Appendix I Data Structure DeviceInfo { /* rw, string, */ \"deviceName\", /* rw, integer, \"1-128\", */ 23 \"deviceAddress\", /* ro, string, */ \"description\", /* ro, string, */ \"model\", /* ro, string, */ \"serialNumber\", /* ro, string, */ \"macAddress\", /* ro, string, */ \"firmwareVersion\", /* ro, string, */ \"firmwareReleaseDate\", /* ro, string, */ \"firmwareVersion\", /* ro, string, */ \"hardwareVersion\", } TimeNtp { /* rw, boolean, [true, false] */ \" ntpEnabled\", /* rw, string, \"max\": 64, */ \" ntpServerDomain\", } AudioInputChannel { /* ro, integer, */ \"id\", /* ro, string, \"input,output\", */ \"workMode\", /* rw, integer, \"8000\", */ \"sampleRate\", /* rw, integer, \"16\", */ \"sampleBitWidth\", /* rw, integer, \"0-100\", */ \"inputVolume\", /* rw, integer, \"0-100\", */ \"outputVolume\", } AudioEncodeChannel 24 { /* ro, integer, */ \"id\", /* ro, integer, */ \"audioInputChannelID\", /* rw, boolean, */ \"enabled\", /* rw, string, \"G.711alaw,G.711ulaw\", */ \"codecType\", } VideoPrivacyMask { /* ro, integer, */ \"id\", /* ro, boolean, */ \"enabled\", /* ro, float, \"0-100\", the relative percentage to capture size */ \"regionX\", \"regionY\", \"regionWidth\", \"regionHeight\", /* ro, string, the mask color, RGB888 format, such as red \"ff0000\" */ \"regionColor\", } VideoInputChannel 25 { /* ro, integer, */ \"id\", /* ro, integer, \"50,60\", */ \"powerLineFrequencyMode\", /* ro, integer, the video capture size, */ \"captureWidth\", \"captureWidthProperty\", /* ro, integer, depends on the <powerLineFrequencyMode>, */ \"captureFrameRate\", /* ro, integer, \"0-100\", */ \"brightnessLevel\", \"contrastLevel\", \"sharpnessLevel\", \"saturationLevel\", \"hueLevel\", /* video privacy mask list, */ \"privacyMask\" : [], } VideoChannelNameOverlay { /* rw, boolean, indicates the overlay shows or not, */ \"enabled\", /* rw, float, \"0-100\", indicates the location of overlay, */ /* the relative percentage of video size, */ \"regionX\", \"regionY\", } VideoDatetimeOverlay 26 { /* rw, boolean, indicates the overlay shows or not, */ \"enabled\", \"regionX\", \"regionY\", /* rw, string, */ /* \"YYYY/MM/DD,MM/DD/YYYY,DD/MM/YYYY\", */ /* \"YYYY-MM-DD,MM-DD-YYYY,DD-MM-YYYY\", */ /* indicates the date format to display, */ \"dateFormat\", /* rw, integer, \"12,24\", indicates the time format to display, */ \"timeFormat\", /* rw, boolean, */ \"displayWeek\", } VideoDeviceIDOverlay { /* rw, boolean, indicates the overlay shows or not, */ \"enabled\", \"regionX\", \"regionY\", } VideoTextOverlay { /* rw, boolean, indicates the overlay shows or not, */ \"enabled\", \"regionX\", \"regionY\", /* rw, string, */ \"message\", } VideoEncodeChannel { /* ro, integer, */ \"id\", /* rw, string, */ \"channelName\", /* rw, boolean, */ \"enabled\", /* ro, integer, refers to </NetSDK/Video/input/channel/ID>, */ \"videoInputChannelID\", 27 /* rw, string, \"H.264\", */ \"codecType\", /* rw, string, \"baseline,main,high\", */ \"h264Profile\", /* rw, string, format <width x height>, */ \"resolution\", /* rw, boolean, */ \"freeResolution\", /* rw, integer, indicates the video size when <freeResolution> true, */ \"resolutionWidth\", \"resolutionHeight\", /* rw, string, \"CBR,VBR\", */ \"bitRateControlType\", /* rw, integer, */ \"constantBitRate\", /* rw, integer, */ \"frameRate\", /* rw, integer, */ \"keyFrameInterval\", /* rw, string, \"JPEG\" */ \"snapShotImageType\", /* the channel name overlay of this encoding, */ \"channelNameOverlay\", /* the datetime overlay of this encoding, */ \"datetimeOverlay\", /* the device ID overlay of this encoding, */ \"deviceIDOverlay\", /* the text overlay of this encoding, */ \"textOverlay\" : [], } VideoMotionDetectionGrid { /* ro, integer, */ \"rowGranularity\", /* ro, integer, */ \"columnGranularity \", /* rw, a boolean <rowGranularity> by <columnGranularity> matrix, */ \"granularity\", /* ro, integer, \"0-100\" */ \"sensitivityLevel\", } VideoMotionDetectionRegion 28 { /* ro, integer, */ \"id\", /* rw, boolean, */ \"enabled\", /* rw, float, \"0-100\" */ \"regionX\", \"regionY\", \"regionWidth\", \"regionHeight\", /* ro, integer, \"0-100\" */ \"sensitivityLevel\", } VideoMotionDetectionChannel { /* ro, integer, */ \"id\", /* rw, boolean, */ \"enabled\", /* rw, string, \"grid,region\", */ \" detectionType\", /* refers to <VideoMotionDetectionGrid>, */ \" detectionGrid\", /* refers to <VideoMotionDetectionRegion>, */ \" detectionRegion\" : [], } AlarmInputChannel { /* ro, integer, */ \"id\", \"active\" : { /* rw, string, \"high,low\", */ \"defaultState\", /* rw, string, \"high,low\", */ \"activeState\", } } AlarmOutputChannel { /* ro, integer, */ \"id\", 29 \"active\" : { /* rw, string, \"high,low\", */ \"defaultState\", \"activeState\", }, /* rw, string, \"continuous,low\", */ \"powerOnState\", /* rw, integer, \"1000-\", in millisecond */ \"pulseDuration\", } AlarmIOPortStatus { /* ro, string, \"input,output\", the type of this alarm IO port */ \"type\", /* ro, string, \"high,low\", the current state of this alarm IO port */ \"state\", /* ro, boolean, */ \"active\", } PTZChannel { /* ro, integer, */ \"id\", /* ro, integer, */ \"serialPortID\", \"videoInputID\", /* ro, string, \"half,full\", */ \"duplexMode\", /* ro, string, \"internal,external\", */ \"controlType, \"externalControl\" : { /* rw, string, */ \"protocol\", /* rw, integer, */ \"address\", }, } StreamTransportRTSP { /* ro, boolean, */ 30 \"enabled\", /* ro, boolean, */ \"authorization\", /* rtsp://<ipAddress>[:<port>]/<absolutePath>, */ /* ro, string, */ \"absolutePath\", /* ro, integer, \"1-60000\", */ \"port\", } StreamTransportRTSPoverHTTP { /* ro, boolean, */ \"enabled\", /* ro, boolean, */ \"authorization\", /* ro, string, \"GET\", */ \"requestMethod\", /* http://<ipAddress>[:<port>]/<absolutePath>, */ /* ro, string, */ \"absolutePath\", /* ro, integer, \"1-60000\", */ \"port\", } StreamTransportFLVoverHTTP { /* ro, boolean, */ \"enabled\", /* ro, boolean, */ \"authorization\", /* ro, string, \"GET\", */ \"requestMethod\", /* http://<ipAddress>[:<port>]/<absolutePath>, */ /* ro, string, */ \"absolutePath\", /* ro, integer, \"1-60000\", */ \"port\", } StreamTransportRTMP { /* ro, boolean, */ \"enabled\", 31 /* ro, boolean, */ \"authorization\", /* rtmp://<ipAddress>[:<port>]/<absolutePath>, */ /* ro, string, */ \"absolutePath\", /* ro, integer, \"1-60000\", */ \"port\", } StreamChannel { /* ro, ineteger, */ \"id\", /* ro, ineteger, refers to </NetSDK/audio/encode/channel/ID>, */ \"audioEncodeChannelID\", /* ro, ineteger, refers to </NetSDK/video/encode/channel/ID>, */ \"videoEncodeChannelID\", /* refers to <StreamTransportRTSP>, */ \"transportRTSP\", /* refers to <StreamTransportRTSPoverHTTP>, */ \"transportRTSPoverHTTP\", /* refers to <StreamTransportFLVoverHTTP>, */ \"transportFLVoverHTTP\", /* refers to <StreamTransportRTMP>, */ \"transportRTMP\", } NetworkInterfaceList { /* ro, integer, */ \"id\", /* ro, string, */ \"interfaceName\", /* refers to <NetworkInterfaceLan>, */ \"lan\", /* refers to <NetworkInterfaceUpnp>, */ \"upnp\", /* refers to <NetworkInterfacePppoe>, */ \"pppoe\", /* refers to <NetworkInterfaceDdns>, */ \"ddns\", /* refers to <NetworkInterfaceWireless>, */ \"wireless\", /* refers to <NetworkInterfaceAccessPointMode>, */ 32 \"accessPointMode\", /* refers to <NetworkInterfaceDhcpServer>, */ \"dhcpServer\", } NetworkInterfaceLan { /* rw, string, */ \" ipVersion\", /* rw, string, [\"static\", \"dynamic\"] */ \" addressingType\", /* rw, string, */ \" staticIP\", /* rw, string, */ \" staticNetmask\", /* rw, string, */ \" staticGateway\", } NetworkInterfaceUpnp { /* ro, boolean, */ \"enabled\", } NetworkInterfacePppoe { /* ro, boolean, */ \"enabled\", /* rw, string, \"max\": 64 * \"pppoeUserName\", /* rw, string, \"max\": 64 * \"pppoePassword\", } NetworkInterfaceDns { /* ro, boolean, */ \"enabled\", /*rw,string, \"DYNDDNS\",\"NOIP\",\"3322\", \"CHANGEIP\",\"POPDVR\",\"SKYBEST\",\"DVRTOP\"*/ \"ddnsProvider\", /* rw, string, \"max\": 64 */ \"ddnsUrl\", 33 /* rw, string, \"max\": 64 */ \"ddnsUserName\", /* rw, string, \"max\": 64 */ \"ddnsPassword\", } NetworkInterfaceWireless { /* rw, string, [\"none\",\"accessPoint\",\"stationMode\"] */ \"wirelessMode\", /* refers to < stationMode >, */ \"stationMode\", } NetworkInterfaceStationMode { /* ro, string, */ \"wirelessStaMode\", /* rw, string, \"max\": 48 */ \"wirelessApBssId\", /* rw, string, \"max\": 32 */ \"wirelessApEssId\", /* rw, string, \"min\": 8,\"max\": 63 */ \"wirelessApPsk\", } NetworkInterfaceAccessPointMode { /* ro, string, */ \"wirelessBssId\", /* rw, string, \"max\": 32 */ \"wirelessEssId\", /* rw, string, \"min\": 8,\"max\": 63 */ \"wirelessPsk\", /* rw, string, [\"802.11b\",\"802.11g\",\"802.11n\",\"802.11bg\",\"802.11bgn\"] */ \"wirelessApMode\", /*rw,string, [\"Auto\",\"1\",\"2\",\"3\",\"4\",\"5\", \"6\",\"7\",\"8\",\"9\",\"10\",\"11\",\"12\",\"13\",\"14\"]*/ \"wirelessApMode80211nChannel\", /* ro,boolean, */ \"wirelessEssIdBroadcastingEnabled\", /* rw, string, [\"WPA_PSK\",\"WPA2_PSK\"] */ \"wirelessWpaMode\", } 34 NetworkInterfaceDhcpServer { /* ro, boolean, */ \"enabled\", /* ro, boolean, */ \"dhcpAutoSettingEnabled\", /* rw, string, \"max\": 64 */ \"dhcpIpRange\", /* rw, string, \"max\": 32 */ \"dhcpIpNumber\", /* rw, string, \"max\": 32 */ \"dhcpIpDns\", /* rw, string, \"max\": 32 */ \"dhcpIpGateway\", } NetworkPortList { /* ro, integer, */ \"id\", /* ro, string, */ \"portName\", /* rw, integer, \"min\" : 1, \"max\" 60000 */ \"value\", } NetworkDNS { /* ro, string, */ \"preferredDns\", /* ro, string, */ \"staticAlternateDns\", } NetworkEsee { /* ro, boolean, */ \"enabled\", } SDCardDbMedia { /* rw, integer, */ 35 \"sessionID\" /* rw, integer, */ \"channelID\". /* rw, integer, */ \"beginUTC\" /* rw, integer, */ \"endUTC\" /* rw, strng, */ \"type\" }, Image { /* rw, string, [ \"auto\", \"indoor\", \"outdoor\"], */ \"sceneMode\" /* refers to <ImageIrCutFilter>, */ \"irCutFilter\" /* refers to < ImageManualSharpness>, */ \"manualSharpness\" /* refers to <ImageDenoise3d>, */ \"denoise3d\" /* refers to <ImageWDR>, */ \"WDR\" /* rw, string, [\"auto\", \"bright\", \"dark\"]*/ \"exposureMode\" /* rw, string, [\"auto\", \"indoor\", \"outdoor\"]*/ \"awbMode\" /* rw, string, [\"close\", \"only night\", \"day-night\", \"auto\"]*/ \"lowlightMode\" } IrCutFilter { /* rw, string, [\"hardware\", \"software\"] */ \"irCutControlMode\" /* rw, string, [\"auto\", \"daylight\", \"night\"]*/ \"irCutMode\" } ManualSharpness { /* ro, boolean, */ \"enabled\" 36 /* rw, integer, \"min\" : 0, \"max\" : 255, \"def\" : 170*/ \"sharpnessLevel\" } Denoise3d { /* ro, boolean, */ \"enabled\" /* rw, integer, \"min\" : 1, \"max\" : 5, \"def\" : 1*/ \"denoise3dStrength\" } WDR { /* ro, boolean, */ \"enabled\" /* rw, integer, \"min\" : 1, \"max\" : 5, \"def\" : 3 */ \"WDRStrength\" } 37 - Many endpoints support GET for read and PUT/POST for write. - Preserve exact path capitalization when testing firmware. - Some PDFs contain OCR errors; validate against live device responses. - Use authenticated HTTP requests if device requires login/session. 1. Generate Python client from endpoint list. 2. Probe live device and compare supported routes. 3. Build ONVIF + NETSDK bridge. 4. Auto-discover writable image/night-vision settings."
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    }
+  }
+]
