@@ -97,6 +97,8 @@ public sealed record PersistenceVerificationResult
     public JsonNode? PreValue { get; init; }
     public JsonNode? PostValue { get; init; }
     public JsonNode? PostRebootValue { get; init; }
+    public SemanticWriteStatus ImmediateStatus { get; init; } = SemanticWriteStatus.Unverified;
+    public SemanticWriteStatus PersistenceStatus { get; init; } = SemanticWriteStatus.Unverified;
     public string? Notes { get; init; }
     public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
 }

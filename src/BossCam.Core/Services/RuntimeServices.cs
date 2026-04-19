@@ -200,7 +200,7 @@ public sealed class SettingsService(
             AdapterName = adapter.Name,
             Operation = plan.Method,
             Endpoint = plan.Endpoint,
-            RequestContent = plan.Payload?.ToJsonString(),
+            RequestContent = RedactPayload(plan.Payload, plan.SensitivePaths)?.ToJsonString(),
             ResponseContent = new JsonObject
             {
                 ["write"] = finalResult.Response?.DeepClone(),
@@ -211,7 +211,9 @@ public sealed class SettingsService(
                 ["rollbackAttempted"] = rollbackAttempted,
                 ["rollbackSucceeded"] = rollbackSucceeded
             }.ToJsonString(),
-            Success = finalResult.Success
+            Success = finalResult.Success,
+            SemanticStatus = finalResult.SemanticStatus,
+            BlockReason = finalResult.Success ? null : finalResult.Message
         }, cancellationToken);
 
         return finalResult;
@@ -240,7 +242,9 @@ public sealed class SettingsService(
             Endpoint = operation.ToString(),
             RequestContent = payload?.ToJsonString(),
             ResponseContent = result.Response?.ToJsonString(),
-            Success = result.Success
+            Success = result.Success,
+            SemanticStatus = result.Success ? SemanticWriteStatus.AcceptedChanged : SemanticWriteStatus.EndpointRejected,
+            BlockReason = result.Success ? null : result.Message
         }, cancellationToken);
 
         return result;
@@ -264,6 +268,59 @@ public sealed class SettingsService(
         }
 
         return null;
+    }
+
+    private static JsonObject? RedactPayload(JsonObject? payload, IReadOnlyCollection<string> sensitivePaths)
+    {
+        if (payload is null)
+        {
+            return null;
+        }
+
+        var clone = (JsonObject)payload.DeepClone();
+        foreach (var path in sensitivePaths)
+        {
+            SetPathValue(clone, path, JsonValue.Create("***REDACTED***"));
+        }
+
+        return clone;
+    }
+
+    private static void SetPathValue(JsonObject root, string path, JsonNode? value)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        var cleaned = path.Trim().TrimStart('$').TrimStart('.');
+        if (string.IsNullOrWhiteSpace(cleaned))
+        {
+            return;
+        }
+
+        var parts = cleaned.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        JsonObject current = root;
+        for (var index = 0; index < parts.Length; index++)
+        {
+            var isLeaf = index == parts.Length - 1;
+            var key = parts[index];
+            if (isLeaf)
+            {
+                current[key] = value?.DeepClone();
+                return;
+            }
+
+            current[key] ??= new JsonObject();
+            if (current[key] is JsonObject child)
+            {
+                current = child;
+            }
+            else
+            {
+                return;
+            }
+        }
     }
 }
 

@@ -2,7 +2,9 @@ using System.Text.Json.Nodes;
 using BossCam.Contracts;
 using BossCam.Core;
 using BossCam.Infrastructure;
+using BossCam.NativeBridge;
 using BossCam.Service.Hosted;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -16,6 +18,7 @@ builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy.Al
 builder.Services.AddBossCamInfrastructure(builder.Configuration);
 builder.Services.AddBossCamCore();
 builder.Services.AddHostedService<BossCamBootstrapWorker>();
+builder.Services.AddHostedService<RecordingLifecycleWorker>();
 
 var app = builder.Build();
 
@@ -79,6 +82,8 @@ app.MapPost("/api/devices/{id:guid}/settings/typed/apply", async (Guid id, Typed
     var result = await typedSettingsService.ApplyTypedFieldAsync(id, request.FieldKey, request.Value, request.ExpertOverride, ct);
     return result is null ? Results.NotFound() : Results.Ok(result);
 });
+app.MapPost("/api/devices/{id:guid}/settings/typed/apply-batch", async (Guid id, TypedSettingBatchApplyRequest request, TypedSettingsService typedSettingsService, CancellationToken ct) =>
+    Results.Ok(await typedSettingsService.ApplyTypedChangesAsync(id, request.Changes, request.ExpertOverride, ct)));
 app.MapPost("/api/devices/{id:guid}/maintenance/{operation}", async (Guid id, string operation, JsonObject? payload, SettingsService settingsService, CancellationToken ct) =>
 {
     if (!Enum.TryParse<MaintenanceOperation>(operation, true, out var parsed))
@@ -102,18 +107,141 @@ app.MapGet("/api/diagnostics/transcripts", async (Guid? deviceId, int? limit, Pr
     Results.Ok(await validationService.GetTranscriptsAsync(deviceId, limit ?? 200, ct)));
 app.MapGet("/api/devices/{id:guid}/persistence", async (Guid id, int? limit, PersistenceVerificationService persistenceVerificationService, CancellationToken ct) =>
     Results.Ok(await persistenceVerificationService.GetResultsAsync(id, limit ?? 100, ct)));
+app.MapGet("/api/devices/{id:guid}/persistence/eligible-fields", async (Guid id, TypedSettingsService typedSettingsService, CancellationToken ct) =>
+    Results.Ok(await typedSettingsService.GetPersistenceEligibleFieldsAsync(id, ct)));
 app.MapPost("/api/devices/{id:guid}/persistence/verify", async (Guid id, PersistenceVerificationRequest request, PersistenceVerificationService persistenceVerificationService, CancellationToken ct) =>
 {
     var result = await persistenceVerificationService.VerifyAsync(request with { DeviceId = id }, ct);
     return result is null ? Results.NotFound() : Results.Ok(result);
 });
+app.MapPost("/api/devices/{id:guid}/persistence/verify-field", async (Guid id, PersistenceFieldVerifyRequest request, TypedSettingsService typedSettingsService, CancellationToken ct) =>
+{
+    var result = await typedSettingsService.VerifyPersistenceForFieldAsync(id, request.FieldKey, request.Value, request.RebootForVerification, request.ExpertOverride, ct);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
 app.MapGet("/api/firmware/capabilities", async (CapabilityPromotionService capabilityPromotionService, CancellationToken ct) =>
     Results.Ok(await capabilityPromotionService.GetProfilesAsync(ct)));
+app.MapGet("/api/contracts/endpoints", async (Guid? deviceId, IApplicationStore store, IEndpointContractCatalog catalog, CancellationToken ct) =>
+{
+    if (deviceId is Guid id)
+    {
+        var device = await store.GetDeviceAsync(id, ct);
+        if (device is null)
+        {
+            return Results.NotFound();
+        }
+
+        return Results.Ok(await catalog.GetContractsForDeviceAsync(device, ct));
+    }
+
+    return Results.Ok(await catalog.GetContractsAsync(ct));
+});
+app.MapPost("/api/contracts/fixtures/promote/{deviceId:guid}", async (Guid deviceId, ContractFixturePromotionRequest request, IContractEvidenceService evidenceService, CancellationToken ct) =>
+    Results.Ok(await evidenceService.PromoteFromTranscriptsAsync(deviceId, request.ExportRoot, ct)));
+app.MapGet("/api/contracts/fixtures", async (Guid? deviceId, IContractEvidenceService evidenceService, CancellationToken ct) =>
+    Results.Ok(await evidenceService.GetFixturesAsync(deviceId, ct)));
+app.MapGet("/api/devices/{id:guid}/semantic/history", async (Guid id, int? limit, SemanticTrustService semanticTrustService, CancellationToken ct) =>
+    Results.Ok(await semanticTrustService.GetSemanticHistoryAsync(id, limit ?? 300, ct)));
+app.MapGet("/api/devices/{id:guid}/constraints", async (Guid id, IApplicationStore store, SemanticTrustService semanticTrustService, CancellationToken ct) =>
+{
+    var fields = await store.GetNormalizedSettingFieldsAsync(id, ct);
+    var firmware = fields.Select(static field => field.FirmwareFingerprint).FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value));
+    return Results.Ok(await semanticTrustService.GetConstraintProfilesAsync(firmware, ct));
+});
+app.MapGet("/api/devices/{id:guid}/dependencies", async (Guid id, IApplicationStore store, SemanticTrustService semanticTrustService, CancellationToken ct) =>
+{
+    var fields = await store.GetNormalizedSettingFieldsAsync(id, ct);
+    var firmware = fields.Select(static field => field.FirmwareFingerprint).FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value));
+    return Results.Ok(await semanticTrustService.GetDependencyMatricesAsync(firmware, ct));
+});
+app.MapPost("/api/devices/{id:guid}/constraints/discover", async (Guid id, ConstraintDiscoveryRequest request, SemanticTrustService semanticTrustService, CancellationToken ct) =>
+{
+    var result = await semanticTrustService.DiscoverConstraintsAsync(request with { DeviceId = id }, ct);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
+app.MapPost("/api/devices/{id:guid}/network/recovery", async (Guid id, NetworkRecoveryContext context, SemanticTrustService semanticTrustService, CancellationToken ct) =>
+    Results.Ok(await semanticTrustService.RecoverNetworkAsync(context with { DeviceId = id }, ct)));
 app.MapGet("/api/recordings", async (Guid? deviceId, IApplicationStore store, CancellationToken ct) => Results.Ok(await store.GetRecordingProfilesAsync(deviceId, ct)));
 app.MapPost("/api/recordings", async (IEnumerable<RecordingProfile> profiles, IApplicationStore store, CancellationToken ct) =>
 {
     await store.SaveRecordingProfilesAsync(profiles, ct);
     return Results.Accepted();
+});
+app.MapPost("/api/recordings/start", async (RecordingStartRequest request, RecordingService recordingService, CancellationToken ct) =>
+{
+    var job = await recordingService.StartAsync(request, ct);
+    return Results.Ok(job);
+});
+app.MapPost("/api/recordings/stop/{jobId:guid}", async (Guid jobId, RecordingService recordingService, CancellationToken ct) =>
+{
+    var job = await recordingService.StopAsync(jobId, ct);
+    return job is null ? Results.NotFound() : Results.Ok(job);
+});
+app.MapGet("/api/recordings/jobs", async (RecordingService recordingService, CancellationToken ct) =>
+    Results.Ok(await recordingService.GetJobsAsync(ct)));
+app.MapPost("/api/recordings/index/refresh", async (Guid? deviceId, RecordingService recordingService, CancellationToken ct) =>
+    Results.Ok(await recordingService.RefreshIndexAsync(deviceId, ct)));
+app.MapGet("/api/recordings/index", async (Guid? deviceId, int? limit, RecordingService recordingService, CancellationToken ct) =>
+    Results.Ok(await recordingService.GetIndexedSegmentsAsync(deviceId, limit ?? 500, ct)));
+app.MapPost("/api/recordings/export", async (ClipExportRequest request, RecordingService recordingService, CancellationToken ct) =>
+    Results.Ok(await recordingService.ExportClipAsync(request, ct)));
+app.MapPost("/api/recordings/reconcile", async (RecordingService recordingService, CancellationToken ct) =>
+    Results.Ok(await recordingService.ReconcileAutoStartAsync(ct)));
+app.MapPost("/api/recordings/housekeeping", async (Guid? deviceId, RecordingService recordingService, CancellationToken ct) =>
+    Results.Ok(await recordingService.RunHousekeepingAsync(deviceId, ct)));
+app.MapGet("/api/devices/{id:guid}/native-fallback-assessment", async (Guid id, IApplicationStore store, IEndpointContractCatalog contractCatalog, IOptions<BossCamRuntimeOptions> runtime, CancellationToken ct) =>
+{
+    var device = await store.GetDeviceAsync(id, ct);
+    if (device is null)
+    {
+        return Results.NotFound();
+    }
+
+    var contracts = await contractCatalog.GetContractsForDeviceAsync(device, ct);
+    var fields = await store.GetNormalizedSettingFieldsAsync(id, ct);
+    var required = new List<NativeFallbackRequirement>();
+    foreach (var contract in contracts.Where(static contract => contract.Surface == ContractSurface.NativeFallback))
+    {
+        foreach (var field in contract.Fields)
+        {
+            required.Add(new NativeFallbackRequirement
+            {
+                FieldKey = field.Key,
+                ContractKey = contract.ContractKey,
+                Reason = "Contract explicitly marked NativeFallback surface.",
+                LibraryHint = field.Key.Contains("ptz", StringComparison.OrdinalIgnoreCase) ? "NetSdk.dll" : null
+            });
+        }
+    }
+
+    foreach (var field in fields.Where(static field => field.SupportState == ContractSupportState.Unsupported && !string.IsNullOrWhiteSpace(field.ContractKey)))
+    {
+        if (required.Any(item => item.FieldKey.Equals(field.FieldKey, StringComparison.OrdinalIgnoreCase) && item.ContractKey.Equals(field.ContractKey, StringComparison.OrdinalIgnoreCase)))
+        {
+            continue;
+        }
+
+        required.Add(new NativeFallbackRequirement
+        {
+            FieldKey = field.FieldKey,
+            ContractKey = field.ContractKey ?? string.Empty,
+            Reason = "HTTP/CGI path marked unsupported for this firmware evidence scope."
+        });
+    }
+
+    var availableLibraries = NativeInteropProbe.Probe(runtime.Value.IpcamSuiteDirectory, runtime.Value.EseeCloudDirectory)
+        .Where(static entry => entry.Loaded)
+        .Select(static entry => entry.Name)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToList();
+
+    return Results.Ok(new NativeFallbackAssessment
+    {
+        DeviceId = id,
+        FirmwareFingerprint = fields.Select(static field => field.FirmwareFingerprint).FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value)),
+        RequiredFields = required,
+        AvailableLibraries = availableLibraries
+    });
 });
 app.MapPost("/api/firmware/register", async (FirmwareRegisterRequest request, FirmwareCatalogService service, CancellationToken ct) =>
 {
@@ -126,3 +254,6 @@ app.Run();
 
 public sealed record FirmwareRegisterRequest(string FilePath);
 public sealed record TypedSettingApplyRequest(string FieldKey, JsonNode? Value, bool ExpertOverride);
+public sealed record TypedSettingBatchApplyRequest(IReadOnlyCollection<TypedFieldChange> Changes, bool ExpertOverride);
+public sealed record PersistenceFieldVerifyRequest(string FieldKey, JsonNode? Value, bool RebootForVerification, bool ExpertOverride);
+public sealed record ContractFixturePromotionRequest(string ExportRoot);

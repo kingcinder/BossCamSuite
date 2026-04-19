@@ -24,7 +24,7 @@ public sealed class TypedSettingsAndProbeWorkflowTests : IDisposable
         var store = CreateStore();
         await store.InitializeAsync(CancellationToken.None);
 
-        var device = new DeviceIdentity { IpAddress = "10.0.0.4", Name = "cam1" };
+        var device = new DeviceIdentity { IpAddress = "10.0.0.4", Name = "cam1", DeviceType = "5523-w", HardwareModel = "5523", FirmwareVersion = "1.0.0" };
         await store.UpsertDevicesAsync([device], CancellationToken.None);
         await store.SaveEndpointValidationResultsAsync(
         [
@@ -65,7 +65,7 @@ public sealed class TypedSettingsAndProbeWorkflowTests : IDisposable
         await store.SaveSettingsSnapshotAsync(snapshot, CancellationToken.None);
 
         var settingsService = BuildSettingsService(store, [new NoopControlAdapter()]);
-        var typed = new TypedSettingsService(store, settingsService, NullLogger<TypedSettingsService>.Instance);
+        var typed = new TypedSettingsService(store, settingsService, new PersistenceVerificationService([new NoopControlAdapter()], store, NullLogger<PersistenceVerificationService>.Instance), new SemanticTrustService(store, BuildContractCatalog(store), settingsService, NullLogger<SemanticTrustService>.Instance), BuildContractCatalog(store), NullLogger<TypedSettingsService>.Instance);
         var groups = await typed.NormalizeDeviceAsync(device.Id, refreshFromDevice: false, CancellationToken.None);
 
         Assert.Contains(groups, group => group.GroupKind == TypedSettingGroupKind.VideoImage);
@@ -80,7 +80,7 @@ public sealed class TypedSettingsAndProbeWorkflowTests : IDisposable
         var store = CreateStore();
         await store.InitializeAsync(CancellationToken.None);
 
-        var device = new DeviceIdentity { IpAddress = "10.0.0.29", Name = "cam2" };
+        var device = new DeviceIdentity { IpAddress = "10.0.0.29", Name = "cam2", DeviceType = "5523-w", HardwareModel = "5523", FirmwareVersion = "1.0.0" };
         await store.UpsertDevicesAsync([device], CancellationToken.None);
         await store.SaveNormalizedSettingFieldsAsync(
         [
@@ -100,12 +100,12 @@ public sealed class TypedSettingsAndProbeWorkflowTests : IDisposable
         ], CancellationToken.None);
 
         var settingsService = BuildSettingsService(store, [new NoopControlAdapter()]);
-        var typed = new TypedSettingsService(store, settingsService, NullLogger<TypedSettingsService>.Instance);
+        var typed = new TypedSettingsService(store, settingsService, new PersistenceVerificationService([new NoopControlAdapter()], store, NullLogger<PersistenceVerificationService>.Instance), new SemanticTrustService(store, BuildContractCatalog(store), settingsService, NullLogger<SemanticTrustService>.Instance), BuildContractCatalog(store), NullLogger<TypedSettingsService>.Instance);
         var result = await typed.ApplyTypedFieldAsync(device.Id, "ip", JsonValue.Create("10.0.0.31"), expertOverride: false, CancellationToken.None);
 
         Assert.NotNull(result);
         Assert.False(result!.Success);
-        Assert.Contains("not write-verified", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("blocked", result.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -154,7 +154,8 @@ public sealed class TypedSettingsAndProbeWorkflowTests : IDisposable
                 FirmwareFingerprint = "5523|1.0.0|ipc",
                 ReadVerified = true,
                 WriteVerified = true,
-                Validity = FieldValidityState.Proven
+                Validity = FieldValidityState.Proven,
+                SupportState = ContractSupportState.Supported
             },
             new NormalizedSettingField
             {
@@ -171,7 +172,7 @@ public sealed class TypedSettingsAndProbeWorkflowTests : IDisposable
             }
         ], CancellationToken.None);
 
-        var capability = new CapabilityPromotionService(store);
+        var capability = new CapabilityPromotionService(store, BuildContractCatalog(store));
         var profile = await capability.PromoteForDeviceAsync(deviceId, CancellationToken.None);
 
         Assert.NotNull(profile);
@@ -212,9 +213,12 @@ public sealed class TypedSettingsAndProbeWorkflowTests : IDisposable
 
     private static SettingsService BuildSettingsService(IApplicationStore store, IEnumerable<IControlAdapter> adapters)
     {
-        var validation = new ProtocolValidationService(adapters, store, NullLogger<ProtocolValidationService>.Instance);
+        var validation = new ProtocolValidationService(adapters, BuildContractCatalog(store), store, NullLogger<ProtocolValidationService>.Instance);
         return new SettingsService(adapters, store, validation, NullLogger<SettingsService>.Instance);
     }
+
+    private static IEndpointContractCatalog BuildContractCatalog(IApplicationStore store)
+        => new EndpointContractCatalogService(store, NullLogger<EndpointContractCatalogService>.Instance);
 
     private sealed class NoopControlAdapter : IControlAdapter
     {
@@ -255,3 +259,5 @@ public sealed class TypedSettingsAndProbeWorkflowTests : IDisposable
             => Task.FromResult(new MaintenanceResult { Success = true, AdapterName = Name, Operation = operation });
     }
 }
+
+

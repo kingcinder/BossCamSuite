@@ -10,7 +10,11 @@ Implemented surfaces in this repository:
 - SQLite-backed local inventory, audit log, capability cache, protocol manifest store, endpoint validation store, transcript store, and firmware artifact catalog
 - ASP.NET Core local service host and a WPF desktop shell
 - ProbeRunner CLI with staged probe sessions, transcript bundle export, and resumable runs
-- typed normalization layer and firmware-scoped capability promotion
+- contract-driven typed normalization/apply layer for top groups (Video/Image, Network/Wireless, Users/Maintenance)
+- endpoint contract catalog + transcript-to-fixture evidence promotion
+- firmware-scoped capability promotion driven by contract truth + live evidence quality
+- semantic write classification and sensitive-field audit redaction
+- FFmpeg-backed recording orchestration + segment indexing + clip export API
 
 ## Run
 
@@ -47,3 +51,64 @@ Probe stage values:
 - `ExpertFull`
 
 The protocol evidence loaded by the runtime lives under `assets/protocols`.
+
+## Contract/Evidence APIs
+
+- `GET /api/contracts/endpoints`
+- `GET /api/contracts/endpoints?deviceId=<guid>`
+- `POST /api/contracts/fixtures/promote/<deviceId>`
+  - body: `{ "exportRoot": "C:\\Users\\ceide\\Documents\\BossCamSuite\\artifacts" }`
+- `GET /api/contracts/fixtures`
+- `GET /api/contracts/fixtures?deviceId=<guid>`
+
+Typed settings APIs:
+- `POST /api/devices/{id}/settings/typed/apply-batch`
+- `GET /api/devices/{id}/persistence/eligible-fields`
+- `POST /api/devices/{id}/persistence/verify-field`
+
+## Contract/Evidence Storage
+
+SQLite tables:
+- `endpoint_contracts`
+- `contract_fixtures`
+
+Runtime fixture export:
+- `<exportRoot>\\contracts\\<group>\\<firmware>\\*.json`
+
+Regression fixtures in repo:
+- `tests/BossCam.Tests/Fixtures/contracts/video_image/5523_w`
+- `tests/BossCam.Tests/Fixtures/contracts/network_wireless/5523_w`
+- `tests/BossCam.Tests/Fixtures/contracts/users_maintenance/5523_w`
+
+## Recording APIs
+
+- `POST /api/recordings/start`
+- `POST /api/recordings/stop/{jobId}`
+- `GET /api/recordings/jobs`
+- `POST /api/recordings/reconcile`
+- `POST /api/recordings/index/refresh`
+- `GET /api/recordings/index`
+- `POST /api/recordings/export`
+- `POST /api/recordings/housekeeping`
+
+Optional ffmpeg override:
+- environment variable `BOSSCAM_FFMPEG_PATH`
+
+Recording lifecycle worker:
+- auto-start enabled recording profiles on service startup (`AutoStart=true`)
+- periodic index refresh + retention housekeeping
+
+Profile retention knobs:
+- `RetentionDays` (delete old `.mp4` segments)
+- `MaxStorageBytes` (cap storage and prune oldest first)
+
+Native fallback assessment API:
+- `GET /api/devices/{id}/native-fallback-assessment`
+
+Native diagnostics now include:
+- DLL loadability checks
+- expected-export presence checks per known vendor library
+
+Service tuning knobs (`BossCam` section in `appsettings.json`):
+- `RecordingHousekeepingMinutes`
+- `RecordingStartupReconcileDelaySeconds`

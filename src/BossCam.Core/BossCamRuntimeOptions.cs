@@ -12,4 +12,6 @@ public sealed class BossCamRuntimeOptions
     public int DiscoveryTimeoutSeconds { get; set; } = 3;
     public int HttpTimeoutSeconds { get; set; } = 8;
     public string LocalApiBaseUrl { get; set; } = "http://127.0.0.1:5317";
+    public int RecordingHousekeepingMinutes { get; set; } = 15;
+    public int RecordingStartupReconcileDelaySeconds { get; set; } = 8;
 }

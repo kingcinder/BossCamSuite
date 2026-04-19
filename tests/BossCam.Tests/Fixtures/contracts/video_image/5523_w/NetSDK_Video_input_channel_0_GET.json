@@ -1,0 +1,16 @@
+{
+  "contractKey": "video.input.channel.0",
+  "endpoint": "/NetSDK/Video/input/channel/0",
+  "method": "GET",
+  "firmwareFingerprint": "5523|1.0.0|5523-w",
+  "authMode": "basic-or-digest",
+  "requestBody": null,
+  "responseBody": {
+    "codec": "H264",
+    "profile": "Main",
+    "resolution": "1920x1080",
+    "bitrate": 1024,
+    "frameRate": 20,
+    "gop": 25
+  }
+}

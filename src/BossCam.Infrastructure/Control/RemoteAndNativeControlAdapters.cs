@@ -205,14 +205,14 @@ public sealed class NativeFallbackAdapter(
 
     public Task<bool> CanHandleAsync(DeviceIdentity device, CancellationToken cancellationToken)
     {
-        var libraries = NativeLibraryCatalog.Discover(options.Value.IpcamSuiteDirectory, options.Value.EseeCloudDirectory);
-        return Task.FromResult(libraries.Any(static library => library.Exists));
+        var probes = NativeInteropProbe.Probe(options.Value.IpcamSuiteDirectory, options.Value.EseeCloudDirectory);
+        return Task.FromResult(probes.Any(static probe => probe.Loaded));
     }
 
     public Task<CapabilityMap> ProbeAsync(DeviceIdentity device, CancellationToken cancellationToken)
     {
-        var libraries = NativeLibraryCatalog.Discover(options.Value.IpcamSuiteDirectory, options.Value.EseeCloudDirectory);
-        logger.LogDebug("Native fallback probe examined {Count} libraries", libraries.Count);
+        var probes = NativeInteropProbe.Probe(options.Value.IpcamSuiteDirectory, options.Value.EseeCloudDirectory);
+        logger.LogDebug("Native fallback probe examined {Count} libraries", probes.Count);
         return Task.FromResult(new CapabilityMap
         {
             DeviceId = device.Id,
@@ -220,9 +220,14 @@ public sealed class NativeFallbackAdapter(
             ControlAdapters = [Name],
             VideoTransportKinds = [TransportKind.NativeFallback, TransportKind.EseeJuanP2P, TransportKind.Kp2p, TransportKind.LinkVision],
             SupportedSettingGroups = ["NativeDiagnostics"],
-            SupportedEndpointPaths = libraries.Select(static library => library.Path).ToList(),
+            SupportedEndpointPaths = probes.Select(static probe => probe.Path).ToList(),
             SupportedMaintenanceOperations = [],
-            Notes = libraries.ToDictionary(static library => library.Name, static library => library.Exists ? library.Path : "missing", StringComparer.OrdinalIgnoreCase)
+            Notes = probes.ToDictionary(
+                static probe => probe.Name,
+                static probe => probe.Loaded
+                    ? $"loaded:{string.Join(',', probe.Exports.Where(export => export.Present).Select(export => export.ExportName))}"
+                    : probe.LoadError ?? "missing",
+                StringComparer.OrdinalIgnoreCase)
         });
     }
 
@@ -231,7 +236,7 @@ public sealed class NativeFallbackAdapter(
 
     public Task<SettingsSnapshot> ReadAsync(DeviceIdentity device, CancellationToken cancellationToken)
     {
-        var libraries = NativeLibraryCatalog.Discover(options.Value.IpcamSuiteDirectory, options.Value.EseeCloudDirectory);
+        var libraries = NativeInteropProbe.Probe(options.Value.IpcamSuiteDirectory, options.Value.EseeCloudDirectory);
         var payload = new JsonObject();
         foreach (var library in libraries)
         {
@@ -239,8 +244,15 @@ public sealed class NativeFallbackAdapter(
             {
                 ["path"] = library.Path,
                 ["exists"] = library.Exists,
+                ["loaded"] = library.Loaded,
+                ["loadError"] = library.LoadError,
                 ["role"] = library.Role
             };
+            payload[library.Name]!["exports"] = new JsonArray(library.Exports.Select(export => (JsonNode)new JsonObject
+            {
+                ["name"] = export.ExportName,
+                ["present"] = export.Present
+            }).ToArray());
         }
 
         return Task.FromResult(new SettingsSnapshot

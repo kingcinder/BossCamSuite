@@ -1,0 +1,15 @@
+{
+  "contractKey": "system.device.info",
+  "endpoint": "/NetSDK/System/deviceInfo",
+  "method": "GET",
+  "firmwareFingerprint": "5523|1.0.0|5523-w",
+  "authMode": "basic-or-digest",
+  "requestBody": null,
+  "responseBody": {
+    "serial": "SN123456",
+    "model": "5523-w",
+    "firmware": "v1.0.0",
+    "mac": "AA:BB:CC:DD:EE:FF",
+    "eseeId": "ESEE1234"
+  }
+}

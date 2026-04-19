@@ -8,6 +8,7 @@ namespace BossCam.Core;
 
 public sealed class ProtocolValidationService(
     IEnumerable<IControlAdapter> controlAdapters,
+    IEndpointContractCatalog contractCatalog,
     IApplicationStore store,
     ILogger<ProtocolValidationService> logger)
 {
@@ -25,6 +26,7 @@ public sealed class ProtocolValidationService(
     public async Task<CapabilityProbeResult> ValidateDeviceAsync(DeviceIdentity device, ValidationRunOptions options, CancellationToken cancellationToken)
     {
         var manifests = await store.GetProtocolManifestsAsync(cancellationToken);
+        var contracts = await contractCatalog.GetContractsForDeviceAsync(device, cancellationToken);
         var allResults = new List<EndpointValidationResult>();
         var allTranscripts = new List<EndpointTranscript>();
 
@@ -56,7 +58,7 @@ public sealed class ProtocolValidationService(
                 continue;
             }
 
-            var endpoints = SelectEndpointsForAdapter(adapter, manifests);
+            var endpoints = SelectEndpointsForAdapter(adapter, manifests, contracts);
             foreach (var endpoint in endpoints)
             {
                 var result = await ValidateEndpointAsync(device, adapter, endpoint, options, cancellationToken);
@@ -96,8 +98,28 @@ public sealed class ProtocolValidationService(
             result.WriteVerified);
     }
 
-    private static IReadOnlyCollection<ProtocolEndpoint> SelectEndpointsForAdapter(IControlAdapter adapter, IReadOnlyCollection<ProtocolManifest> manifests)
+    private static IReadOnlyCollection<ProtocolEndpoint> SelectEndpointsForAdapter(IControlAdapter adapter, IReadOnlyCollection<ProtocolManifest> manifests, IReadOnlyCollection<EndpointContract> contracts)
     {
+        var contracted = contracts
+            .Where(contract => adapter.TransportKind switch
+            {
+                TransportKind.LanRest => contract.Surface == ContractSurface.NetSdkRest,
+                TransportKind.LanPrivateHttp => contract.Surface == ContractSurface.PrivateCgiXml,
+                _ => false
+            })
+            .Select(contract => new ProtocolEndpoint
+            {
+                Path = contract.Endpoint,
+                Tag = contract.GroupName,
+                Methods = [contract.Method],
+                Safety = contract.DisruptionClass.ToString()
+            })
+            .ToList();
+        if (contracted.Count > 0)
+        {
+            return contracted;
+        }
+
         if (adapter.TransportKind == TransportKind.LanRest)
         {
             return manifests

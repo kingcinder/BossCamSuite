@@ -7,6 +7,7 @@ namespace BossCam.Service.Hosted;
 public sealed class BossCamBootstrapWorker(
     IApplicationStore store,
     ProtocolCatalogService protocolCatalogService,
+    IEndpointContractCatalog endpointContractCatalog,
     DiscoveryCoordinator discoveryCoordinator,
     ILogger<BossCamBootstrapWorker> logger) : BackgroundService
 {
@@ -14,6 +15,7 @@ public sealed class BossCamBootstrapWorker(
     {
         await store.InitializeAsync(stoppingToken);
         await protocolCatalogService.RefreshAsync(stoppingToken);
+        _ = await endpointContractCatalog.GetContractsAsync(stoppingToken);
 
         try
         {

@@ -11,6 +11,8 @@ public sealed record WritePlan
     public string? AdapterName { get; init; }
     public bool SnapshotBeforeWrite { get; init; } = true;
     public bool RequireWriteVerification { get; init; } = true;
+    public string? ContractKey { get; init; }
+    public IReadOnlyCollection<string> SensitivePaths { get; init; } = [];
 }
 
 public sealed record WriteResult
@@ -27,6 +29,9 @@ public sealed record WriteResult
     public bool RollbackSucceeded { get; init; }
     public JsonNode? PreWriteValue { get; init; }
     public JsonNode? PostWriteValue { get; init; }
+    public SemanticWriteStatus SemanticStatus { get; init; } = SemanticWriteStatus.Unverified;
+    public string? ContractKey { get; init; }
+    public IReadOnlyCollection<string> ContractViolations { get; init; } = [];
 }
 
 public sealed record WriteAuditEntry
@@ -39,6 +44,8 @@ public sealed record WriteAuditEntry
     public string? RequestContent { get; init; }
     public string? ResponseContent { get; init; }
     public bool Success { get; init; }
+    public SemanticWriteStatus SemanticStatus { get; init; } = SemanticWriteStatus.Unverified;
+    public string? BlockReason { get; init; }
     public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
 }
 
@@ -88,8 +95,86 @@ public sealed record RecordingProfile
     public string OutputDirectory { get; init; } = string.Empty;
     public string? SourceId { get; init; }
     public bool Enabled { get; init; }
+    public bool AutoStart { get; init; } = true;
     public int SegmentSeconds { get; init; } = 300;
+    public int RetentionDays { get; init; } = 14;
+    public long MaxStorageBytes { get; init; } = 0;
     public DateTimeOffset UpdatedAt { get; init; } = DateTimeOffset.UtcNow;
+}
+
+public sealed record RecordingSegment
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid DeviceId { get; init; }
+    public Guid ProfileId { get; init; }
+    public string FilePath { get; init; } = string.Empty;
+    public long SizeBytes { get; init; }
+    public DateTimeOffset StartTime { get; init; }
+    public DateTimeOffset EndTime { get; init; }
+    public DateTimeOffset IndexedAt { get; init; } = DateTimeOffset.UtcNow;
+}
+
+public sealed record RecordingStartRequest
+{
+    public Guid DeviceId { get; init; }
+    public Guid? ProfileId { get; init; }
+    public string? SourceUrl { get; init; }
+}
+
+public sealed record RecordingJob
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid DeviceId { get; init; }
+    public Guid ProfileId { get; init; }
+    public string SourceUrl { get; init; } = string.Empty;
+    public string OutputDirectory { get; init; } = string.Empty;
+    public string SegmentPattern { get; init; } = string.Empty;
+    public int SegmentSeconds { get; init; } = 300;
+    public bool IsRunning { get; init; }
+    public string? LastError { get; init; }
+    public int? ProcessId { get; init; }
+    public DateTimeOffset StartedAt { get; init; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? StoppedAt { get; init; }
+}
+
+public sealed record ClipExportRequest
+{
+    public Guid DeviceId { get; init; }
+    public DateTimeOffset StartTime { get; init; }
+    public DateTimeOffset EndTime { get; init; }
+    public string OutputPath { get; init; } = string.Empty;
+}
+
+public sealed record ClipExportResult
+{
+    public bool Success { get; init; }
+    public string OutputPath { get; init; } = string.Empty;
+    public string? Message { get; init; }
+}
+
+public sealed record RecordingHousekeepingResult
+{
+    public int ProfilesChecked { get; init; }
+    public int FilesDeleted { get; init; }
+    public long BytesDeleted { get; init; }
+    public DateTimeOffset ExecutedAt { get; init; } = DateTimeOffset.UtcNow;
+}
+
+public sealed record NativeFallbackRequirement
+{
+    public string FieldKey { get; init; } = string.Empty;
+    public string ContractKey { get; init; } = string.Empty;
+    public string Reason { get; init; } = string.Empty;
+    public string? LibraryHint { get; init; }
+}
+
+public sealed record NativeFallbackAssessment
+{
+    public Guid DeviceId { get; init; }
+    public string? FirmwareFingerprint { get; init; }
+    public IReadOnlyCollection<NativeFallbackRequirement> RequiredFields { get; init; } = [];
+    public IReadOnlyCollection<string> AvailableLibraries { get; init; } = [];
+    public DateTimeOffset AssessedAt { get; init; } = DateTimeOffset.UtcNow;
 }
 
 public sealed record AlertEvent

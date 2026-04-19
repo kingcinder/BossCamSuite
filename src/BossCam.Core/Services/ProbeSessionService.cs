@@ -11,6 +11,7 @@ public sealed class ProbeSessionService(
     CapabilityProbeService capabilityProbeService,
     ProtocolValidationService protocolValidationService,
     TypedSettingsService typedSettingsService,
+    IContractEvidenceService contractEvidenceService,
     CapabilityPromotionService capabilityPromotionService,
     ILogger<ProbeSessionService> logger)
 {
@@ -83,6 +84,7 @@ public sealed class ProbeSessionService(
             if (!string.IsNullOrWhiteSpace(request.TranscriptExportDirectory))
             {
                 bundlePath = await ExportTranscriptBundleAsync(session.Id, device.Id, request.TranscriptExportDirectory, cancellationToken);
+                _ = await contractEvidenceService.PromoteFromTranscriptsAsync(device.Id, request.TranscriptExportDirectory, cancellationToken);
             }
 
             var completed = session with

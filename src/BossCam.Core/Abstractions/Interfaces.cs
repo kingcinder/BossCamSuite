@@ -25,6 +25,19 @@ public interface IFirmwareArtifactAnalyzer
     Task<FirmwareArtifact> AnalyzeAsync(string filePath, CancellationToken cancellationToken);
 }
 
+public interface IEndpointContractCatalog
+{
+    Task<IReadOnlyCollection<EndpointContract>> GetContractsAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<EndpointContract>> GetContractsForDeviceAsync(DeviceIdentity device, CancellationToken cancellationToken);
+    EndpointContract? MatchContract(string endpoint, string method, IEnumerable<EndpointContract> contracts);
+}
+
+public interface IContractEvidenceService
+{
+    Task<IReadOnlyCollection<EndpointContractFixture>> PromoteFromTranscriptsAsync(Guid deviceId, string exportRoot, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<EndpointContractFixture>> GetFixturesAsync(Guid? deviceId, CancellationToken cancellationToken);
+}
+
 public interface IControlAdapter
 {
     string Name { get; }
@@ -74,8 +87,20 @@ public interface IApplicationStore
     Task<IReadOnlyCollection<FirmwareCapabilityProfile>> GetFirmwareCapabilityProfilesAsync(CancellationToken cancellationToken);
     Task SavePersistenceVerificationResultAsync(PersistenceVerificationResult result, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<PersistenceVerificationResult>> GetPersistenceVerificationResultsAsync(Guid deviceId, int limit, CancellationToken cancellationToken);
+    Task SaveEndpointContractsAsync(IEnumerable<EndpointContract> contracts, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<EndpointContract>> GetEndpointContractsAsync(CancellationToken cancellationToken);
+    Task SaveContractFixturesAsync(IEnumerable<EndpointContractFixture> fixtures, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<EndpointContractFixture>> GetContractFixturesAsync(Guid? deviceId, int limit, CancellationToken cancellationToken);
     Task AddFirmwareArtifactAsync(FirmwareArtifact artifact, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<FirmwareArtifact>> GetFirmwareArtifactsAsync(CancellationToken cancellationToken);
     Task SaveRecordingProfilesAsync(IEnumerable<RecordingProfile> profiles, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<RecordingProfile>> GetRecordingProfilesAsync(Guid? deviceId, CancellationToken cancellationToken);
+    Task SaveRecordingSegmentsAsync(IEnumerable<RecordingSegment> segments, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<RecordingSegment>> GetRecordingSegmentsAsync(Guid? deviceId, int limit, CancellationToken cancellationToken);
+    Task SaveSemanticWriteObservationsAsync(IEnumerable<SemanticWriteObservation> observations, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<SemanticWriteObservation>> GetSemanticWriteObservationsAsync(Guid? deviceId, int limit, CancellationToken cancellationToken);
+    Task SaveFieldConstraintProfilesAsync(IEnumerable<FieldConstraintProfile> profiles, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<FieldConstraintProfile>> GetFieldConstraintProfilesAsync(string? firmwareFingerprint, CancellationToken cancellationToken);
+    Task SaveDependencyMatrixProfilesAsync(IEnumerable<DependencyMatrixProfile> profiles, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<DependencyMatrixProfile>> GetDependencyMatrixProfilesAsync(string? firmwareFingerprint, CancellationToken cancellationToken);
 }

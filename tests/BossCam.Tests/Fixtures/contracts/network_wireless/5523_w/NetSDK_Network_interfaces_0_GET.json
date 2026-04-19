@@ -1,0 +1,17 @@
+{
+  "contractKey": "network.interfaces",
+  "endpoint": "/NetSDK/Network/interfaces/0",
+  "method": "GET",
+  "firmwareFingerprint": "5523|1.0.0|5523-w",
+  "authMode": "basic-or-digest",
+  "requestBody": null,
+  "responseBody": {
+    "ip": "10.0.0.4",
+    "netmask": "255.255.255.0",
+    "gateway": "10.0.0.1",
+    "dns": "1.1.1.1",
+    "httpPort": 80,
+    "dhcp": false,
+    "esee": "enabled"
+  }
+}

@@ -97,7 +97,11 @@ public sealed class PersistenceVerificationService(
             RebootVerifyPassed = rebootPassed,
             PreValue = pre.Response?.DeepClone(),
             PostValue = post.Response?.DeepClone(),
-            PostRebootValue = postRebootValue
+            PostRebootValue = postRebootValue,
+            ImmediateStatus = immediate ? SemanticWriteStatus.AcceptedChanged : SemanticWriteStatus.EndpointRejected,
+            PersistenceStatus = request.RebootForVerification
+                ? (rebootPassed ? SemanticWriteStatus.AcceptedPersistedAfterReboot : SemanticWriteStatus.AcceptedLostAfterReboot)
+                : SemanticWriteStatus.Unverified
         };
 
         await store.SavePersistenceVerificationResultAsync(result, cancellationToken);

@@ -8,14 +8,18 @@ public static class CoreServiceCollectionExtensions
     {
         services.AddSingleton<DiscoveryCoordinator>();
         services.AddSingleton<ProtocolCatalogService>();
+        services.AddSingleton<IEndpointContractCatalog, EndpointContractCatalogService>();
+        services.AddSingleton<IContractEvidenceService, ContractEvidenceService>();
         services.AddSingleton<CapabilityProbeService>();
         services.AddSingleton<ProtocolValidationService>();
         services.AddSingleton<SettingsService>();
         services.AddSingleton<TypedSettingsService>();
         services.AddSingleton<CapabilityPromotionService>();
         services.AddSingleton<PersistenceVerificationService>();
+        services.AddSingleton<SemanticTrustService>();
         services.AddSingleton<ProbeSessionService>();
         services.AddSingleton<TransportBroker>();
+        services.AddSingleton<RecordingService>();
         services.AddSingleton<FirmwareCatalogService>();
         return services;
     }
