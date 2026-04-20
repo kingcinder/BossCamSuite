@@ -257,9 +257,43 @@ public sealed class EndpointContractCatalogService(
                     NumericField("bitrate", "Bitrate", "$.constantBitRate", 64, 16384),
                     NumericField("frameRate", "Frame Rate", "$.frameRate", 1, 60),
                     NumericField("keyframeInterval", "Keyframe Interval", "$.keyFrameInterval", 1, 240),
-                    EnumField("codec", "Codec", "$.codecType", ["H.264", "H.265", "H.264+", "H.265+"]),
+                    EnumField("codec", "Codec", "$.codecType", ["H.264", "H.265", "H.264+", "H.265+", "MJPEG"]),
                     EnumField("profile", "Profile", "$.h264Profile", ["baseline", "main", "high"]),
+                    EnumField("definition", "Definition", "$.definition", ["auto", "fluency", "HD", "BD"]),
                     StringField("resolution", "Resolution", "$.resolution")
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "video.encode.channel.keyframe",
+                Endpoint = "/netsdk/video/encode/channel/*/requestKeyFrame",
+                Method = "POST",
+                Surface = ContractSurface.PrivateCgiXml,
+                GroupKind = TypedSettingGroupKind.VideoImage,
+                GroupName = "Video / Image",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.Safe,
+                ExpertOnly = true,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = false, PartialWriteAllowed = true },
+                Fields =
+                [
+                    new ContractField
+                    {
+                        Key = "requestKeyframe",
+                        DisplayName = "Request Keyframe",
+                        SourcePath = "$.requestKeyframe",
+                        Kind = ContractFieldKind.Boolean,
+                        Writable = true,
+                        ExpertOnly = true,
+                        DisruptionClass = DisruptionClass.Safe,
+                        Evidence = new ContractEvidence
+                        {
+                            TruthState = ContractTruthState.Inferred,
+                            Source = "ipcamsuite-mining",
+                            Notes = "Observed channel-indexed keyframe trigger endpoint in NetSdk strings."
+                        }
+                    }
                 ]
             },
             new EndpointContract
@@ -287,8 +321,10 @@ public sealed class EndpointContractCatalogService(
                         DisruptionClass = DisruptionClass.Safe,
                         Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "live-observed" }
                     },
-                    EnumField("dayNight", "Day/Night", "$.irCutFilter.irCutMode", ["auto", "light", "daylight", "night", "smart"]),
-                    EnumField("irCut", "IR Cut", "$.irCutFilter.irCutMode", ["auto", "light", "daylight", "night", "smart"]),
+                    EnumField("dayNight", "Day/Night", "$.irCutFilter.irCutMode", ["auto", "daylight", "night", "ir", "light", "smart"]),
+                    EnumField("irMode", "IR Mode", "$.irCutFilter.irCutMode", ["auto", "daylight", "night", "ir", "light", "smart"]),
+                    EnumField("irCut", "IR Cut", "$.irCutFilter.irCutMode", ["auto", "daylight", "night", "ir", "light", "smart"]),
+                    EnumField("irCutMethod", "IR Cut Method", "$.irCutFilter.irCutControlMode", ["software", "hardware"]),
                     StringField("exposure", "Exposure", "$.exposureMode"),
                     StringField("awb", "AWB", "$.awbMode"),
                     StringField("osd", "OSD", "$.osd.title")
@@ -351,8 +387,9 @@ public sealed class EndpointContractCatalogService(
                 ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
                 Fields =
                 [
-                    EnumField("irCut", "IR Cut", "$.irCutMode", ["auto", "light", "daylight", "night", "smart"]),
-                    EnumField("irMode", "IR Mode", "$.irCutMode", ["auto", "light", "daylight", "night", "smart"])
+                    EnumField("irCut", "IR Cut", "$.irCutMode", ["auto", "daylight", "night", "ir", "light", "smart"]),
+                    EnumField("irMode", "IR Mode", "$.irCutMode", ["auto", "daylight", "night", "ir", "light", "smart"]),
+                    EnumField("irCutMethod", "IR Cut Method", "$.irCutControlMode", ["software", "hardware"])
                 ]
             },
             new EndpointContract
@@ -370,7 +407,24 @@ public sealed class EndpointContractCatalogService(
                 ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = false, PartialWriteAllowed = true },
                 Fields =
                 [
-                    NumericField("whiteLight", "White Light", "$.whiteLightLevel", 0, 100) with { ExpertOnly = true }
+                    NumericField("whiteLight", "White Light", "$.whiteLightLevel", 0, 100) with { ExpertOnly = true },
+                    new ContractField
+                    {
+                        Key = "whiteLightTypeIndex",
+                        DisplayName = "White Light Type Index",
+                        SourcePath = "$.typeIndex",
+                        Kind = ContractFieldKind.Integer,
+                        Writable = true,
+                        ExpertOnly = true,
+                        DisruptionClass = DisruptionClass.Safe,
+                        Validation = new ContractValidationRule { Min = 0, Max = 8 },
+                        Evidence = new ContractEvidence
+                        {
+                            TruthState = ContractTruthState.Inferred,
+                            Source = "ipcamsuite-mainset",
+                            Notes = "Mapped from iOemWhitrLightTypeIndex."
+                        }
+                    }
                 ]
             },
             new EndpointContract
@@ -388,7 +442,24 @@ public sealed class EndpointContractCatalogService(
                 ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = false, PartialWriteAllowed = true },
                 Fields =
                 [
-                    NumericField("infrared", "Infrared", "$.infraRedLevel", 0, 100) with { ExpertOnly = true }
+                    NumericField("infrared", "Infrared", "$.infraRedLevel", 0, 100) with { ExpertOnly = true },
+                    new ContractField
+                    {
+                        Key = "infraredTypeIndex",
+                        DisplayName = "Infrared Type Index",
+                        SourcePath = "$.typeIndex",
+                        Kind = ContractFieldKind.Integer,
+                        Writable = true,
+                        ExpertOnly = true,
+                        DisruptionClass = DisruptionClass.Safe,
+                        Validation = new ContractValidationRule { Min = 0, Max = 8 },
+                        Evidence = new ContractEvidence
+                        {
+                            TruthState = ContractTruthState.Inferred,
+                            Source = "ipcamsuite-mainset",
+                            Notes = "Mapped from iOemInFraRedTypeIndex."
+                        }
+                    }
                 ]
             },
             // Network / Wireless
@@ -434,6 +505,34 @@ public sealed class EndpointContractCatalogService(
                         Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "manifest" }
                     },
                     StringField("esee", "ESEE", "$.esee", false, DisruptionClass.NetworkChanging)
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "network.esee",
+                Endpoint = "/NetSDK/Network/Esee",
+                Method = "PUT",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.NetworkWireless,
+                GroupName = "Network / Wireless",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.NetworkChanging,
+                RequiresRebootToTakeEffect = true,
+                PersistenceExpectedAfterReboot = true,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
+                Fields =
+                [
+                    new ContractField
+                    {
+                        Key = "eseeEnabled",
+                        DisplayName = "ESEE Enabled",
+                        SourcePath = "$.enabled",
+                        Kind = ContractFieldKind.Boolean,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.NetworkChanging,
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "ipcamsuite-endpoint-catalog" }
+                    }
                 ]
             },
             new EndpointContract
@@ -533,7 +632,7 @@ public sealed class EndpointContractCatalogService(
             {
                 ContractKey = "maintenance.reboot",
                 Endpoint = "/NetSDK/System/operation/reboot",
-                Method = "POST",
+                Method = "PUT",
                 Surface = ContractSurface.PrivateCgiXml,
                 GroupKind = TypedSettingGroupKind.UsersMaintenance,
                 GroupName = "Users / Maintenance",
@@ -560,9 +659,43 @@ public sealed class EndpointContractCatalogService(
             },
             new EndpointContract
             {
+                ContractKey = "maintenance.reboot.legacy",
+                Endpoint = "/netsdk/Reboot",
+                Method = "POST",
+                Surface = ContractSurface.PrivateCgiXml,
+                GroupKind = TypedSettingGroupKind.UsersMaintenance,
+                GroupName = "Users / Maintenance",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.Reboot,
+                ExpertOnly = true,
+                RequiresRebootToTakeEffect = true,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = false, PartialWriteAllowed = true },
+                Fields =
+                [
+                    new ContractField
+                    {
+                        Key = "reboot",
+                        DisplayName = "Reboot",
+                        SourcePath = "$.reboot",
+                        Kind = ContractFieldKind.Boolean,
+                        Writable = true,
+                        ExpertOnly = true,
+                        DisruptionClass = DisruptionClass.Reboot,
+                        Evidence = new ContractEvidence
+                        {
+                            TruthState = ContractTruthState.Inferred,
+                            Source = "eseecloud-js",
+                            Notes = "Observed from reboot flow in NvrRemoteSettingsController."
+                        }
+                    }
+                ]
+            },
+            new EndpointContract
+            {
                 ContractKey = "maintenance.factory.default",
                 Endpoint = "/NetSDK/System/operation/default",
-                Method = "POST",
+                Method = "PUT",
                 Surface = ContractSurface.PrivateCgiXml,
                 GroupKind = TypedSettingGroupKind.UsersMaintenance,
                 GroupName = "Users / Maintenance",
@@ -584,6 +717,40 @@ public sealed class EndpointContractCatalogService(
                         ExpertOnly = true,
                         DisruptionClass = DisruptionClass.FactoryReset,
                         Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "private-manifest" }
+                    }
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "maintenance.firmware.upload",
+                Endpoint = "/onlineupgrade",
+                Method = "POST",
+                Surface = ContractSurface.PrivateCgiXml,
+                GroupKind = TypedSettingGroupKind.UsersMaintenance,
+                GroupName = "Users / Maintenance",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.ServiceImpacting,
+                ExpertOnly = true,
+                RequiresRebootToTakeEffect = true,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = false, PartialWriteAllowed = true },
+                Fields =
+                [
+                    new ContractField
+                    {
+                        Key = "firmwareBlob",
+                        DisplayName = "Firmware Upload",
+                        SourcePath = "$.firmware",
+                        Kind = ContractFieldKind.Opaque,
+                        Writable = true,
+                        ExpertOnly = true,
+                        DisruptionClass = DisruptionClass.ServiceImpacting,
+                        Evidence = new ContractEvidence
+                        {
+                            TruthState = ContractTruthState.Inferred,
+                            Source = "eseecloud-js",
+                            Notes = "Observed upload target in firmware upgrade flow."
+                        }
                     }
                 ]
             }

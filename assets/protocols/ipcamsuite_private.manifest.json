@@ -1,29 +1,29 @@
 {
   "manifestId": "ipcamsuite-private",
   "name": "IPCamSuite Private Endpoints",
-  "source": "IPCamSuite.exe strings + MAINSET.INI evidence",
+  "source": "IPCamSuite.exe + EseeCloud web/src + INI evidence",
   "family": "5523-w / Juan IPC OEM private HTTP",
   "authMode": "basic-or-digest",
   "endpoints": [
     {
       "path": "/NetSDK/System/operation/reboot",
       "tag": "Maintenance",
-      "methods": ["PUT"],
+      "methods": ["PUT", "POST"],
       "description": "Reboot device.",
       "requestSchema": "None or minimal JSON body depending on firmware.",
       "responseSchema": "Response JSON form.",
       "safety": "reboot",
-      "notes": ["Observed in IPCamSuite string inventory."]
+      "notes": ["Observed in IPCamSuite string inventory.", "Cross-correlated with EseeCloud reboot flows."]
     },
     {
       "path": "/NetSDK/System/operation/default",
       "tag": "Maintenance",
-      "methods": ["PUT"],
+      "methods": ["PUT", "POST"],
       "description": "Factory default device.",
       "requestSchema": "None or minimal JSON body depending on firmware.",
       "responseSchema": "Response JSON form.",
       "safety": "factory-reset",
-      "notes": ["Observed in IPCamSuite string inventory."]
+      "notes": ["Observed in IPCamSuite string inventory.", "Cross-correlated with EseeCloud factory setting action family."]
     },
     {
       "path": "/NetSDK/Factory?cmd=WhiteLightCtrl",
@@ -126,6 +126,36 @@
       "notes": ["Observed in IPCamSuite strings."]
     },
     {
+      "path": "/onlineupgrade",
+      "tag": "Maintenance",
+      "methods": ["POST"],
+      "description": "Firmware upload endpoint used by EseeCloud upgrade flow.",
+      "requestSchema": "Multipart upload body.",
+      "responseSchema": "Plain-text or JSON status.",
+      "safety": "firmware-upgrade",
+      "notes": ["Observed in EseeCloud NvrRemoteSettingsController.js."]
+    },
+    {
+      "path": "/netsdk/GetUpgradeRate",
+      "tag": "Maintenance",
+      "methods": ["GET"],
+      "description": "Firmware upgrade progress polling endpoint.",
+      "requestSchema": "None.",
+      "responseSchema": "Progress payload.",
+      "safety": "read-only",
+      "notes": ["Observed in EseeCloud NvrRemoteSettingsController.js."]
+    },
+    {
+      "path": "/netsdk/Reboot",
+      "tag": "Maintenance",
+      "methods": ["POST"],
+      "description": "Legacy reboot endpoint observed in EseeCloud flow.",
+      "requestSchema": "None or minimal body.",
+      "responseSchema": "Plain-text or JSON status.",
+      "safety": "reboot",
+      "notes": ["Observed in EseeCloud NvrRemoteSettingsController.js."]
+    },
+    {
       "path": "/cgi-bin/upgrade_rate.cgi?cmd=upgrade_rate",
       "tag": "Maintenance",
       "methods": ["GET"],
@@ -164,6 +194,16 @@
       "responseSchema": "XML response.",
       "safety": "service-impacting",
       "notes": ["Observed in IPCamSuite strings."]
+    },
+    {
+      "path": "/netsdk/video/encode/channel/ID/requestKeyFrame",
+      "tag": "Stream",
+      "methods": ["POST"],
+      "description": "Trigger keyframe for channel-indexed encoder path.",
+      "requestSchema": "None or tiny trigger body depending on firmware.",
+      "responseSchema": "Response JSON form.",
+      "safety": "safe-write",
+      "notes": ["Observed in NetSdk binary strings with channel-indexed path hints."]
     }
   ]
 }
