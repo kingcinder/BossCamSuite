@@ -1131,6 +1131,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             return;
         }
 
+        if (!_fieldByKey.TryGetValue(fieldKey, out var field)
+            || !field.TruthState.Equals(nameof(ContractTruthState.Proven), StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
         foreach (var value in fallback)
         {
             target.Add(value);
@@ -1412,7 +1418,7 @@ public sealed class TypedFieldRow
             TruthState = field.TruthState.ToString(),
             ContractKey = field.ContractKey ?? string.Empty,
             GroupName = field.GroupName,
-            PersistenceExpectedAfterReboot = field.PersistsAfterReboot,
+            PersistenceExpectedAfterReboot = field.PersistenceExpectedAfterReboot,
             EditableValue = editable,
             OriginalValue = editable
         };

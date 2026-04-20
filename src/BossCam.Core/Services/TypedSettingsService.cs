@@ -118,6 +118,7 @@ public sealed class TypedSettingsService(
                             ReadVerified = validation?.ReadVerified == true,
                             WriteVerified = validation?.WriteVerified == true && field.Writable,
                             PersistsAfterReboot = validation?.PersistsAfterReboot == true,
+                            PersistenceExpectedAfterReboot = field.PersistExpectedAfterReboot || contract.PersistenceExpectedAfterReboot,
                             ExpertOnly = contract.ExpertOnly || field.ExpertOnly,
                             DisruptionClass = field.DisruptionClass != DisruptionClass.Unknown ? field.DisruptionClass : contract.DisruptionClass
                         });
@@ -461,6 +462,9 @@ public sealed class TypedSettingsService(
             Endpoint = field.SourceEndpoint,
             Method = contract.Method,
             Payload = payloadBuild.Payload,
+            FieldKey = field.FieldKey,
+            FieldSourcePath = contractField.SourcePath,
+            IntendedValue = converted.Value?.DeepClone(),
             RebootForVerification = rebootForVerification
         }, cancellationToken);
     }

@@ -135,7 +135,15 @@ public sealed class ProbeSessionService(
 
         if (!string.IsNullOrWhiteSpace(request.DeviceIp))
         {
-            var known = devices.FirstOrDefault(device => string.Equals(device.IpAddress, request.DeviceIp, StringComparison.OrdinalIgnoreCase));
+            var known = devices
+                .Where(device => string.Equals(device.IpAddress, request.DeviceIp, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(static device => string.Equals(device.DeviceType, "IPC", StringComparison.OrdinalIgnoreCase))
+                .ThenByDescending(static device => string.Equals(device.DisplayName, "5523-W", StringComparison.OrdinalIgnoreCase))
+                .ThenByDescending(static device => !string.IsNullOrWhiteSpace(device.LoginName))
+                .ThenByDescending(static device => !string.IsNullOrWhiteSpace(device.Password) || !string.IsNullOrWhiteSpace(device.PasswordCiphertext))
+                .ThenByDescending(static device => !string.IsNullOrWhiteSpace(device.FirmwareVersion))
+                .ThenByDescending(static device => !string.IsNullOrWhiteSpace(device.HardwareModel))
+                .FirstOrDefault();
             if (known is not null)
             {
                 return known;

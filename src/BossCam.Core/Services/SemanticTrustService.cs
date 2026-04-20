@@ -227,6 +227,7 @@ public sealed class SemanticTrustService(
         if (!string.IsNullOrWhiteSpace(context.PredictedControlUrl))
         {
             candidates.Add(context.PredictedControlUrl);
+            candidates.AddRange(BuildSubnetNeighborCandidates(context.PredictedControlUrl));
         }
 
         var probed = new List<string>();
@@ -655,6 +656,45 @@ public sealed class SemanticTrustService(
         {
             return false;
         }
+    }
+
+    private static IEnumerable<string> BuildSubnetNeighborCandidates(string predictedControlUrl)
+    {
+        if (!TryParseHostPort(predictedControlUrl, out var host, out var port))
+        {
+            return [];
+        }
+
+        if (!System.Net.IPAddress.TryParse(host, out var ip))
+        {
+            return [];
+        }
+
+        var bytes = ip.GetAddressBytes();
+        if (bytes.Length != 4)
+        {
+            return [];
+        }
+
+        var candidates = new List<string>();
+        for (var delta = -2; delta <= 2; delta++)
+        {
+            if (delta == 0)
+            {
+                continue;
+            }
+
+            var value = bytes[3] + delta;
+            if (value is <= 0 or >= 255)
+            {
+                continue;
+            }
+
+            var neighbor = $"{bytes[0]}.{bytes[1]}.{bytes[2]}.{value}";
+            candidates.Add($"http://{neighbor}:{port}");
+        }
+
+        return candidates;
     }
 }
 

@@ -68,13 +68,29 @@ public sealed class SqliteApplicationStore(IOptions<BossCamRuntimeOptions> optio
             await connection.OpenAsync(cancellationToken);
             foreach (var device in devices)
             {
-                await using var command = connection.CreateCommand();
-                command.CommandText = "INSERT INTO devices (id, dedupe_key, payload, updated_at) VALUES ($id, $key, $payload, $updated) ON CONFLICT(dedupe_key) DO UPDATE SET id = excluded.id, payload = excluded.payload, updated_at = excluded.updated_at";
-                command.Parameters.AddWithValue("$id", device.Id.ToString());
-                command.Parameters.AddWithValue("$key", BuildDedupeKey(device));
-                command.Parameters.AddWithValue("$payload", JsonSerializer.Serialize(device, _serializerOptions));
-                command.Parameters.AddWithValue("$updated", DateTimeOffset.UtcNow.ToString("O"));
-                await command.ExecuteNonQueryAsync(cancellationToken);
+                var key = BuildDedupeKey(device);
+                var payload = JsonSerializer.Serialize(device, _serializerOptions);
+                var updated = DateTimeOffset.UtcNow.ToString("O");
+
+                await using var updateById = connection.CreateCommand();
+                updateById.CommandText = "UPDATE devices SET dedupe_key = $key, payload = $payload, updated_at = $updated WHERE id = $id";
+                updateById.Parameters.AddWithValue("$id", device.Id.ToString());
+                updateById.Parameters.AddWithValue("$key", key);
+                updateById.Parameters.AddWithValue("$payload", payload);
+                updateById.Parameters.AddWithValue("$updated", updated);
+                var updatedRows = await updateById.ExecuteNonQueryAsync(cancellationToken);
+                if (updatedRows > 0)
+                {
+                    continue;
+                }
+
+                await using var upsertByKey = connection.CreateCommand();
+                upsertByKey.CommandText = "INSERT INTO devices (id, dedupe_key, payload, updated_at) VALUES ($id, $key, $payload, $updated) ON CONFLICT(dedupe_key) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at";
+                upsertByKey.Parameters.AddWithValue("$id", device.Id.ToString());
+                upsertByKey.Parameters.AddWithValue("$key", key);
+                upsertByKey.Parameters.AddWithValue("$payload", payload);
+                upsertByKey.Parameters.AddWithValue("$updated", updated);
+                await upsertByKey.ExecuteNonQueryAsync(cancellationToken);
             }
         }
         finally
@@ -611,7 +627,9 @@ public sealed class SqliteApplicationStore(IOptions<BossCamRuntimeOptions> optio
         => new($"Data Source={DatabasePath}");
 
     private static string BuildDedupeKey(DeviceIdentity device)
-        => device.DeviceId ?? device.EseeId ?? device.IpAddress ?? device.Id.ToString("N");
+        => !string.IsNullOrWhiteSpace(device.IpAddress)
+            ? device.IpAddress
+            : device.DeviceId ?? device.EseeId ?? device.Id.ToString("N");
 
     private static string BuildValidationKey(EndpointValidationResult result)
         => $"{result.DeviceId:N}:{result.AdapterName}:{result.Method}:{result.Endpoint}:{result.FirmwareFingerprint}";

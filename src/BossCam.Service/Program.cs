@@ -28,7 +28,24 @@ app.UseCors();
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "ok", timestamp = DateTimeOffset.UtcNow }));
 
-app.MapGet("/api/devices", async (IApplicationStore store, CancellationToken ct) => Results.Ok(await store.GetDevicesAsync(ct)));
+app.MapGet("/api/devices", async (IApplicationStore store, CancellationToken ct) =>
+{
+    var devices = await store.GetDevicesAsync(ct);
+    var withIp = devices.Where(static device => !string.IsNullOrWhiteSpace(device.IpAddress))
+        .GroupBy(device => device.IpAddress!, StringComparer.OrdinalIgnoreCase)
+        .Select(group => group
+            .OrderByDescending(static device => string.Equals(device.DeviceType, "IPC", StringComparison.OrdinalIgnoreCase))
+            .ThenByDescending(static device => !string.IsNullOrWhiteSpace(device.LoginName))
+            .ThenByDescending(static device => !string.IsNullOrWhiteSpace(device.Password) || !string.IsNullOrWhiteSpace(device.PasswordCiphertext))
+            .ThenByDescending(static device => string.Equals(device.DisplayName, "5523-W", StringComparison.OrdinalIgnoreCase))
+            .ThenByDescending(static device => !string.IsNullOrWhiteSpace(device.FirmwareVersion))
+            .ThenByDescending(static device => !string.IsNullOrWhiteSpace(device.HardwareModel))
+            .ThenByDescending(static device => device.DiscoveredAt)
+            .First())
+        .ToList();
+    var withoutIp = devices.Where(static device => string.IsNullOrWhiteSpace(device.IpAddress)).ToList();
+    return Results.Ok(withIp.Concat(withoutIp).OrderByDescending(static device => device.DiscoveredAt).ToList());
+});
 app.MapPost("/api/devices/discover", async (DiscoveryCoordinator coordinator, CancellationToken ct) => Results.Ok(await coordinator.RunAsync(ct)));
 app.MapPost("/api/devices/{id:guid}/probe", async (Guid id, CapabilityProbeService probeService, CancellationToken ct) =>
 {

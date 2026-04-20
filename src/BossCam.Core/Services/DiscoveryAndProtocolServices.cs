@@ -12,6 +12,8 @@ public sealed class DiscoveryCoordinator(
     public async Task<IReadOnlyCollection<DeviceIdentity>> RunAsync(CancellationToken cancellationToken)
     {
         var all = new List<DeviceIdentity>();
+        // Include existing inventory so discovery updates enrich instead of fragmenting identities.
+        all.AddRange(await store.GetDevicesAsync(cancellationToken));
 
         foreach (var importer in importProviders)
         {
@@ -48,44 +50,90 @@ public sealed class DiscoveryCoordinator(
 
         foreach (var device in devices)
         {
-            var key = device.DeviceId ?? device.EseeId ?? device.IpAddress ?? device.Id.ToString("N");
+            var key = BuildMergeKey(device);
             if (!merged.TryGetValue(key, out var existing))
             {
                 merged[key] = device;
                 continue;
             }
 
-            merged[key] = existing with
+            var primary = PickPrimary(existing, device);
+            var secondary = ReferenceEquals(primary, existing) ? device : existing;
+            merged[key] = primary with
             {
-                DeviceId = Pick(existing.DeviceId, device.DeviceId),
-                EseeId = Pick(existing.EseeId, device.EseeId),
-                Name = Pick(existing.Name, device.Name),
-                IpAddress = Pick(existing.IpAddress, device.IpAddress),
-                Port = existing.Port != 80 ? existing.Port : device.Port,
-                MacAddress = Pick(existing.MacAddress, device.MacAddress),
-                WirelessMacAddress = Pick(existing.WirelessMacAddress, device.WirelessMacAddress),
-                FirmwareVersion = Pick(existing.FirmwareVersion, device.FirmwareVersion),
-                HardwareModel = Pick(existing.HardwareModel, device.HardwareModel),
-                DeviceType = Pick(existing.DeviceType, device.DeviceType),
-                LoginName = Pick(existing.LoginName, device.LoginName),
-                Password = Pick(existing.Password, device.Password),
-                PasswordCiphertext = Pick(existing.PasswordCiphertext, device.PasswordCiphertext),
-                Metadata = MergeDictionary(existing.Metadata, device.Metadata),
-                ChannelMap = existing.ChannelMap.Concat(device.ChannelMap)
+                Id = existing.Id,
+                DeviceId = Pick(primary.DeviceId, secondary.DeviceId),
+                EseeId = Pick(primary.EseeId, secondary.EseeId),
+                Name = Pick(primary.Name, secondary.Name),
+                IpAddress = Pick(primary.IpAddress, secondary.IpAddress),
+                Port = primary.Port != 80 ? primary.Port : secondary.Port,
+                MacAddress = Pick(primary.MacAddress, secondary.MacAddress),
+                WirelessMacAddress = Pick(primary.WirelessMacAddress, secondary.WirelessMacAddress),
+                FirmwareVersion = Pick(primary.FirmwareVersion, secondary.FirmwareVersion),
+                HardwareModel = Pick(primary.HardwareModel, secondary.HardwareModel),
+                DeviceType = Pick(primary.DeviceType, secondary.DeviceType),
+                LoginName = Pick(primary.LoginName, secondary.LoginName),
+                Password = Pick(primary.Password, secondary.Password),
+                PasswordCiphertext = Pick(primary.PasswordCiphertext, secondary.PasswordCiphertext),
+                Metadata = MergeDictionary(primary.Metadata, secondary.Metadata),
+                ChannelMap = primary.ChannelMap.Concat(secondary.ChannelMap)
                     .GroupBy(static channel => $"{channel.ChannelNumber}:{channel.ChannelId}", StringComparer.OrdinalIgnoreCase)
                     .Select(static group => group.First())
                     .OrderBy(static channel => channel.ChannelNumber)
                     .ToList(),
-                TransportProfiles = existing.TransportProfiles.Concat(device.TransportProfiles)
+                TransportProfiles = primary.TransportProfiles.Concat(secondary.TransportProfiles)
                     .GroupBy(static transport => $"{transport.Kind}:{transport.Address}", StringComparer.OrdinalIgnoreCase)
                     .Select(static group => group.OrderBy(t => t.Rank).First())
                     .OrderBy(static transport => transport.Rank)
                     .ToList(),
-                DiscoveredAt = existing.DiscoveredAt <= device.DiscoveredAt ? existing.DiscoveredAt : device.DiscoveredAt
+                DiscoveredAt = primary.DiscoveredAt <= secondary.DiscoveredAt ? primary.DiscoveredAt : secondary.DiscoveredAt
             };
         }
 
         return merged;
+    }
+
+    private static string BuildMergeKey(DeviceIdentity device)
+        => !string.IsNullOrWhiteSpace(device.IpAddress)
+            ? device.IpAddress
+            : device.DeviceId ?? device.EseeId ?? device.Id.ToString("N");
+
+    private static DeviceIdentity PickPrimary(DeviceIdentity left, DeviceIdentity right)
+    {
+        var leftScore = Score(left);
+        var rightScore = Score(right);
+        return leftScore >= rightScore ? left : right;
+    }
+
+    private static int Score(DeviceIdentity device)
+    {
+        var score = 0;
+        if (string.Equals(device.DeviceType, "IPC", StringComparison.OrdinalIgnoreCase))
+        {
+            score += 100;
+        }
+        if (!string.IsNullOrWhiteSpace(device.Name) && device.Name.Contains("5523", StringComparison.OrdinalIgnoreCase))
+        {
+            score += 30;
+        }
+        if (!string.IsNullOrWhiteSpace(device.LoginName))
+        {
+            score += 25;
+        }
+        if (!string.IsNullOrWhiteSpace(device.Password) || !string.IsNullOrWhiteSpace(device.PasswordCiphertext))
+        {
+            score += 20;
+        }
+        if (!string.IsNullOrWhiteSpace(device.FirmwareVersion))
+        {
+            score += 10;
+        }
+        if (!string.IsNullOrWhiteSpace(device.HardwareModel))
+        {
+            score += 10;
+        }
+        score += Math.Min(10, device.TransportProfiles.Count);
+        return score;
     }
 
     private static string? Pick(string? left, string? right)

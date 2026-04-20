@@ -64,6 +64,7 @@ public sealed record NormalizedSettingField
     public bool ReadVerified { get; init; }
     public bool WriteVerified { get; init; }
     public bool PersistsAfterReboot { get; init; }
+    public bool PersistenceExpectedAfterReboot { get; init; }
     public bool ExpertOnly { get; init; }
     public DisruptionClass DisruptionClass { get; init; } = DisruptionClass.Unknown;
     public DateTimeOffset CapturedAt { get; init; } = DateTimeOffset.UtcNow;

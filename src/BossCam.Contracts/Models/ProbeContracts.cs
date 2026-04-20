@@ -81,6 +81,9 @@ public sealed record PersistenceVerificationRequest
     public string Endpoint { get; init; } = string.Empty;
     public string Method { get; init; } = "PUT";
     public JsonObject Payload { get; init; } = [];
+    public string? FieldKey { get; init; }
+    public string? FieldSourcePath { get; init; }
+    public JsonNode? IntendedValue { get; init; }
     public bool RebootForVerification { get; init; }
     public int RebootWaitSeconds { get; init; } = 35;
 }
