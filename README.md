@@ -18,6 +18,18 @@ Implemented surfaces in this repository:
 
 ## Run
 
+One-command launcher (build + service health wait + desktop):
+
+```powershell
+& .\scripts\Start-BossCamSuite.ps1
+```
+
+Optional: include safe read probe against known cameras:
+
+```powershell
+& .\scripts\Start-BossCamSuite.ps1 -RunProbe
+```
+
 Service API host:
 
 ```powershell
