@@ -22,7 +22,7 @@ public sealed class SemanticTrustService(
     {
         if (!write.Success)
         {
-            return write.StatusCode is >= 400 ? SemanticWriteStatus.EndpointRejected : SemanticWriteStatus.TransportFailed;
+            return write.StatusCode is >= 400 ? SemanticWriteStatus.Rejected : SemanticWriteStatus.TransportFailed;
         }
 
         if (!write.PostReadVerified || immediate is null)
@@ -32,21 +32,21 @@ public sealed class SemanticTrustService(
 
         if (JsonNode.DeepEquals(immediate, baseline))
         {
-            return SemanticWriteStatus.AcceptedNoObservableChange;
+            return SemanticWriteStatus.AcceptedNoChange;
         }
 
         if (JsonNode.DeepEquals(immediate, intended))
         {
             if (delayed is not null && JsonNode.DeepEquals(delayed, immediate))
             {
-                return SemanticWriteStatus.AcceptedPersistedAfterDelay;
+                return SemanticWriteStatus.PersistedAfterDelay;
             }
 
             if (reboot is not null)
             {
                 return JsonNode.DeepEquals(reboot, immediate)
-                    ? SemanticWriteStatus.AcceptedPersistedAfterReboot
-                    : SemanticWriteStatus.AcceptedLostAfterReboot;
+                    ? SemanticWriteStatus.PersistedAfterReboot
+                    : SemanticWriteStatus.LostAfterReboot;
             }
 
             return SemanticWriteStatus.AcceptedChanged;
@@ -291,8 +291,8 @@ public sealed class SemanticTrustService(
         var max = numbers.Count == 0 ? field.Validation.Max : numbers.Max();
         var quality = observation.Status is SemanticWriteStatus.AcceptedChanged
             or SemanticWriteStatus.AcceptedClamped
-            or SemanticWriteStatus.AcceptedPersistedAfterDelay
-            or SemanticWriteStatus.AcceptedPersistedAfterReboot
+            or SemanticWriteStatus.PersistedAfterDelay
+            or SemanticWriteStatus.PersistedAfterReboot
             ? EvidenceQuality.Proven
             : EvidenceQuality.Inferred;
 
@@ -321,6 +321,35 @@ public sealed class SemanticTrustService(
             .ToList();
         var rules = new List<FieldDependencyRule>();
 
+        var resolutionRows = observations
+            .Where(item => item.FieldKey.Equals("resolution", StringComparison.OrdinalIgnoreCase)
+                && item.Context.TryGetPropertyValue("codec", out _))
+            .ToList();
+        foreach (var group in resolutionRows.GroupBy(item => item.Context["codec"]?.ToJsonString().Trim('"') ?? "unknown", StringComparer.OrdinalIgnoreCase))
+        {
+            var accepted = group
+                .Where(item => item.Status is SemanticWriteStatus.AcceptedChanged or SemanticWriteStatus.PersistedAfterDelay or SemanticWriteStatus.PersistedAfterReboot)
+                .Select(item => item.ImmediateValue?.ToJsonString().Trim('"'))
+                .Where(static value => !string.IsNullOrWhiteSpace(value))
+                .Cast<string>()
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (accepted.Count == 0)
+            {
+                continue;
+            }
+
+            rules.Add(new FieldDependencyRule
+            {
+                PrimaryFieldKey = "resolution",
+                DependsOnFieldKey = "codec",
+                DependsOnValues = [group.Key],
+                AllowedPrimaryValues = accepted,
+                Notes = "Learned from semantic writes.",
+                Quality = EvidenceQuality.Proven
+            });
+        }
+
         var fpsRows = observations
             .Where(item => item.FieldKey.Equals("frameRate", StringComparison.OrdinalIgnoreCase)
                 && item.Context.TryGetPropertyValue("resolution", out _)
@@ -329,7 +358,7 @@ public sealed class SemanticTrustService(
         foreach (var group in fpsRows.GroupBy(item => $"{item.Context["codec"]}|{item.Context["resolution"]}", StringComparer.OrdinalIgnoreCase))
         {
             var fpsAccepted = group
-                .Where(item => item.Status is SemanticWriteStatus.AcceptedChanged or SemanticWriteStatus.AcceptedPersistedAfterDelay or SemanticWriteStatus.AcceptedPersistedAfterReboot)
+                .Where(item => item.Status is SemanticWriteStatus.AcceptedChanged or SemanticWriteStatus.PersistedAfterDelay or SemanticWriteStatus.PersistedAfterReboot)
                 .Select(item => item.ImmediateValue?.ToJsonString().Trim('"'))
                 .Where(static value => !string.IsNullOrWhiteSpace(value))
                 .Cast<string>()
@@ -349,6 +378,64 @@ public sealed class SemanticTrustService(
                 DependsOnValues = [parts[1].Trim('"')],
                 AllowedPrimaryValues = fpsAccepted,
                 Notes = $"Codec={parts[0].Trim('\"')}",
+                Quality = EvidenceQuality.Proven
+            });
+        }
+
+        var profileRows = observations
+            .Where(item => item.FieldKey.Equals("profile", StringComparison.OrdinalIgnoreCase)
+                && item.Context.TryGetPropertyValue("codec", out _))
+            .ToList();
+        foreach (var group in profileRows.GroupBy(item => item.Context["codec"]?.ToJsonString().Trim('"') ?? "unknown", StringComparer.OrdinalIgnoreCase))
+        {
+            var accepted = group
+                .Where(item => item.Status is SemanticWriteStatus.AcceptedChanged or SemanticWriteStatus.PersistedAfterDelay or SemanticWriteStatus.PersistedAfterReboot)
+                .Select(item => item.ImmediateValue?.ToJsonString().Trim('"'))
+                .Where(static value => !string.IsNullOrWhiteSpace(value))
+                .Cast<string>()
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (accepted.Count == 0)
+            {
+                continue;
+            }
+
+            rules.Add(new FieldDependencyRule
+            {
+                PrimaryFieldKey = "profile",
+                DependsOnFieldKey = "codec",
+                DependsOnValues = [group.Key],
+                AllowedPrimaryValues = accepted,
+                Notes = "Learned from semantic writes.",
+                Quality = EvidenceQuality.Proven
+            });
+        }
+
+        var bitrateRows = observations
+            .Where(item => item.FieldKey.Equals("bitrate", StringComparison.OrdinalIgnoreCase)
+                && item.Context.TryGetPropertyValue("codec", out _))
+            .ToList();
+        foreach (var group in bitrateRows.GroupBy(item => item.Context["codec"]?.ToJsonString().Trim('"') ?? "unknown", StringComparer.OrdinalIgnoreCase))
+        {
+            var accepted = group
+                .Where(item => item.Status is SemanticWriteStatus.AcceptedChanged or SemanticWriteStatus.AcceptedClamped or SemanticWriteStatus.PersistedAfterDelay or SemanticWriteStatus.PersistedAfterReboot)
+                .Select(item => item.ImmediateValue?.ToJsonString().Trim('"'))
+                .Where(static value => !string.IsNullOrWhiteSpace(value))
+                .Cast<string>()
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (accepted.Count == 0)
+            {
+                continue;
+            }
+
+            rules.Add(new FieldDependencyRule
+            {
+                PrimaryFieldKey = "bitrate",
+                DependsOnFieldKey = "codec",
+                DependsOnValues = [group.Key],
+                AllowedPrimaryValues = accepted,
+                Notes = "Learned from semantic writes.",
                 Quality = EvidenceQuality.Proven
             });
         }
@@ -570,3 +657,6 @@ public sealed class SemanticTrustService(
         }
     }
 }
+
+
+

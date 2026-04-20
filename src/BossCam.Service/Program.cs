@@ -53,6 +53,13 @@ app.MapGet("/api/probe/sessions", async (Guid? deviceId, int? limit, ProbeSessio
     Results.Ok(await probeSessionService.GetSessionsAsync(deviceId, limit ?? 50, ct)));
 app.MapGet("/api/probe/sessions/{id:guid}/stages", async (Guid id, ProbeSessionService probeSessionService, CancellationToken ct) =>
     Results.Ok(await probeSessionService.GetStagesAsync(id, ct)));
+app.MapGet("/api/truth/sweep", async (string? ips, ProbeSessionService probeSessionService, CancellationToken ct) =>
+{
+    var targetIps = string.IsNullOrWhiteSpace(ips)
+        ? null
+        : ips.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    return Results.Ok(await probeSessionService.BuildTruthSweepReportAsync(targetIps, ct));
+});
 app.MapGet("/api/devices/{id:guid}/capabilities", async (Guid id, IApplicationStore store, CancellationToken ct) =>
 {
     var result = await store.GetCapabilityMapAsync(id, ct);

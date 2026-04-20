@@ -128,6 +128,48 @@ public abstract class HttpControlAdapterBase(IOptions<BossCamRuntimeOptions> opt
         };
     }
 
+    protected static bool IsSemanticSuccess(HttpAdapterResponse? response)
+    {
+        if (response is null)
+        {
+            return false;
+        }
+
+        if ((int)response.StatusCode is < 200 or >= 300)
+        {
+            return false;
+        }
+
+        var raw = response.RawContent ?? string.Empty;
+        if (raw.Contains("Invalid Operation", StringComparison.OrdinalIgnoreCase)
+            || raw.Contains("ret=\"sorry\"", StringComparison.OrdinalIgnoreCase)
+            || raw.Contains("check in falied", StringComparison.OrdinalIgnoreCase)
+            || raw.Contains("not found", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (response.Json is JsonObject obj)
+        {
+            if (obj.TryGetPropertyValue("statusCode", out var codeNode)
+                && codeNode is not null
+                && int.TryParse(codeNode.ToJsonString().Trim('"'), out var code)
+                && code != 0)
+            {
+                return false;
+            }
+
+            if (obj.TryGetPropertyValue("ret", out var retNode)
+                && retNode is not null
+                && retNode.ToJsonString().Trim('"').Equals("sorry", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private static void ApplyBasicAuth(HttpRequestMessage request, DeviceIdentity device)
     {
         if (string.IsNullOrWhiteSpace(device.LoginName))
@@ -165,7 +207,7 @@ public sealed class LanDirectNetSdkRestAdapter(
     public async Task<bool> CanHandleAsync(DeviceIdentity device, CancellationToken cancellationToken)
     {
         var response = await SendAsync(device, "/NetSDK/System/deviceInfo", "GET", null, cancellationToken);
-        return response is not null && response.StatusCode != HttpStatusCode.NotFound;
+        return IsSemanticSuccess(response);
     }
 
     public async Task<CapabilityMap> ProbeAsync(DeviceIdentity device, CancellationToken cancellationToken)
@@ -221,7 +263,7 @@ public sealed class LanDirectNetSdkRestAdapter(
         var response = await SendAsync(device, plan.Endpoint, plan.Method, plan.Payload, cancellationToken);
         return new WriteResult
         {
-            Success = response is not null && (int)response.StatusCode is >= 200 and < 300,
+            Success = IsSemanticSuccess(response),
             AdapterName = Name,
             StatusCode = response is null ? null : (int)response.StatusCode,
             Response = response?.Json,
@@ -290,7 +332,7 @@ public sealed class LanPrivateVendorHttpAdapter(
         var response = await SendAsync(device, plan.Endpoint, plan.Method, plan.Payload, cancellationToken, contentType);
         return new WriteResult
         {
-            Success = response is not null && (int)response.StatusCode is >= 200 and < 300,
+            Success = IsSemanticSuccess(response),
             AdapterName = Name,
             StatusCode = response is null ? null : (int)response.StatusCode,
             Response = response?.Json,
@@ -316,7 +358,7 @@ public sealed class LanPrivateVendorHttpAdapter(
         var response = await SendAsync(device, endpoint, method, payload, cancellationToken);
         return new MaintenanceResult
         {
-            Success = response is not null && (int)response.StatusCode is >= 200 and < 300,
+            Success = IsSemanticSuccess(response),
             AdapterName = Name,
             Operation = operation,
             Response = response?.Json,
@@ -339,7 +381,7 @@ public sealed class LanPrivateVendorHttpAdapter(
         var progress = await SendAsync(device, "/cgi-bin/upgrade_rate.cgi?cmd=upgrade_rate", "GET", null, cancellationToken);
         return new MaintenanceResult
         {
-            Success = upload is not null && (int)upload.StatusCode is >= 200 and < 300,
+            Success = IsSemanticSuccess(upload),
             AdapterName = Name,
             Operation = MaintenanceOperation.FirmwareUpload,
             Response = progress?.Json ?? upload?.Json,

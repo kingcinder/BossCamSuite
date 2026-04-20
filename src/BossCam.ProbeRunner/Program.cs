@@ -28,9 +28,11 @@ if (cli.DiscoverFirst)
     await discovery.RunAsync(CancellationToken.None);
 }
 
-var targetIps = cli.DeviceIps.Count > 0 ? cli.DeviceIps : ["10.0.0.4", "10.0.0.29", "10.0.0.227"];
+var loopTargets = cli.DeviceId is not null
+    ? [cli.DeviceIps.FirstOrDefault() ?? "by-id"]
+    : (cli.DeviceIps.Count > 0 ? cli.DeviceIps : ["10.0.0.4", "10.0.0.29", "10.0.0.227"]);
 var created = new List<ProbeSession>();
-foreach (var ip in targetIps)
+foreach (var ip in loopTargets)
 {
     var request = new ProbeSessionRequest
     {
@@ -67,6 +69,20 @@ if (!string.IsNullOrWhiteSpace(cli.ExportSummaryPath))
     Console.WriteLine($"Exported session summary: {Path.GetFullPath(cli.ExportSummaryPath)}");
 }
 
+if (cli.ExportTruthSweep)
+{
+    var reportTargets = cli.DeviceId is not null
+        ? (created.Where(session => !string.IsNullOrWhiteSpace(session.DeviceIp)).Select(session => session.DeviceIp!).Distinct(StringComparer.OrdinalIgnoreCase).ToList())
+        : loopTargets;
+    var report = await probeSessions.BuildTruthSweepReportAsync(reportTargets, CancellationToken.None);
+    var reportPath = string.IsNullOrWhiteSpace(cli.TruthSweepPath)
+        ? Path.Combine(cli.ExportDirectory ?? "artifacts", "truth-sweep-report.json")
+        : cli.TruthSweepPath;
+    Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(reportPath))!);
+    await File.WriteAllTextAsync(reportPath, JsonSerializer.Serialize(report, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true }));
+    Console.WriteLine($"Exported truth sweep report: {Path.GetFullPath(reportPath)}");
+}
+
 Console.WriteLine("Probe runner complete.");
 
 internal sealed record ProbeCliOptions
@@ -81,6 +97,8 @@ internal sealed record ProbeCliOptions
     public List<string> DeviceIps { get; init; } = [];
     public string? ExportDirectory { get; init; }
     public string? ExportSummaryPath { get; init; }
+    public bool ExportTruthSweep { get; init; }
+    public string? TruthSweepPath { get; init; }
 
     public static ProbeCliOptions Parse(string[] args)
     {
@@ -131,7 +149,9 @@ internal sealed record ProbeCliOptions
             RebootVerification = bool.TryParse(map.GetValueOrDefault("--reboot-verification"), out var rebootVerification) && rebootVerification,
             DeviceIps = ips,
             ExportDirectory = map.GetValueOrDefault("--export-dir"),
-            ExportSummaryPath = map.GetValueOrDefault("--export-summary")
+            ExportSummaryPath = map.GetValueOrDefault("--export-summary"),
+            ExportTruthSweep = bool.TryParse(map.GetValueOrDefault("--export-truth-sweep"), out var exportTruth) && exportTruth,
+            TruthSweepPath = map.GetValueOrDefault("--truth-sweep-path")
         };
     }
 }

@@ -64,6 +64,7 @@
                         <TextBlock Text="{Binding SelectedDevice.HardwareModel, StringFormat=Model: {0}, TargetNullValue=Model: -}"/>
                         <TextBlock Text="{Binding HealthBadgeText}" FontWeight="SemiBold" Margin="0,6,0,0"/>
                         <TextBlock Text="{Binding CapabilityBadgeText}" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding FirmwareTruthBadge}" FontWeight="SemiBold"/>
                     </StackPanel>
                     <WrapPanel Grid.Column="1" VerticalAlignment="Top">
                         <Button Margin="0,0,8,8" Padding="10,5" Click="ApplyValidated_Click">Apply Validated</Button>
@@ -187,6 +188,15 @@
                                         <TextBlock Width="140" Text="AP Channel" VerticalAlignment="Center"/>
                                         <TextBox Width="180" Text="{Binding WirelessApChannel}" IsEnabled="{Binding CanEditWirelessApChannel}"/>
                                     </WrapPanel>
+                                    <WrapPanel Margin="0,6,0,6">
+                                        <TextBlock Width="140" Text="Current URL" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding CurrentControlUrl}" VerticalAlignment="Center"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8">
+                                        <TextBlock Width="140" Text="Predicted URL" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding PredictedControlUrl}" VerticalAlignment="Center"/>
+                                    </WrapPanel>
+                                    <Button Width="190" Margin="0,0,0,6" Click="RunNetworkRecovery_Click">Run Recovery Probe</Button>
                                     <TextBlock Text="{Binding NetworkRecoveryHint}" Foreground="#FFD27A" Margin="0,8,0,0"/>
                                     <TextBlock Text="{Binding LastReachableUrl, StringFormat=Last Reachable URL: {0}}" Foreground="#E5D9BF" Margin="0,4,0,0"/>
                                 </StackPanel>

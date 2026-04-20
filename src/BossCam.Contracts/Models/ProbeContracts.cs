@@ -102,3 +102,42 @@ public sealed record PersistenceVerificationResult
     public string? Notes { get; init; }
     public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
 }
+
+public sealed record DeviceTruthProfile
+{
+    public Guid DeviceId { get; init; }
+    public string DisplayName { get; init; } = string.Empty;
+    public string? IpAddress { get; init; }
+    public string FirmwareFingerprint { get; init; } = string.Empty;
+    public string? FirmwareVersion { get; init; }
+    public string? HardwareModel { get; init; }
+    public string? DeviceType { get; init; }
+    public int EndpointsObserved { get; init; }
+    public int EndpointsReadVerified { get; init; }
+    public int EndpointsWriteVerified { get; init; }
+    public int TopGroupFieldsSupported { get; init; }
+    public int TopGroupFieldsUncertain { get; init; }
+    public int TopGroupFieldsUnsupported { get; init; }
+    public IReadOnlyCollection<string> ResponsiveEndpoints { get; init; } = [];
+    public IReadOnlyCollection<string> AuthModesObserved { get; init; } = [];
+    public IReadOnlyCollection<string> StreamDescriptorEndpoints { get; init; } = [];
+    public IReadOnlyCollection<string> Notes { get; init; } = [];
+}
+
+public sealed record FirmwareTruthCluster
+{
+    public string FirmwareFingerprint { get; init; } = string.Empty;
+    public IReadOnlyCollection<Guid> DeviceIds { get; init; } = [];
+    public IReadOnlyCollection<string> Ips { get; init; } = [];
+    public int EndpointsReadVerified { get; init; }
+    public int EndpointsWriteVerified { get; init; }
+    public int SupportedTopGroupFields { get; init; }
+    public int UnsupportedTopGroupFields { get; init; }
+}
+
+public sealed record TruthSweepReport
+{
+    public DateTimeOffset CapturedAt { get; init; } = DateTimeOffset.UtcNow;
+    public IReadOnlyCollection<DeviceTruthProfile> Devices { get; init; } = [];
+    public IReadOnlyCollection<FirmwareTruthCluster> Clusters { get; init; } = [];
+}

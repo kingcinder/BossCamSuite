@@ -98,9 +98,9 @@ public sealed class PersistenceVerificationService(
             PreValue = pre.Response?.DeepClone(),
             PostValue = post.Response?.DeepClone(),
             PostRebootValue = postRebootValue,
-            ImmediateStatus = immediate ? SemanticWriteStatus.AcceptedChanged : SemanticWriteStatus.EndpointRejected,
+            ImmediateStatus = immediate ? SemanticWriteStatus.AcceptedChanged : SemanticWriteStatus.Rejected,
             PersistenceStatus = request.RebootForVerification
-                ? (rebootPassed ? SemanticWriteStatus.AcceptedPersistedAfterReboot : SemanticWriteStatus.AcceptedLostAfterReboot)
+                ? (rebootPassed ? SemanticWriteStatus.PersistedAfterReboot : SemanticWriteStatus.LostAfterReboot)
                 : SemanticWriteStatus.Unverified
         };
 
@@ -124,3 +124,5 @@ public sealed class PersistenceVerificationService(
     public Task<IReadOnlyCollection<PersistenceVerificationResult>> GetResultsAsync(Guid deviceId, int limit, CancellationToken cancellationToken)
         => store.GetPersistenceVerificationResultsAsync(deviceId, limit, cancellationToken);
 }
+
+

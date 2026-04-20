@@ -87,7 +87,7 @@ public sealed class SemanticTrustServiceTests : IDisposable
             new JsonObject { ["codec"] = "H264", ["resolution"] = "1920x1080" },
             CancellationToken.None);
 
-        Assert.Equal(SemanticWriteStatus.AcceptedPersistedAfterDelay, observation.Status);
+        Assert.Equal(SemanticWriteStatus.PersistedAfterDelay, observation.Status);
         var constraints = await store.GetFieldConstraintProfilesAsync("5523|1.0.0|5523-w", CancellationToken.None);
         Assert.Contains(constraints, item => item.FieldKey == "bitrate" && item.SupportedValues.Contains("2048"));
     }
@@ -112,6 +112,66 @@ public sealed class SemanticTrustServiceTests : IDisposable
 
         Assert.True(result.Recovered);
         Assert.Equal($"http://127.0.0.1:{port}", result.ReachableUrl);
+    }
+
+    [Fact]
+    public async Task Builds_Dependency_Matrix_From_Observations()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync(CancellationToken.None);
+        var device = new DeviceIdentity { Name = "cam", DeviceType = "5523-w", IpAddress = "10.0.0.4", HardwareModel = "5523", FirmwareVersion = "1.0.0" };
+        await store.UpsertDevicesAsync([device], CancellationToken.None);
+        await store.SaveNormalizedSettingFieldsAsync(
+        [
+            new NormalizedSettingField
+            {
+                DeviceId = device.Id,
+                GroupKind = TypedSettingGroupKind.VideoImage,
+                GroupName = "Video / Image",
+                FieldKey = "resolution",
+                DisplayName = "Resolution",
+                AdapterName = "Fake",
+                SourceEndpoint = "/NetSDK/Video/input/channel/0",
+                ContractKey = "video.input.channel.0",
+                TypedValue = JsonValue.Create("1920x1080"),
+                FirmwareFingerprint = "5523|1.0.0|5523-w"
+            },
+            new NormalizedSettingField
+            {
+                DeviceId = device.Id,
+                GroupKind = TypedSettingGroupKind.VideoImage,
+                GroupName = "Video / Image",
+                FieldKey = "frameRate",
+                DisplayName = "Frame Rate",
+                AdapterName = "Fake",
+                SourceEndpoint = "/NetSDK/Video/input/channel/0",
+                ContractKey = "video.input.channel.0",
+                TypedValue = JsonValue.Create(20),
+                FirmwareFingerprint = "5523|1.0.0|5523-w"
+            }
+        ], CancellationToken.None);
+
+        var settings = BuildSettingsService(store, [new NoopAdapter()]);
+        var catalog = new EndpointContractCatalogService(store, NullLogger<EndpointContractCatalogService>.Instance);
+        var trust = new SemanticTrustService(store, catalog, settings, NullLogger<SemanticTrustService>.Instance);
+        var contract = (await catalog.GetContractsForDeviceAsync(device, CancellationToken.None)).First(item => item.ContractKey == "video.input.channel.0");
+        var resolutionField = contract.Fields.First(item => item.Key == "resolution");
+        var fpsField = contract.Fields.First(item => item.Key == "frameRate");
+
+        _ = await trust.CaptureObservationAsync(
+            device.Id, contract, resolutionField, new WriteResult { Success = true, PostReadVerified = true },
+            JsonValue.Create("1920x1080"), JsonValue.Create("1280x720"), JsonValue.Create("1920x1080"), JsonValue.Create("1920x1080"), null,
+            new JsonObject { ["codec"] = "H264", ["resolution"] = "1920x1080" }, CancellationToken.None);
+        _ = await trust.CaptureObservationAsync(
+            device.Id, contract, fpsField, new WriteResult { Success = true, PostReadVerified = true },
+            JsonValue.Create(20), JsonValue.Create(15), JsonValue.Create(20), JsonValue.Create(20), null,
+            new JsonObject { ["codec"] = "H264", ["resolution"] = "1920x1080" }, CancellationToken.None);
+
+        var matrices = await store.GetDependencyMatrixProfilesAsync("5523|1.0.0|5523-w", CancellationToken.None);
+        var top = matrices.FirstOrDefault();
+        Assert.NotNull(top);
+        Assert.Contains(top!.Rules, rule => rule.PrimaryFieldKey == "resolution" && rule.DependsOnFieldKey == "codec");
+        Assert.Contains(top.Rules, rule => rule.PrimaryFieldKey == "frameRate" && rule.DependsOnFieldKey == "resolution");
     }
 
     public void Dispose()
@@ -152,3 +212,4 @@ public sealed class SemanticTrustServiceTests : IDisposable
         public Task<MaintenanceResult> ExecuteMaintenanceAsync(DeviceIdentity device, MaintenanceOperation operation, JsonObject? payload, CancellationToken cancellationToken) => Task.FromResult(new MaintenanceResult { Success = true, AdapterName = Name, Operation = operation });
     }
 }
+

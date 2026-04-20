@@ -14,14 +14,17 @@ public sealed class EndpointContractCatalogService(
     public async Task<IReadOnlyCollection<EndpointContract>> GetContractsAsync(CancellationToken cancellationToken)
     {
         var existing = await store.GetEndpointContractsAsync(cancellationToken);
-        if (existing.Count > 0)
+        var merged = existing
+            .Concat(SeedContracts)
+            .GroupBy(contract => contract.ContractKey, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.Last())
+            .ToList();
+        if (existing.Count == 0 || merged.Count != existing.Count || !merged.All(contract => existing.Any(current => current.ContractKey.Equals(contract.ContractKey, StringComparison.OrdinalIgnoreCase) && current.Scope == contract.Scope)))
         {
-            return existing;
+            await store.SaveEndpointContractsAsync(merged, cancellationToken);
+            logger.LogInformation("Upserted {Count} endpoint contracts from seed+store merge", merged.Count);
         }
-
-        await store.SaveEndpointContractsAsync(SeedContracts, cancellationToken);
-        logger.LogInformation("Seeded {Count} endpoint contracts", SeedContracts.Count);
-        return SeedContracts;
+        return merged;
     }
 
     public async Task<IReadOnlyCollection<EndpointContract>> GetContractsForDeviceAsync(DeviceIdentity device, CancellationToken cancellationToken)
@@ -59,7 +62,10 @@ public sealed class EndpointContractCatalogService(
             return false;
         }
 
-        if (!string.IsNullOrWhiteSpace(scope.HardwareModelPattern) && !WildcardMatch(scope.HardwareModelPattern, device.HardwareModel ?? string.Empty))
+        // If hardware model is unknown at runtime, do not over-filter inferred contracts.
+        if (!string.IsNullOrWhiteSpace(scope.HardwareModelPattern)
+            && !string.IsNullOrWhiteSpace(device.HardwareModel)
+            && !WildcardMatch(scope.HardwareModelPattern, device.HardwareModel))
         {
             return false;
         }
@@ -188,7 +194,8 @@ public sealed class EndpointContractCatalogService(
 
     private static IReadOnlyCollection<EndpointContract> BuildSeedContracts()
     {
-        var scope = new ContractScope { FirmwareFingerprintPattern = "*", HardwareModelPattern = "*5523*" };
+        // Keep scope broad when hardware model is missing; field evidence still tracks proven vs inferred.
+        var scope = new ContractScope { FirmwareFingerprintPattern = "*", HardwareModelPattern = "*" };
         return
         [
             // Video / Image

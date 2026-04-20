@@ -43,6 +43,11 @@ public sealed class TypedSettingsService(
         {
             foreach (var value in group.Values.Values)
             {
+                if (IsSemanticErrorPayload(value.Value))
+                {
+                    continue;
+                }
+
                 var endpoint = NormalizeEndpoint(value.SourceEndpoint ?? value.Key);
                 var matched = contracts.Where(contract => EndpointPatternMatches(contract.Endpoint, endpoint)).ToList();
                 if (matched.Count == 0)
@@ -271,7 +276,7 @@ public sealed class TypedSettingsService(
             {
                 writes.Add(write with
                 {
-                    SemanticStatus = write.StatusCode is >= 400 ? SemanticWriteStatus.EndpointRejected : SemanticWriteStatus.TransportFailed,
+                    SemanticStatus = write.StatusCode is >= 400 ? SemanticWriteStatus.Rejected : SemanticWriteStatus.TransportFailed,
                     ContractKey = seed.Contract.ContractKey,
                     ContractViolations = payloadBuild.Validation.Errors
                 });
@@ -965,6 +970,36 @@ public sealed class TypedSettingsService(
         return current;
     }
 
+    private static bool IsSemanticErrorPayload(JsonNode? node)
+    {
+        if (node is JsonObject obj)
+        {
+            if (obj.TryGetPropertyValue("statusCode", out var codeNode)
+                && codeNode is not null
+                && int.TryParse(codeNode.ToJsonString().Trim('"'), out var code)
+                && code != 0)
+            {
+                return true;
+            }
+
+            if (obj.TryGetPropertyValue("ret", out var retNode)
+                && retNode is not null
+                && retNode.ToJsonString().Trim('"').Equals("sorry", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        if (node is JsonValue value && value.TryGetValue<string>(out var raw))
+        {
+            return raw.Contains("Not Found", StringComparison.OrdinalIgnoreCase)
+                || raw.Contains("Invalid Operation", StringComparison.OrdinalIgnoreCase)
+                || raw.Contains("check in falied", StringComparison.OrdinalIgnoreCase);
+        }
+
+        return false;
+    }
+
     private static void SetPathValue(JsonObject root, string path, JsonNode? value)
     {
         if (string.IsNullOrWhiteSpace(path))
@@ -1059,4 +1094,5 @@ public sealed class TypedSettingsService(
 
     private sealed record PathSegment(string? Name, int? Index);
 }
+
 

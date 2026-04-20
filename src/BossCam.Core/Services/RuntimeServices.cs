@@ -243,7 +243,7 @@ public sealed class SettingsService(
             RequestContent = payload?.ToJsonString(),
             ResponseContent = result.Response?.ToJsonString(),
             Success = result.Success,
-            SemanticStatus = result.Success ? SemanticWriteStatus.AcceptedChanged : SemanticWriteStatus.EndpointRejected,
+            SemanticStatus = result.Success ? SemanticWriteStatus.AcceptedChanged : SemanticWriteStatus.Rejected,
             BlockReason = result.Success ? null : result.Message
         }, cancellationToken);
 
@@ -376,3 +376,4 @@ public sealed class FirmwareCatalogService(IFirmwareArtifactAnalyzer analyzer, I
     public Task<IReadOnlyCollection<FirmwareArtifact>> GetAsync(CancellationToken cancellationToken)
         => store.GetFirmwareArtifactsAsync(cancellationToken);
 }
+

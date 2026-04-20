@@ -11,6 +11,8 @@ public sealed class ProbeSessionService(
     CapabilityProbeService capabilityProbeService,
     ProtocolValidationService protocolValidationService,
     TypedSettingsService typedSettingsService,
+    SemanticTrustService semanticTrustService,
+    IEndpointContractCatalog endpointContractCatalog,
     IContractEvidenceService contractEvidenceService,
     CapabilityPromotionService capabilityPromotionService,
     ILogger<ProbeSessionService> logger)
@@ -73,6 +75,17 @@ public sealed class ProbeSessionService(
                 var options = MapRunOptions(request.Mode, request.IncludePersistenceChecks, request.IncludeRollbackChecks);
                 _ = await protocolValidationService.ValidateDeviceAsync(device, options, cancellationToken);
                 _ = await typedSettingsService.NormalizeDeviceAsync(device.Id, refreshFromDevice: true, cancellationToken);
+                if (request.Mode is ProbeStageMode.SafeWriteVerify or ProbeStageMode.NetworkImpacting or ProbeStageMode.ExpertFull)
+                {
+                    _ = await semanticTrustService.DiscoverConstraintsAsync(new ConstraintDiscoveryRequest
+                    {
+                        DeviceId = device.Id,
+                        FieldKeys = ["brightness", "contrast", "saturation", "sharpness", "bitrate", "frameRate"],
+                        IncludeNetworkChanging = request.Mode is ProbeStageMode.NetworkImpacting or ProbeStageMode.ExpertFull,
+                        ExpertOverride = request.Mode == ProbeStageMode.ExpertFull,
+                        DelaySeconds = 2
+                    }, cancellationToken);
+                }
             }
 
             var profile = await capabilityPromotionService.PromoteForDeviceAsync(device.Id, cancellationToken);
@@ -266,4 +279,97 @@ public sealed class ProbeSessionService(
             },
             _ => new ValidationRunOptions { AttemptWrites = false }
         };
+
+    public async Task<TruthSweepReport> BuildTruthSweepReportAsync(IReadOnlyCollection<string>? targetIps, CancellationToken cancellationToken)
+    {
+        var devices = await store.GetDevicesAsync(cancellationToken);
+        if (targetIps is { Count: > 0 })
+        {
+            devices = devices
+                .Where(device => !string.IsNullOrWhiteSpace(device.IpAddress) && targetIps.Contains(device.IpAddress, StringComparer.OrdinalIgnoreCase))
+                .GroupBy(device => device.IpAddress!, StringComparer.OrdinalIgnoreCase)
+                .Select(group => group
+                    .OrderByDescending(device => string.Equals(device.DeviceType, "IPC", StringComparison.OrdinalIgnoreCase))
+                    .ThenByDescending(device => string.Equals(device.DisplayName, "5523-W", StringComparison.OrdinalIgnoreCase))
+                    .ThenByDescending(device => device.DiscoveredAt)
+                    .First())
+                .ToList();
+        }
+
+        var profiles = new List<DeviceTruthProfile>();
+        foreach (var device in devices)
+        {
+            var validations = await store.GetEndpointValidationResultsAsync(device.Id, cancellationToken);
+            var fields = await store.GetNormalizedSettingFieldsAsync(device.Id, cancellationToken);
+            var responsive = validations.Where(validation => validation.ReadVerified).Select(validation => validation.Endpoint).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            var authModes = validations.Select(validation => validation.AuthMode).Where(static mode => !string.IsNullOrWhiteSpace(mode)).Distinct(StringComparer.OrdinalIgnoreCase).Cast<string>().ToList();
+            var stream = validations.Where(validation => validation.Endpoint.Contains("/Stream/", StringComparison.OrdinalIgnoreCase) && validation.ReadVerified).Select(validation => validation.Endpoint).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            var topGroup = fields.Where(field => field.GroupKind is TypedSettingGroupKind.VideoImage or TypedSettingGroupKind.NetworkWireless or TypedSettingGroupKind.UsersMaintenance).ToList();
+            var contracts = await endpointContractCatalog.GetContractsForDeviceAsync(device, cancellationToken);
+            var expectedTopWritable = contracts
+                .Where(contract => contract.GroupKind is TypedSettingGroupKind.VideoImage or TypedSettingGroupKind.NetworkWireless or TypedSettingGroupKind.UsersMaintenance)
+                .SelectMany(contract => contract.Fields.Where(field => field.Writable).Select(field => field.Key))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count();
+            var supportedTop = topGroup.Count(field => field.SupportState == ContractSupportState.Supported);
+            var uncertainTop = topGroup.Count(field => field.SupportState == ContractSupportState.Uncertain);
+            var unsupportedTop = topGroup.Count(field => field.SupportState == ContractSupportState.Unsupported);
+            if (topGroup.Count == 0 && expectedTopWritable > 0)
+            {
+                unsupportedTop = expectedTopWritable;
+            }
+            var fingerprint = fields.Select(static field => field.FirmwareFingerprint).FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value))
+                ?? $"{device.HardwareModel}|{device.FirmwareVersion}|{device.DeviceType}";
+            var notes = new List<string>();
+            if (validations.All(validation => !validation.WriteVerified))
+            {
+                notes.Add("No write-verified endpoints yet.");
+            }
+            if (responsive.Count == 0)
+            {
+                notes.Add("No read-verified endpoints discovered.");
+            }
+
+            profiles.Add(new DeviceTruthProfile
+            {
+                DeviceId = device.Id,
+                DisplayName = device.DisplayName,
+                IpAddress = device.IpAddress,
+                FirmwareFingerprint = fingerprint,
+                FirmwareVersion = device.FirmwareVersion,
+                HardwareModel = device.HardwareModel,
+                DeviceType = device.DeviceType,
+                EndpointsObserved = validations.Count,
+                EndpointsReadVerified = validations.Count(validation => validation.ReadVerified),
+                EndpointsWriteVerified = validations.Count(validation => validation.WriteVerified),
+                TopGroupFieldsSupported = supportedTop,
+                TopGroupFieldsUncertain = uncertainTop,
+                TopGroupFieldsUnsupported = unsupportedTop,
+                ResponsiveEndpoints = responsive,
+                AuthModesObserved = authModes,
+                StreamDescriptorEndpoints = stream,
+                Notes = notes
+            });
+        }
+
+        var clusters = profiles
+            .GroupBy(profile => profile.FirmwareFingerprint, StringComparer.OrdinalIgnoreCase)
+            .Select(group => new FirmwareTruthCluster
+            {
+                FirmwareFingerprint = group.Key,
+                DeviceIds = group.Select(profile => profile.DeviceId).ToList(),
+                Ips = group.Select(profile => profile.IpAddress).Where(static ip => !string.IsNullOrWhiteSpace(ip)).Cast<string>().ToList(),
+                EndpointsReadVerified = group.Sum(profile => profile.EndpointsReadVerified),
+                EndpointsWriteVerified = group.Sum(profile => profile.EndpointsWriteVerified),
+                SupportedTopGroupFields = group.Sum(profile => profile.TopGroupFieldsSupported),
+                UnsupportedTopGroupFields = group.Sum(profile => profile.TopGroupFieldsUnsupported)
+            })
+            .ToList();
+
+        return new TruthSweepReport
+        {
+            Devices = profiles,
+            Clusters = clusters
+        };
+    }
 }

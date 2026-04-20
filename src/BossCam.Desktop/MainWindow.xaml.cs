@@ -32,6 +32,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private string _maintenanceState = "No maintenance action executed.";
     private string _recordingState = "Recording idle.";
     private string _recordingDiagnostics = string.Empty;
+    private string _firmwareTruthBadge = "Truth: unknown";
     private string _passwordChangeUsername = string.Empty;
     private string _passwordChangeValue = string.Empty;
     private string _wirelessApPsk = string.Empty;
@@ -211,6 +212,19 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
     }
 
+    public string FirmwareTruthBadge
+    {
+        get => _firmwareTruthBadge;
+        set
+        {
+            if (_firmwareTruthBadge != value)
+            {
+                _firmwareTruthBadge = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
     public string LastReachableUrl
     {
         get => _lastReachableUrl;
@@ -223,6 +237,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             }
         }
     }
+
+    public string CurrentControlUrl => string.IsNullOrWhiteSpace(SelectedDevice?.IpAddress) ? string.Empty : BuildUrlFromIpPort(SelectedDevice.IpAddress, NetworkPort);
+    public string PredictedControlUrl => BuildUrlFromIpPort(NetworkIp, NetworkPort);
 
     public string PasswordChangeUsername
     {
@@ -366,6 +383,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private async void StopRecording_Click(object sender, RoutedEventArgs e) => await RunAsync(StopRecordingAsync);
     private async void RefreshRecordingIndex_Click(object sender, RoutedEventArgs e) => await RunAsync(RefreshRecordingIndexAsync);
     private async void ExportRecentClip_Click(object sender, RoutedEventArgs e) => await RunAsync(ExportRecentClipAsync);
+    private async void RunNetworkRecovery_Click(object sender, RoutedEventArgs e) => await RunAsync(RunNetworkRecoveryAsync);
 
     private async Task RunAsync(Func<Task> action)
     {
@@ -525,7 +543,33 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         PopulateUserList();
         await LoadSemanticTrustAsync();
+        await LoadTruthBadgeAsync();
         NotifyAllEditorProperties();
+    }
+
+    private async Task LoadTruthBadgeAsync()
+    {
+        if (SelectedDevice is null)
+        {
+            FirmwareTruthBadge = "Truth: unknown";
+            return;
+        }
+
+        var report = await GetAsync<TruthSweepReport>($"/api/truth/sweep?ips={SelectedDevice.IpAddress}");
+        var profile = report?.Devices.FirstOrDefault(device => device.DeviceId == SelectedDevice.Id)
+            ?? report?.Devices.FirstOrDefault(device => string.Equals(device.IpAddress, SelectedDevice.IpAddress, StringComparison.OrdinalIgnoreCase));
+        if (profile is null)
+        {
+            FirmwareTruthBadge = "Truth: no evidence profile";
+            return;
+        }
+
+        var confidence = profile.EndpointsWriteVerified > 0
+            ? "proven-write"
+            : profile.EndpointsReadVerified > 0
+                ? "read-only"
+                : "unverified";
+        FirmwareTruthBadge = $"Truth: {confidence} firmware={profile.FirmwareFingerprint} read={profile.EndpointsReadVerified} write={profile.EndpointsWriteVerified}";
     }
 
     private async Task LoadPersistenceEligibleFieldsAsync()
@@ -665,6 +709,13 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             return;
         }
 
+        var comboErrors = ValidateCompatibilityEdits();
+        if (comboErrors.Count > 0)
+        {
+            DiagnosticsText = "Compatibility block: " + string.Join(" | ", comboErrors);
+            return;
+        }
+
         var changes = _fieldByKey.Values
             .Where(field => !string.Equals(field.EditableValue, field.OriginalValue, StringComparison.Ordinal))
             .Where(field => expertOverride
@@ -709,6 +760,46 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         await LoadSemanticTrustAsync();
     }
 
+    private List<string> ValidateCompatibilityEdits()
+    {
+        var errors = new List<string>();
+        if (_fieldByKey.TryGetValue("resolution", out var resolutionField) && VideoResolutionOptions.Count > 0)
+        {
+            var resolution = resolutionField.EditableValue;
+            if (!string.IsNullOrWhiteSpace(resolution) && !VideoResolutionOptions.Contains(resolution))
+            {
+                errors.Add($"resolution '{resolution}' is not valid for current codec/profile constraints");
+            }
+        }
+
+        if (_fieldByKey.TryGetValue("frameRate", out var fpsField))
+        {
+            if (int.TryParse(fpsField.EditableValue, out var fps))
+            {
+                var max = (int)HintMax("frameRate", 60);
+                if (fps > max)
+                {
+                    errors.Add($"frameRate '{fps}' exceeds constrained max '{max}'");
+                }
+            }
+        }
+
+        if (_fieldByKey.TryGetValue("bitrate", out var bitrateField))
+        {
+            if (int.TryParse(bitrateField.EditableValue, out var bitrate))
+            {
+                var min = (int)HintMin("bitrate", 64);
+                var max = (int)HintMax("bitrate", 16384);
+                if (bitrate < min || bitrate > max)
+                {
+                    errors.Add($"bitrate '{bitrate}' outside constrained range {min}-{max}");
+                }
+            }
+        }
+
+        return errors;
+    }
+
     private async Task VerifyPersistenceAsync()
     {
         if (SelectedDevice is null)
@@ -749,6 +840,31 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         DiagnosticsText = JsonSerializer.Serialize(result, SerializerOptions);
     }
 
+    private async Task RunNetworkRecoveryAsync()
+    {
+        if (SelectedDevice is null)
+        {
+            DiagnosticsText = "Select a device first.";
+            return;
+        }
+
+        var context = new NetworkRecoveryContext
+        {
+            DeviceId = SelectedDevice.Id,
+            PreviousIp = SelectedDevice.IpAddress,
+            PreviousGateway = NetworkGateway,
+            PreviousDns = NetworkDns,
+            PreviousControlUrl = string.IsNullOrWhiteSpace(LastReachableUrl) ? CurrentControlUrl : LastReachableUrl,
+            PredictedControlUrl = PredictedControlUrl
+        };
+        var result = await PostAsync<NetworkRecoveryResult>($"/api/devices/{SelectedDevice.Id}/network/recovery", context);
+        if (result is not null && result.Recovered && !string.IsNullOrWhiteSpace(result.ReachableUrl))
+        {
+            LastReachableUrl = result.ReachableUrl;
+        }
+        DiagnosticsText = JsonSerializer.Serialize(result, SerializerOptions);
+    }
+
     private async Task ApplyPasswordChangeAsync()
     {
         if (SelectedDevice is null)
@@ -759,6 +875,18 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         if (string.IsNullOrWhiteSpace(PasswordChangeUsername) || string.IsNullOrWhiteSpace(_passwordChangeValue))
         {
             MaintenanceState = "Username and new password are required.";
+            return;
+        }
+
+        if (_passwordChangeValue.Length < 8)
+        {
+            MaintenanceState = "Password must be at least 8 characters.";
+            return;
+        }
+
+        if (MessageBox.Show($"Apply password change for user '{PasswordChangeUsername}'?", "Confirm Password Change", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+        {
+            MaintenanceState = "Password change cancelled.";
             return;
         }
 
@@ -892,6 +1020,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         if (_fieldByKey.TryGetValue(key, out var field))
         {
             field.EditableValue = value;
+            if (key.Equals("ip", StringComparison.OrdinalIgnoreCase) || key.Equals("ports", StringComparison.OrdinalIgnoreCase))
+            {
+                OnPropertyChanged(nameof(CurrentControlUrl));
+                OnPropertyChanged(nameof(PredictedControlUrl));
+            }
         }
     }
 
@@ -1045,6 +1178,35 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 }
             }
         }
+
+        var profileRules = _dependencyRules
+            .Where(rule => rule.PrimaryFieldKey.Equals("profile", StringComparison.OrdinalIgnoreCase)
+                && rule.DependsOnFieldKey.Equals("codec", StringComparison.OrdinalIgnoreCase)
+                && rule.DependsOnValues.Contains(codec, StringComparer.OrdinalIgnoreCase))
+            .ToList();
+        if (profileRules.Count > 0)
+        {
+            var allowed = profileRules.SelectMany(static rule => rule.AllowedPrimaryValues).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            FilterOptions(VideoProfileOptions, allowed);
+        }
+
+        var bitrateRules = _dependencyRules
+            .Where(rule => rule.PrimaryFieldKey.Equals("bitrate", StringComparison.OrdinalIgnoreCase)
+                && rule.DependsOnFieldKey.Equals("codec", StringComparison.OrdinalIgnoreCase)
+                && rule.DependsOnValues.Contains(codec, StringComparer.OrdinalIgnoreCase))
+            .ToList();
+        if (bitrateRules.Count > 0)
+        {
+            var values = bitrateRules
+                .SelectMany(static rule => rule.AllowedPrimaryValues)
+                .Select(value => int.TryParse(value, out var parsed) ? parsed : 0)
+                .Where(static value => value > 0)
+                .ToList();
+            if (values.Count > 0 && _editorHintByKey.TryGetValue("bitrate", out var hint))
+            {
+                _editorHintByKey["bitrate"] = hint with { Min = values.Min(), Max = values.Max() };
+            }
+        }
     }
 
     private static void FilterOptions(ObservableCollection<string> target, IReadOnlyCollection<string> allowed)
@@ -1059,6 +1221,21 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private static double ParseDouble(string raw, double fallback)
         => double.TryParse(raw, out var parsed) ? parsed : fallback;
 
+    private static string BuildUrlFromIpPort(string? ip, string? portRaw)
+    {
+        if (string.IsNullOrWhiteSpace(ip))
+        {
+            return string.Empty;
+        }
+
+        if (!int.TryParse(portRaw, out var port))
+        {
+            port = 80;
+        }
+
+        return $"http://{ip}:{port}";
+    }
+
     private void NotifyAllEditorProperties()
     {
         foreach (var name in new[]
@@ -1070,6 +1247,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             nameof(VideoFrameRate), nameof(ImageBrightness), nameof(ImageBrightnessSlider), nameof(ImageBrightnessMin), nameof(ImageBrightnessMax),
             nameof(ImageContrast), nameof(ImageSaturation), nameof(ImageHue), nameof(ImageSharpness),
             nameof(NetworkIp), nameof(NetworkNetmask), nameof(NetworkGateway), nameof(NetworkDns), nameof(NetworkPort),
+            nameof(CurrentControlUrl), nameof(PredictedControlUrl),
             nameof(WirelessApSsid), nameof(WirelessApChannel),
             nameof(VideoCodecState), nameof(VideoProfileState), nameof(NetworkIpState), nameof(WirelessApPskState),
             nameof(CanEditVideoCodec), nameof(CanEditVideoProfile), nameof(CanEditVideoResolution), nameof(CanEditVideoDayNight), nameof(CanEditVideoWdr), nameof(CanEditVideoIrCut),
