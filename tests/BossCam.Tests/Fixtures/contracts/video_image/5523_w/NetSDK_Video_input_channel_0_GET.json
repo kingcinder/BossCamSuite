@@ -6,11 +6,14 @@
   "authMode": "basic-or-digest",
   "requestBody": null,
   "responseBody": {
-    "codec": "H264",
-    "profile": "Main",
-    "resolution": "1920x1080",
-    "bitrate": 1024,
-    "frameRate": 20,
-    "gop": 25
+    "id": 1,
+    "enabled": true,
+    "brightnessLevel": 50,
+    "contrastLevel": 50,
+    "saturationLevel": 50,
+    "sharpnessLevel": 50,
+    "hueLevel": 50,
+    "mirrorEnabled": false,
+    "flipEnabled": false
   }
 }

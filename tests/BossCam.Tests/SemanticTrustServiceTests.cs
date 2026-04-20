@@ -29,7 +29,7 @@ public sealed class SemanticTrustServiceTests : IDisposable
         var catalog = new EndpointContractCatalogService(store, NullLogger<EndpointContractCatalogService>.Instance);
         var trust = new SemanticTrustService(store, catalog, settings, NullLogger<SemanticTrustService>.Instance);
         var contracts = await catalog.GetContractsAsync(CancellationToken.None);
-        var videoContract = contracts.First(contract => contract.ContractKey == "video.input.channel.0");
+        var videoContract = contracts.First(contract => contract.ContractKey == "video.encode.channel");
         var bitrate = videoContract.Fields.First(field => field.Key == "bitrate");
 
         var status = trust.Classify(
@@ -61,8 +61,8 @@ public sealed class SemanticTrustServiceTests : IDisposable
                 FieldKey = "bitrate",
                 DisplayName = "Bitrate",
                 AdapterName = "Fake",
-                SourceEndpoint = "/NetSDK/Video/input/channel/0",
-                ContractKey = "video.input.channel.0",
+                SourceEndpoint = "/NetSDK/Video/encode/channel/101/properties",
+                ContractKey = "video.encode.channel",
                 TypedValue = JsonValue.Create(1024),
                 FirmwareFingerprint = "5523|1.0.0|5523-w"
             }
@@ -71,7 +71,7 @@ public sealed class SemanticTrustServiceTests : IDisposable
         var settings = BuildSettingsService(store, [new NoopAdapter()]);
         var catalog = new EndpointContractCatalogService(store, NullLogger<EndpointContractCatalogService>.Instance);
         var trust = new SemanticTrustService(store, catalog, settings, NullLogger<SemanticTrustService>.Instance);
-        var contract = (await catalog.GetContractsForDeviceAsync(device, CancellationToken.None)).First(item => item.ContractKey == "video.input.channel.0");
+        var contract = (await catalog.GetContractsForDeviceAsync(device, CancellationToken.None)).First(item => item.ContractKey == "video.encode.channel");
         var field = contract.Fields.First(item => item.Key == "bitrate");
 
         var observation = await trust.CaptureObservationAsync(
@@ -131,8 +131,8 @@ public sealed class SemanticTrustServiceTests : IDisposable
                 FieldKey = "resolution",
                 DisplayName = "Resolution",
                 AdapterName = "Fake",
-                SourceEndpoint = "/NetSDK/Video/input/channel/0",
-                ContractKey = "video.input.channel.0",
+                SourceEndpoint = "/NetSDK/Video/encode/channel/101/properties",
+                ContractKey = "video.encode.channel",
                 TypedValue = JsonValue.Create("1920x1080"),
                 FirmwareFingerprint = "5523|1.0.0|5523-w"
             },
@@ -144,8 +144,8 @@ public sealed class SemanticTrustServiceTests : IDisposable
                 FieldKey = "frameRate",
                 DisplayName = "Frame Rate",
                 AdapterName = "Fake",
-                SourceEndpoint = "/NetSDK/Video/input/channel/0",
-                ContractKey = "video.input.channel.0",
+                SourceEndpoint = "/NetSDK/Video/encode/channel/101/properties",
+                ContractKey = "video.encode.channel",
                 TypedValue = JsonValue.Create(20),
                 FirmwareFingerprint = "5523|1.0.0|5523-w"
             }
@@ -154,7 +154,7 @@ public sealed class SemanticTrustServiceTests : IDisposable
         var settings = BuildSettingsService(store, [new NoopAdapter()]);
         var catalog = new EndpointContractCatalogService(store, NullLogger<EndpointContractCatalogService>.Instance);
         var trust = new SemanticTrustService(store, catalog, settings, NullLogger<SemanticTrustService>.Instance);
-        var contract = (await catalog.GetContractsForDeviceAsync(device, CancellationToken.None)).First(item => item.ContractKey == "video.input.channel.0");
+        var contract = (await catalog.GetContractsForDeviceAsync(device, CancellationToken.None)).First(item => item.ContractKey == "video.encode.channel");
         var resolutionField = contract.Fields.First(item => item.Key == "resolution");
         var fpsField = contract.Fields.First(item => item.Key == "frameRate");
 

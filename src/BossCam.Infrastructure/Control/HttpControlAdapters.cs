@@ -189,7 +189,7 @@ public sealed class LanDirectNetSdkRestAdapter(
         ["Device"] = ["/NetSDK/System/deviceInfo", "/NetSDK/System/time/localTime", "/NetSDK/System/time/ntp"],
         ["Network"] = ["/NetSDK/Network/interfaces", "/NetSDK/Network/Ports", "/NetSDK/Network/Dns", "/NetSDK/Network/Esee"],
         ["Audio"] = ["/NetSDK/Audio/input/channels", "/NetSDK/Audio/encode/channels"],
-        ["Video"] = ["/NetSDK/Video/input/channles", "/NetSDK/Video/encode/channels"],
+        ["Video"] = ["/NetSDK/Video/input/channel/1", "/NetSDK/Video/encode/channels", "/NetSDK/Video/encode/channel/101/properties", "/NetSDK/Video/encode/channel/102/properties"],
         ["Detection"] = ["/NetSDK/Video/motionDetection/channels", "/NetSDK/IO/alarmInput/channels", "/NetSDK/IO/alarmOutput/channels"],
         ["PTZ"] = ["/NetSDK/PTZ/channels"],
         ["Stream"] = ["/NetSDK/Stream/channles", "/NetSDK/Stream/channel/ID"],

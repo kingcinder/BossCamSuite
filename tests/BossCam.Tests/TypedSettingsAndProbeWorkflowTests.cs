@@ -32,7 +32,7 @@ public sealed class TypedSettingsAndProbeWorkflowTests : IDisposable
             {
                 DeviceId = device.Id,
                 AdapterName = "Fake",
-                Endpoint = "/NetSDK/Video/input/channel/0",
+                Endpoint = "/NetSDK/Video/encode/channel/101/properties",
                 Method = "PUT",
                 ReadVerified = true,
                 WriteVerified = true,
@@ -52,11 +52,17 @@ public sealed class TypedSettingsAndProbeWorkflowTests : IDisposable
                     DisplayName = "Video",
                     Values = new Dictionary<string, SettingValue>
                     {
-                        ["/NetSDK/Video/input/channel/0"] = new()
+                        ["/NetSDK/Video/input/channel/1"] = new()
                         {
-                            Key = "/NetSDK/Video/input/channel/0",
-                            SourceEndpoint = "/NetSDK/Video/input/channel/0",
-                            Value = JsonNode.Parse("{\"codec\":\"H264\",\"bitrate\":1024,\"frameRate\":20}")
+                            Key = "/NetSDK/Video/input/channel/1",
+                            SourceEndpoint = "/NetSDK/Video/input/channel/1",
+                            Value = JsonNode.Parse("{\"id\":1,\"enabled\":true,\"brightnessLevel\":50,\"contrastLevel\":50,\"saturationLevel\":50,\"sharpnessLevel\":50,\"hueLevel\":50}")
+                        },
+                        ["/NetSDK/Video/encode/channel/101/properties"] = new()
+                        {
+                            Key = "/NetSDK/Video/encode/channel/101/properties",
+                            SourceEndpoint = "/NetSDK/Video/encode/channel/101/properties",
+                            Value = JsonNode.Parse("{\"codecType\":\"H.264\",\"h264Profile\":\"main\",\"resolution\":\"1920x1080\",\"constantBitRate\":1024,\"frameRate\":20,\"keyFrameInterval\":25}")
                         }
                     }
                 }
@@ -72,6 +78,7 @@ public sealed class TypedSettingsAndProbeWorkflowTests : IDisposable
         var fields = groups.SelectMany(static group => group.Fields).ToList();
         Assert.Contains(fields, field => field.FieldKey == "codec" && field.WriteVerified);
         Assert.Contains(fields, field => field.FieldKey == "bitrate");
+        Assert.Contains(fields, field => field.FieldKey == "brightness");
     }
 
     [Fact]
@@ -150,7 +157,7 @@ public sealed class TypedSettingsAndProbeWorkflowTests : IDisposable
                 FieldKey = "codec",
                 DisplayName = "Codec",
                 AdapterName = "Fake",
-                SourceEndpoint = "/NetSDK/Video/input/channel/0",
+                SourceEndpoint = "/NetSDK/Video/encode/channel/101/properties",
                 FirmwareFingerprint = "5523|1.0.0|ipc",
                 ReadVerified = true,
                 WriteVerified = true,

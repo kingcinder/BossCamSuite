@@ -90,6 +90,7 @@ public sealed class ImageTruthService(
             .Where(static contract => contract.GroupKind == TypedSettingGroupKind.VideoImage)
             .ToList();
         var fixtureRows = await LoadFixtureRowsForIpAsync(device.IpAddress, cancellationToken);
+        var liveEvidenceRows = await LoadLiveSemanticEvidenceRowsForIpAsync(device.IpAddress, cancellationToken);
         var firmware = BuildFirmwareFingerprint(device, imageFields.Values);
 
         var candidateKeys = new HashSet<string>(PriorityFieldOrder, StringComparer.OrdinalIgnoreCase);
@@ -135,6 +136,11 @@ public sealed class ImageTruthService(
                 Notes = BuildInventoryNote(field, contractField, lastSemantic, status, decision),
                 CapturedAt = DateTimeOffset.UtcNow
             });
+        }
+
+        if (liveEvidenceRows.Count > 0)
+        {
+            inventory = ApplyLiveEvidenceOverrides(inventory, liveEvidenceRows);
         }
 
         foreach (var fixture in fixtureRows.Where(static row => row.Verified))
@@ -937,6 +943,7 @@ public sealed class ImageTruthService(
     }
 
     private sealed record FixtureBehaviorRow(string Field, decimal Orig, decimal Attempt, decimal Actual, bool Verified, int Status, string? Endpoint);
+    private sealed record LiveSemanticEvidenceRow(string Field, string Phase, bool Readable, string Status, string? Endpoint);
 
     private async Task<List<FixtureBehaviorRow>> LoadFixtureRowsForIpAsync(string? ipAddress, CancellationToken cancellationToken)
     {
@@ -1018,6 +1025,201 @@ public sealed class ImageTruthService(
         }
 
         return files.ToList();
+    }
+
+    private static IReadOnlyCollection<string> ResolveLiveSemanticEvidenceFiles()
+    {
+        var roots = new List<string>();
+        var current = Directory.GetCurrentDirectory();
+        roots.Add(current);
+        roots.Add(Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..")));
+        var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var root in roots.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var evidenceDir = Path.Combine(root, "artifacts", "5523w");
+            if (!Directory.Exists(evidenceDir))
+            {
+                continue;
+            }
+
+            foreach (var path in Directory.GetFiles(evidenceDir, "live-image-targeted-semantic-*.json", SearchOption.TopDirectoryOnly))
+            {
+                files.Add(path);
+            }
+        }
+
+        return files.ToList();
+    }
+
+    private async Task<List<LiveSemanticEvidenceRow>> LoadLiveSemanticEvidenceRowsForIpAsync(string? ipAddress, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(ipAddress))
+        {
+            return [];
+        }
+
+        var files = ResolveLiveSemanticEvidenceFiles();
+        var rows = new List<LiveSemanticEvidenceRow>();
+        foreach (var file in files)
+        {
+            if (!File.Exists(file))
+            {
+                continue;
+            }
+
+            try
+            {
+                var root = JsonNode.Parse(await File.ReadAllTextAsync(file, cancellationToken)) as JsonArray;
+                if (root is null)
+                {
+                    continue;
+                }
+
+                foreach (var node in root.OfType<JsonObject>())
+                {
+                    var ip = node["ip"]?.GetValue<string>();
+                    if (!string.Equals(ip, ipAddress, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    var field = node["field"]?.GetValue<string>();
+                    if (string.IsNullOrWhiteSpace(field))
+                    {
+                        continue;
+                    }
+
+                    var phase = node["phase"]?.GetValue<string>() ?? "read";
+                    var status = node["status"]?.GetValue<string>() ?? "Unknown";
+                    var readable = node["readable"]?.GetValue<bool>() == true;
+                    var endpoint = node["endpoint"]?.GetValue<string>();
+                    rows.Add(new LiveSemanticEvidenceRow(field, phase, readable, status, endpoint));
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to parse live semantic evidence file {EvidenceFile}", file);
+            }
+        }
+
+        return rows;
+    }
+
+    private static List<ImageControlInventoryItem> ApplyLiveEvidenceOverrides(List<ImageControlInventoryItem> inventory, IReadOnlyCollection<LiveSemanticEvidenceRow> evidenceRows)
+    {
+        if (inventory.Count == 0 || evidenceRows.Count == 0)
+        {
+            return inventory;
+        }
+
+        var output = new List<ImageControlInventoryItem>(inventory.Count);
+        foreach (var item in inventory)
+        {
+            var fieldEvidence = evidenceRows
+                .Where(row => row.Field.Equals(item.FieldKey, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (fieldEvidence.Count == 0)
+            {
+                output.Add(item);
+                continue;
+            }
+
+            var hasReadable = fieldEvidence.Any(static row => row.Phase.Equals("read", StringComparison.OrdinalIgnoreCase) && row.Readable);
+            var writeStatuses = fieldEvidence
+                .Where(static row => row.Phase.Equals("write", StringComparison.OrdinalIgnoreCase))
+                .Select(static row => row.Status)
+                .ToList();
+            var hasWritable = writeStatuses.Any(static status => status.Equals("Writable", StringComparison.OrdinalIgnoreCase));
+            var hasIgnored = writeStatuses.Any(static status => status.Equals("Ignored", StringComparison.OrdinalIgnoreCase));
+            var hasRejected = writeStatuses.Any(static status => status.Equals("Rejected", StringComparison.OrdinalIgnoreCase));
+            var hasPrivate = fieldEvidence.Any(static row => row.Status.Equals("PrivatePathCandidate", StringComparison.OrdinalIgnoreCase));
+
+            var updated = item;
+            if (hasWritable)
+            {
+                updated = updated with
+                {
+                    Readable = true,
+                    Writable = true,
+                    WriteVerified = true,
+                    SupportState = ContractSupportState.Supported,
+                    TruthState = ContractTruthState.Proven,
+                    Status = ImageInventoryStatus.Writable,
+                    CandidateClassification = HiddenCandidateClassification.Writable,
+                    PromotedToUi = true,
+                    ReasonCodes = ["live_semantic_write_readback"],
+                    Notes = "Live semantic write/readback verified."
+                };
+            }
+            else if (hasIgnored)
+            {
+                updated = updated with
+                {
+                    Readable = hasReadable || item.Readable,
+                    Writable = false,
+                    WriteVerified = false,
+                    SupportState = ContractSupportState.Uncertain,
+                    TruthState = ContractTruthState.Inferred,
+                    Status = ImageInventoryStatus.TransportSuccessNoSemanticChange,
+                    CandidateClassification = HiddenCandidateClassification.Ignored,
+                    PromotedToUi = false,
+                    ReasonCodes = ["transport_success_no_semantic_change"],
+                    Notes = "Write accepted but semantic readback unchanged in live probe."
+                };
+            }
+            else if (hasRejected)
+            {
+                updated = updated with
+                {
+                    Readable = hasReadable || item.Readable,
+                    Writable = false,
+                    WriteVerified = false,
+                    SupportState = ContractSupportState.Uncertain,
+                    TruthState = ContractTruthState.Inferred,
+                    Status = ImageInventoryStatus.Blocked,
+                    CandidateClassification = HiddenCandidateClassification.RejectedByFirmware,
+                    PromotedToUi = false,
+                    ReasonCodes = ["repeated_live_rejection"],
+                    Notes = "Live probe returned explicit write rejection."
+                };
+            }
+            else if (hasPrivate)
+            {
+                updated = updated with
+                {
+                    Readable = hasReadable || item.Readable,
+                    Writable = false,
+                    WriteVerified = false,
+                    SupportState = ContractSupportState.Uncertain,
+                    TruthState = ContractTruthState.Inferred,
+                    Status = ImageInventoryStatus.HiddenAdjacentCandidate,
+                    CandidateClassification = HiddenCandidateClassification.PrivatePathCandidate,
+                    PromotedToUi = false,
+                    ReasonCodes = ["private_path_candidate"],
+                    Notes = "Live probe observed private/OEM candidate path."
+                };
+            }
+            else if (hasReadable)
+            {
+                updated = updated with
+                {
+                    Readable = true,
+                    Writable = false,
+                    WriteVerified = false,
+                    SupportState = ContractSupportState.Uncertain,
+                    TruthState = ContractTruthState.Inferred,
+                    Status = ImageInventoryStatus.Readable,
+                    CandidateClassification = HiddenCandidateClassification.ReadableOnly,
+                    PromotedToUi = true,
+                    ReasonCodes = ["live_read_probe"],
+                    Notes = "Field observed in live readable payload."
+                };
+            }
+
+            output.Add(updated);
+        }
+
+        return output;
     }
 
     private static string NormalizeFixtureFieldKey(string raw)

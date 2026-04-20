@@ -210,23 +210,34 @@ public sealed class EndpointContractCatalogService(
                 Scope = scope,
                 DisruptionClass = DisruptionClass.Safe,
                 TruthState = ContractTruthState.Inferred,
-                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false, RequiredRootFields = ["codec", "resolution"] },
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false, RequiredRootFields = ["id", "enabled"] },
                 Fields =
                 [
-                    NumericField("bitrate", "Bitrate", "$.bitrate", 64, 16384),
-                    NumericField("frameRate", "Frame Rate", "$.frameRate", 1, 60),
-                    NumericField("keyframeInterval", "Keyframe Interval", "$.gop", 1, 240),
                     NumericField("brightness", "Brightness", "$.brightnessLevel", 0, 100),
                     NumericField("contrast", "Contrast", "$.contrastLevel", 0, 100),
                     NumericField("saturation", "Saturation", "$.saturationLevel", 0, 100),
                     NumericField("sharpness", "Sharpness", "$.sharpnessLevel", 0, 100),
                     NumericField("hue", "Hue", "$.hueLevel", 0, 100),
-                    NumericField("gamma", "Gamma", "$.gammaLevel", 0, 100),
-                    EnumField("mirror", "Mirror", "$.mirror", ["Off", "On"]),
-                    EnumField("flip", "Flip", "$.flip", ["Off", "On"]),
-                    EnumField("codec", "Codec", "$.codec", ["H264", "H265"], true),
-                    EnumField("profile", "Profile", "$.profile", ["Baseline", "Main", "High"]),
-                    StringField("resolution", "Resolution", "$.resolution", true)
+                    new ContractField
+                    {
+                        Key = "mirror",
+                        DisplayName = "Mirror",
+                        SourcePath = "$.mirrorEnabled",
+                        Kind = ContractFieldKind.Boolean,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.Safe,
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "live-observed" }
+                    },
+                    new ContractField
+                    {
+                        Key = "flip",
+                        DisplayName = "Flip",
+                        SourcePath = "$.flipEnabled",
+                        Kind = ContractFieldKind.Boolean,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.Safe,
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "live-observed" }
+                    }
                 ]
             },
             new EndpointContract
@@ -246,8 +257,8 @@ public sealed class EndpointContractCatalogService(
                     NumericField("bitrate", "Bitrate", "$.constantBitRate", 64, 16384),
                     NumericField("frameRate", "Frame Rate", "$.frameRate", 1, 60),
                     NumericField("keyframeInterval", "Keyframe Interval", "$.keyFrameInterval", 1, 240),
-                    EnumField("codec", "Codec", "$.codec", ["H264", "H265"]),
-                    EnumField("profile", "Profile", "$.profile", ["Baseline", "Main", "High"]),
+                    EnumField("codec", "Codec", "$.codecType", ["H.264", "H.265", "H.264+", "H.265+"]),
+                    EnumField("profile", "Profile", "$.h264Profile", ["baseline", "main", "high"]),
                     StringField("resolution", "Resolution", "$.resolution")
                 ]
             },
@@ -265,15 +276,119 @@ public sealed class EndpointContractCatalogService(
                 ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
                 Fields =
                 [
-                    NumericField("denoise", "Denoise", "$.denoise", 0, 100),
-                    EnumField("wdr", "WDR", "$.wdr", ["Off", "On", "Auto"]),
-                    EnumField("dayNight", "Day/Night", "$.dayNight", ["Auto", "Day", "Night"]),
-                    EnumField("irCut", "IR Cut", "$.irCut", ["Auto", "Day", "Night"]),
-                    EnumField("whiteLight", "White Light", "$.whiteLight", ["Off", "On", "Auto"], expertOnly: true),
-                    EnumField("infrared", "Infrared", "$.infrared", ["Off", "On", "Auto"], expertOnly: true),
-                    StringField("exposure", "Exposure", "$.exposure"),
-                    StringField("awb", "AWB", "$.awb"),
+                    NumericField("denoise", "Denoise", "$.denoise3d.denoise3dStrength", 0, 5),
+                    new ContractField
+                    {
+                        Key = "wdr",
+                        DisplayName = "WDR",
+                        SourcePath = "$.WDR.enabled",
+                        Kind = ContractFieldKind.Boolean,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.Safe,
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "live-observed" }
+                    },
+                    EnumField("dayNight", "Day/Night", "$.irCutFilter.irCutMode", ["auto", "light", "daylight", "night", "smart"]),
+                    EnumField("irCut", "IR Cut", "$.irCutFilter.irCutMode", ["auto", "light", "daylight", "night", "smart"]),
+                    StringField("exposure", "Exposure", "$.exposureMode"),
+                    StringField("awb", "AWB", "$.awbMode"),
                     StringField("osd", "OSD", "$.osd.title")
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "image.wdr",
+                Endpoint = "/NetSDK/Image/wdr",
+                Method = "PUT",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.VideoImage,
+                GroupName = "Video / Image",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.Safe,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
+                Fields =
+                [
+                    new ContractField
+                    {
+                        Key = "wdr",
+                        DisplayName = "WDR",
+                        SourcePath = "$.enabled",
+                        Kind = ContractFieldKind.Boolean,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.Safe,
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "live-observed" }
+                    }
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "image.denoise3d",
+                Endpoint = "/NetSDK/Image/denoise3d",
+                Method = "PUT",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.VideoImage,
+                GroupName = "Video / Image",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.Safe,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
+                Fields =
+                [
+                    NumericField("denoise", "Denoise", "$.denoise3dStrength", 0, 5)
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "image.ircut",
+                Endpoint = "/NetSDK/Image/irCutfilter",
+                Method = "PUT",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.VideoImage,
+                GroupName = "Video / Image",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.Safe,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
+                Fields =
+                [
+                    EnumField("irCut", "IR Cut", "$.irCutMode", ["auto", "light", "daylight", "night", "smart"]),
+                    EnumField("irMode", "IR Mode", "$.irCutMode", ["auto", "light", "daylight", "night", "smart"])
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "image.whiteLight.private",
+                Endpoint = "/NetSDK/Factory?cmd=WhiteLightCtrl",
+                Method = "PUT",
+                Surface = ContractSurface.PrivateCgiXml,
+                GroupKind = TypedSettingGroupKind.VideoImage,
+                GroupName = "Video / Image",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.Safe,
+                ExpertOnly = true,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = false, PartialWriteAllowed = true },
+                Fields =
+                [
+                    NumericField("whiteLight", "White Light", "$.whiteLightLevel", 0, 100) with { ExpertOnly = true }
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "image.infrared.private",
+                Endpoint = "/NetSDK/Factory?cmd=InfraRedCtrl",
+                Method = "PUT",
+                Surface = ContractSurface.PrivateCgiXml,
+                GroupKind = TypedSettingGroupKind.VideoImage,
+                GroupName = "Video / Image",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.Safe,
+                ExpertOnly = true,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = false, PartialWriteAllowed = true },
+                Fields =
+                [
+                    NumericField("infrared", "Infrared", "$.infraRedLevel", 0, 100) with { ExpertOnly = true }
                 ]
             },
             // Network / Wireless

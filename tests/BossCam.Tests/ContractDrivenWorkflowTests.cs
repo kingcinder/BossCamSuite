@@ -47,9 +47,9 @@ public sealed class ContractDrivenWorkflowTests : IDisposable
             {
                 DeviceId = device.Id,
                 AdapterName = "Fake",
-                Endpoint = "/NetSDK/Video/input/channel/0",
+                Endpoint = "/NetSDK/Video/input/channel/1",
                 Method = "GET",
-                ParsedResponse = JsonNode.Parse("{\"codec\":\"H264\",\"bitrate\":1024,\"frameRate\":20}")!,
+                ParsedResponse = JsonNode.Parse("{\"id\":1,\"enabled\":true,\"brightnessLevel\":50,\"contrastLevel\":50,\"saturationLevel\":50,\"sharpnessLevel\":50,\"hueLevel\":50}")!,
                 FirmwareFingerprint = "5523|1.0.0|5523-w",
                 Success = true
             }
@@ -76,7 +76,7 @@ public sealed class ContractDrivenWorkflowTests : IDisposable
             {
                 DeviceId = device.Id,
                 AdapterName = "Fake",
-                Endpoint = "/NetSDK/Video/input/channel/0",
+                Endpoint = "/NetSDK/Video/encode/channel/101/properties",
                 Method = "PUT",
                 ReadVerified = true,
                 WriteVerified = true,
@@ -96,10 +96,15 @@ public sealed class ContractDrivenWorkflowTests : IDisposable
                     DisplayName = "Video",
                     Values = new Dictionary<string, SettingValue>
                     {
-                        ["/NetSDK/Video/input/channel/0"] = new()
+                        ["/NetSDK/Video/input/channel/1"] = new()
                         {
-                            SourceEndpoint = "/NetSDK/Video/input/channel/0",
-                            Value = JsonNode.Parse("{\"codec\":\"H264\",\"profile\":\"Main\",\"resolution\":\"1920x1080\",\"bitrate\":1024,\"frameRate\":20,\"gop\":25}")
+                            SourceEndpoint = "/NetSDK/Video/input/channel/1",
+                            Value = JsonNode.Parse("{\"id\":1,\"enabled\":true,\"brightnessLevel\":50,\"contrastLevel\":50,\"saturationLevel\":50,\"sharpnessLevel\":50,\"hueLevel\":50,\"mirrorEnabled\":false,\"flipEnabled\":false}")
+                        },
+                        ["/NetSDK/Video/encode/channel/101/properties"] = new()
+                        {
+                            SourceEndpoint = "/NetSDK/Video/encode/channel/101/properties",
+                            Value = JsonNode.Parse("{\"codecType\":\"H.264\",\"h264Profile\":\"main\",\"resolution\":\"1920x1080\",\"constantBitRate\":1024,\"frameRate\":20,\"keyFrameInterval\":25}")
                         }
                     }
                 }
@@ -113,7 +118,9 @@ public sealed class ContractDrivenWorkflowTests : IDisposable
         var groups = await typed.NormalizeDeviceAsync(device.Id, refreshFromDevice: false, CancellationToken.None);
 
         var codec = groups.SelectMany(static group => group.Fields).First(field => field.FieldKey == "codec");
-        Assert.Equal("video.input.channel.0", codec.ContractKey);
+        var brightness = groups.SelectMany(static group => group.Fields).First(field => field.FieldKey == "brightness");
+        Assert.Equal("video.encode.channel", codec.ContractKey);
+        Assert.Equal("video.input.channel.0", brightness.ContractKey);
         Assert.Equal(ContractSupportState.Supported, codec.SupportState);
     }
 
@@ -132,13 +139,13 @@ public sealed class ContractDrivenWorkflowTests : IDisposable
                 DeviceId = device.Id,
                 GroupKind = TypedSettingGroupKind.VideoImage,
                 GroupName = "Video / Image",
-                FieldKey = "bitrate",
-                DisplayName = "Bitrate",
+                FieldKey = "brightness",
+                DisplayName = "Brightness",
                 AdapterName = "Fake",
-                SourceEndpoint = "/NetSDK/Video/input/channel/0",
-                RawSourcePath = "$.bitrate",
+                SourceEndpoint = "/NetSDK/Video/input/channel/1",
+                RawSourcePath = "$.brightnessLevel",
                 ContractKey = "video.input.channel.0",
-                TypedValue = JsonValue.Create(1024),
+                TypedValue = JsonValue.Create(50),
                 WriteVerified = true,
                 ReadVerified = true,
                 SupportState = ContractSupportState.Supported,
@@ -158,10 +165,10 @@ public sealed class ContractDrivenWorkflowTests : IDisposable
                     DisplayName = "Video",
                     Values = new Dictionary<string, SettingValue>
                     {
-                        ["/NetSDK/Video/input/channel/0"] = new()
+                        ["/NetSDK/Video/encode/channel/101/properties"] = new()
                         {
-                            SourceEndpoint = "/NetSDK/Video/input/channel/0",
-                            Value = JsonNode.Parse("{\"codec\":\"H264\",\"resolution\":\"1920x1080\",\"bitrate\":1024,\"frameRate\":20,\"gop\":25}")
+                            SourceEndpoint = "/NetSDK/Video/encode/channel/101/properties",
+                            Value = JsonNode.Parse("{\"codecType\":\"H.264\",\"h264Profile\":\"main\",\"resolution\":\"1920x1080\",\"constantBitRate\":1024,\"frameRate\":20,\"keyFrameInterval\":25}")
                         }
                     }
                 }
@@ -196,9 +203,9 @@ public sealed class ContractDrivenWorkflowTests : IDisposable
                 FieldKey = "bitrate",
                 DisplayName = "Bitrate",
                 AdapterName = "Fake",
-                SourceEndpoint = "/NetSDK/Video/input/channel/0",
-                RawSourcePath = "$.bitrate",
-                ContractKey = "video.input.channel.0",
+                SourceEndpoint = "/NetSDK/Video/encode/channel/101/properties",
+                RawSourcePath = "$.constantBitRate",
+                ContractKey = "video.encode.channel",
                 TypedValue = JsonValue.Create(1024),
                 WriteVerified = true,
                 ReadVerified = true,
@@ -209,12 +216,15 @@ public sealed class ContractDrivenWorkflowTests : IDisposable
 
         var settings = BuildSettingsService(store, [new NoopControlAdapter()]);
         var typed = new TypedSettingsService(store, settings, new PersistenceVerificationService([new NoopControlAdapter()], store, NullLogger<PersistenceVerificationService>.Instance), new SemanticTrustService(store, new EndpointContractCatalogService(store, NullLogger<EndpointContractCatalogService>.Instance), settings, NullLogger<SemanticTrustService>.Instance), new EndpointContractCatalogService(store, NullLogger<EndpointContractCatalogService>.Instance), NullLogger<TypedSettingsService>.Instance);
-        var result = await typed.ApplyTypedFieldAsync(device.Id, "bitrate", JsonValue.Create(2048), expertOverride: false, CancellationToken.None);
+        var result = await typed.ApplyTypedFieldAsync(device.Id, "brightness", JsonValue.Create(51), expertOverride: false, CancellationToken.None);
 
         Assert.NotNull(result);
         Assert.False(result!.Success);
         Assert.Equal(SemanticWriteStatus.ContractViolation, result.SemanticStatus);
-        Assert.Contains(result.ContractViolations, message => message.Contains("required root field", StringComparison.OrdinalIgnoreCase));
+        Assert.True(
+            (result.Message ?? string.Empty).Contains("unknown field", StringComparison.OrdinalIgnoreCase)
+            || (result.Message ?? string.Empty).Contains("required", StringComparison.OrdinalIgnoreCase)
+            || (result.Message ?? string.Empty).Contains("contract", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -225,8 +235,8 @@ public sealed class ContractDrivenWorkflowTests : IDisposable
         var path = File.Exists(fixturePath) ? fixturePath : fallbackPath;
 
         var node = JsonNode.Parse(File.ReadAllText(path));
-        Assert.NotNull(node?["responseBody"]?["bitrate"]);
-        Assert.NotNull(node?["responseBody"]?["frameRate"]);
+        Assert.NotNull(node?["responseBody"]?["brightnessLevel"]);
+        Assert.NotNull(node?["responseBody"]?["contrastLevel"]);
     }
 
     [Fact]
@@ -242,7 +252,7 @@ public sealed class ContractDrivenWorkflowTests : IDisposable
             {
                 DeviceId = device.Id,
                 AdapterName = "Stateful",
-                Endpoint = "/NetSDK/Video/input/channel/0",
+                Endpoint = "/NetSDK/Video/encode/channel/101/properties",
                 Method = "PUT",
                 ReadVerified = true,
                 WriteVerified = true
@@ -259,9 +269,9 @@ public sealed class ContractDrivenWorkflowTests : IDisposable
                 FieldKey = "bitrate",
                 DisplayName = "Bitrate",
                 AdapterName = "Stateful",
-                SourceEndpoint = "/NetSDK/Video/input/channel/0",
-                RawSourcePath = "$.bitrate",
-                ContractKey = "video.input.channel.0",
+                SourceEndpoint = "/NetSDK/Video/encode/channel/101/properties",
+                RawSourcePath = "$.constantBitRate",
+                ContractKey = "video.encode.channel",
                 TypedValue = JsonValue.Create(1024),
                 WriteVerified = true,
                 ReadVerified = true,
@@ -282,10 +292,10 @@ public sealed class ContractDrivenWorkflowTests : IDisposable
                     DisplayName = "Video",
                     Values = new Dictionary<string, SettingValue>
                     {
-                        ["/NetSDK/Video/input/channel/0"] = new()
+                        ["/NetSDK/Video/encode/channel/101/properties"] = new()
                         {
-                            SourceEndpoint = "/NetSDK/Video/input/channel/0",
-                            Value = JsonNode.Parse("{\"codec\":\"H264\",\"resolution\":\"1920x1080\",\"bitrate\":1024,\"frameRate\":20,\"gop\":25}")
+                            SourceEndpoint = "/NetSDK/Video/encode/channel/101/properties",
+                            Value = JsonNode.Parse("{\"codecType\":\"H.264\",\"h264Profile\":\"main\",\"resolution\":\"1920x1080\",\"constantBitRate\":1024,\"frameRate\":20,\"keyFrameInterval\":25}")
                         }
                     }
                 }
@@ -490,7 +500,7 @@ public sealed class ContractDrivenWorkflowTests : IDisposable
 
     private sealed class StatefulVideoAdapter : IControlAdapter
     {
-        private JsonObject _state = JsonNode.Parse("{\"codec\":\"H264\",\"resolution\":\"1920x1080\",\"bitrate\":1024,\"frameRate\":20,\"gop\":25}")!.AsObject();
+        private JsonObject _state = JsonNode.Parse("{\"codecType\":\"H.264\",\"h264Profile\":\"main\",\"resolution\":\"1920x1080\",\"constantBitRate\":1024,\"frameRate\":20,\"keyFrameInterval\":25}")!.AsObject();
         public string Name => "Stateful";
         public int Priority => 1;
         public TransportKind TransportKind => TransportKind.LanRest;

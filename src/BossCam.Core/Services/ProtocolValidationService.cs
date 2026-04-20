@@ -21,20 +21,36 @@ public sealed class ProtocolValidationService(
         "contrast",
         "saturation",
         "sharpness",
+        "hue",
         "bitrate",
         "frameRate",
         "brightnessLevel",
         "contrastLevel",
         "saturationLevel",
         "sharpnessLevel",
+        "hueLevel",
         "constantBitRate",
-        "enabled"
+        "enabled",
+        "flipEnabled",
+        "mirrorEnabled",
+        "codecType",
+        "h264Profile",
+        "resolution",
+        "irCutMode",
+        "awbMode",
+        "exposureMode",
+        "denoise3dStrength",
+        "WDRStrength"
     ];
     private static readonly string[] KnownLanReadFallbacks =
     [
         "/netsdk/system/deviceInfo",
         "/netsdk/image",
         "/netsdk/image/properties",
+        "/netsdk/image/wdr",
+        "/netsdk/image/denoise3d",
+        "/netsdk/image/manualSharpness",
+        "/netsdk/image/irCutfilter",
         "/netsdk/video/input/channel/1",
         "/netsdk/video/encode/channel/101/properties",
         "/netsdk/video/encode/channel/102/properties",
@@ -150,12 +166,18 @@ public sealed class ProtocolValidationService(
                 TransportKind.LanPrivateHttp => contract.Surface == ContractSurface.PrivateCgiXml,
                 _ => false
             })
-            .Select(contract => new ProtocolEndpoint
+            .Select(contract =>
             {
-                Path = contract.Endpoint,
-                Tag = contract.GroupName,
-                Methods = [contract.Method],
-                Safety = contract.DisruptionClass.ToString()
+                var methods = contract.Method.Equals("GET", StringComparison.OrdinalIgnoreCase)
+                    ? new List<string> { "GET" }
+                    : new List<string> { "GET", contract.Method };
+                return new ProtocolEndpoint
+                {
+                    Path = contract.Endpoint,
+                    Tag = contract.GroupName,
+                    Methods = methods,
+                    Safety = contract.DisruptionClass.ToString()
+                };
             })
             .ToList();
         var synthetic = BuildSyntheticTopGroupEndpoints(adapter.TransportKind);
@@ -164,7 +186,7 @@ public sealed class ProtocolValidationService(
             .GroupBy(static endpoint => $"{endpoint.Path}|{string.Join(',', endpoint.Methods)}", StringComparer.OrdinalIgnoreCase)
             .Select(static group => group.First())
             .ToList();
-        if (merged.Count > 0)
+        if (merged.Any())
         {
             return merged;
         }
@@ -584,14 +606,13 @@ public sealed class ProtocolValidationService(
     private async Task<IReadOnlyCollection<DeepAuthContext>> BuildDeepAuthContextsAsync(DeviceIdentity device, CancellationToken cancellationToken)
     {
         var contexts = new List<DeepAuthContext>();
+        var ports = BuildPortCandidates(device.Port);
         foreach (var credential in BuildCredentialCandidates(device))
         {
-            contexts.Add(new DeepAuthContext($"basic:{credential.UserName}:p{device.Port}", credential, null, null, device.Port));
-            contexts.Add(new DeepAuthContext($"digest:{credential.UserName}:p{device.Port}", credential, null, null, device.Port));
-            if (device.Port != 8080)
+            foreach (var port in ports)
             {
-                contexts.Add(new DeepAuthContext($"basic:{credential.UserName}:p8080", credential, null, null, 8080));
-                contexts.Add(new DeepAuthContext($"digest:{credential.UserName}:p8080", credential, null, null, 8080));
+                contexts.Add(new DeepAuthContext($"basic:{credential.UserName}:p{port}", credential, null, null, port));
+                contexts.Add(new DeepAuthContext($"digest:{credential.UserName}:p{port}", credential, null, null, port));
             }
         }
 
@@ -796,12 +817,16 @@ public sealed class ProtocolValidationService(
 
     private static IReadOnlyCollection<int> BuildPortCandidates(int basePort)
     {
-        var ports = new List<int> { basePort };
-        if (basePort != 80)
+        var ports = new List<int>();
+        if (basePort is > 0 and <= 65535)
+        {
+            ports.Add(basePort);
+        }
+        if (!ports.Contains(80))
         {
             ports.Add(80);
         }
-        if (basePort != 8080)
+        if (!ports.Contains(8080))
         {
             ports.Add(8080);
         }
@@ -1147,6 +1172,33 @@ public sealed class ProtocolValidationService(
         }
 
         var raw = current?.ToJsonString().Trim('"');
+        if (!string.IsNullOrWhiteSpace(raw))
+        {
+            var mapped = raw.ToLowerInvariant() switch
+            {
+                "auto" => "manual",
+                "manual" => "auto",
+                "off" => "on",
+                "on" => "off",
+                "day" => "night",
+                "night" => "day",
+                "light" => "auto",
+                "indoor" => "outdoor",
+                "outdoor" => "indoor",
+                "h.264" => "H.265",
+                "h.265" => "H.264",
+                "h.264+" => "H.265+",
+                "h.265+" => "H.264+",
+                "main" => "high",
+                "high" => "main",
+                "baseline" => "main",
+                _ => null
+            };
+            if (!string.IsNullOrWhiteSpace(mapped))
+            {
+                return JsonValue.Create(mapped);
+            }
+        }
         if (int.TryParse(raw, out var parsed))
         {
             return JsonValue.Create(parsed + (parsed >= 100 ? -1 : 1));
