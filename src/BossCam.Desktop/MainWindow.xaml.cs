@@ -9,7 +9,9 @@ using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 using BossCam.Contracts;
+using Microsoft.Win32;
 
 namespace BossCam.Desktop;
 
@@ -39,6 +41,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private string _wirelessApPsk = string.Empty;
     private string? _selectedPersistenceField;
     private string _lastReachableUrl = string.Empty;
+    private string _lastSyncText = "Last sync: never";
+    private string _toastMessage = string.Empty;
+    private string _toastBackground = "#2B3C4B";
+    private Visibility _toastVisibility = Visibility.Collapsed;
+    private string _firmwareUploadPath = string.Empty;
+    private readonly DispatcherTimer _toastTimer = new() { Interval = TimeSpan.FromSeconds(3.5) };
     private readonly List<FieldDependencyRule> _dependencyRules = [];
     private readonly Dictionary<string, ImageFieldBehaviorMap> _imageBehaviorByField = new(StringComparer.OrdinalIgnoreCase);
 
@@ -57,6 +65,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public ObservableCollection<string> VideoCodecOptions { get; } = [];
     public ObservableCollection<string> VideoProfileOptions { get; } = [];
     public ObservableCollection<string> VideoDayNightOptions { get; } = [];
+    public ObservableCollection<string> VideoIrModeOptions { get; } = [];
     public ObservableCollection<string> VideoWdrOptions { get; } = [];
     public ObservableCollection<string> VideoIrCutOptions { get; } = [];
     public ObservableCollection<string> VideoResolutionOptions { get; } = [];
@@ -256,6 +265,74 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
     }
 
+    public string LastSyncText
+    {
+        get => _lastSyncText;
+        set
+        {
+            if (_lastSyncText != value)
+            {
+                _lastSyncText = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public string ToastMessage
+    {
+        get => _toastMessage;
+        set
+        {
+            if (_toastMessage != value)
+            {
+                _toastMessage = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public string ToastBackground
+    {
+        get => _toastBackground;
+        set
+        {
+            if (_toastBackground != value)
+            {
+                _toastBackground = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public Visibility ToastVisibility
+    {
+        get => _toastVisibility;
+        set
+        {
+            if (_toastVisibility != value)
+            {
+                _toastVisibility = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public string FirmwareUploadPath
+    {
+        get => _firmwareUploadPath;
+        set
+        {
+            if (_firmwareUploadPath != value)
+            {
+                _firmwareUploadPath = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public bool HasPendingChanges => _fieldByKey.Values.Any(field => !string.Equals(field.EditableValue, field.OriginalValue, StringComparison.Ordinal));
+    public string DirtyStateText => HasPendingChanges ? "Unsaved changes" : "All changes saved";
+
     public string CurrentControlUrl => string.IsNullOrWhiteSpace(SelectedDevice?.IpAddress) ? string.Empty : BuildUrlFromIpPort(SelectedDevice.IpAddress, NetworkPort);
     public string PredictedControlUrl => BuildUrlFromIpPort(NetworkIp, NetworkPort);
 
@@ -276,6 +353,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public string VideoCodec { get => GetValue("codec"); set => SetValue("codec", value); }
     public string VideoProfile { get => GetValue("profile"); set => SetValue("profile", value); }
     public string VideoDayNight { get => GetValue("dayNight"); set => SetValue("dayNight", value); }
+    public string VideoIrMode { get => GetValue("irMode"); set => SetValue("irMode", value); }
     public string VideoWdr { get => GetValue("wdr"); set => SetValue("wdr", value); }
     public string VideoIrCut { get => GetValue("irCut"); set => SetValue("irCut", value); }
     public string VideoResolution { get => GetValue("resolution"); set => SetValue("resolution", value); }
@@ -290,6 +368,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
     }
     public string VideoFrameRate { get => GetValue("frameRate"); set => SetValue("frameRate", value); }
+    public string VideoKeyframeInterval { get => GetValue("keyframeInterval"); set => SetValue("keyframeInterval", value); }
     public string ImageBrightness { get => GetValue("brightness"); set => SetValue("brightness", value); }
     public double ImageBrightnessSlider
     {
@@ -301,9 +380,55 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
     }
     public string ImageContrast { get => GetValue("contrast"); set => SetValue("contrast", value); }
+    public double ImageContrastSlider
+    {
+        get => ParseDouble(ImageContrast, 50);
+        set
+        {
+            ImageContrast = ((int)value).ToString();
+            OnPropertyChanged();
+        }
+    }
     public string ImageSaturation { get => GetValue("saturation"); set => SetValue("saturation", value); }
+    public double ImageSaturationSlider
+    {
+        get => ParseDouble(ImageSaturation, 50);
+        set
+        {
+            ImageSaturation = ((int)value).ToString();
+            OnPropertyChanged();
+        }
+    }
     public string ImageHue { get => GetValue("hue"); set => SetValue("hue", value); }
+    public double ImageHueSlider
+    {
+        get => ParseDouble(ImageHue, 50);
+        set
+        {
+            ImageHue = ((int)value).ToString();
+            OnPropertyChanged();
+        }
+    }
     public string ImageSharpness { get => GetValue("sharpness"); set => SetValue("sharpness", value); }
+    public double ImageSharpnessSlider
+    {
+        get => ParseDouble(ImageSharpness, 50);
+        set
+        {
+            ImageSharpness = ((int)value).ToString();
+            OnPropertyChanged();
+        }
+    }
+    public bool ImageMirror
+    {
+        get => ParseBool(GetValue("mirror"));
+        set => SetValue("mirror", value ? "true" : "false");
+    }
+    public bool ImageFlip
+    {
+        get => ParseBool(GetValue("flip"));
+        set => SetValue("flip", value ? "true" : "false");
+    }
 
     // Network/wireless typed bindings
     public string NetworkIp { get => GetValue("ip"); set => SetValue("ip", value); }
@@ -345,8 +470,22 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public bool CanEditVideoProfile => CanEdit("profile");
     public bool CanEditVideoResolution => CanEdit("resolution");
     public bool CanEditVideoDayNight => CanEdit("dayNight");
+    public bool CanEditVideoIrMode => CanEdit("irMode");
     public bool CanEditVideoWdr => CanEdit("wdr");
     public bool CanEditVideoIrCut => CanEdit("irCut");
+    public bool CanEditImageBrightness => CanEdit("brightness");
+    public bool CanEditImageContrast => CanEdit("contrast");
+    public bool CanEditImageSaturation => CanEdit("saturation");
+    public bool CanEditImageSharpness => CanEdit("sharpness");
+    public bool CanEditImageHue => CanEdit("hue");
+    public bool CanEditImageMirror => CanEdit("mirror");
+    public bool CanEditImageFlip => CanEdit("flip");
+    public bool CanEditImageDayNight => CanEdit("dayNight");
+    public bool CanEditImageIrMode => CanEdit("irMode");
+    public bool CanEditImageIrCut => CanEdit("irCut");
+    public bool CanEditStreamBitrate => CanEdit("bitrate");
+    public bool CanEditStreamFrameRate => CanEdit("frameRate");
+    public bool CanEditStreamKeyframe => CanEdit("keyframeInterval");
     public bool CanEditNetworkIp => CanEdit("ip");
     public bool CanEditNetworkNetmask => CanEdit("netmask");
     public bool CanEditNetworkGateway => CanEdit("gateway");
@@ -362,11 +501,22 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public Visibility VideoBitrateVisibility => FieldVisibility("bitrate");
     public Visibility VideoFrameRateVisibility => FieldVisibility("frameRate");
     public Visibility VideoResolutionVisibility => FieldVisibility("resolution");
-    public Visibility ImageBrightnessVisibility => FieldVisibility("brightness");
-    public Visibility ImageContrastVisibility => FieldVisibility("contrast");
-    public Visibility ImageSaturationVisibility => FieldVisibility("saturation");
-    public Visibility ImageHueVisibility => FieldVisibility("hue");
-    public Visibility ImageSharpnessVisibility => FieldVisibility("sharpness");
+    public Visibility StreamResolutionVisibility => FieldVisibility("resolution");
+    public Visibility StreamCodecVisibility => FieldVisibility("codec");
+    public Visibility StreamProfileVisibility => FieldVisibility("profile");
+    public Visibility StreamBitrateVisibility => FieldVisibility("bitrate");
+    public Visibility StreamFpsVisibility => FieldVisibility("frameRate");
+    public Visibility StreamKeyframeVisibility => FieldVisibility("keyframeInterval");
+    public Visibility ImageBrightnessVisibility => OperatorFieldVisibility("brightness");
+    public Visibility ImageContrastVisibility => OperatorFieldVisibility("contrast");
+    public Visibility ImageSaturationVisibility => OperatorFieldVisibility("saturation");
+    public Visibility ImageHueVisibility => OperatorFieldVisibility("hue");
+    public Visibility ImageSharpnessVisibility => OperatorFieldVisibility("sharpness");
+    public Visibility ImageMirrorVisibility => OperatorFieldVisibility("mirror");
+    public Visibility ImageFlipVisibility => OperatorFieldVisibility("flip");
+    public Visibility ImageDayNightVisibility => OperatorFieldVisibility("dayNight");
+    public Visibility ImageIrModeVisibility => OperatorFieldVisibility("irMode");
+    public Visibility ImageIrCutVisibility => OperatorFieldVisibility("irCut");
     public Visibility NetworkIpVisibility => FieldVisibility("ip");
     public Visibility NetworkNetmaskVisibility => FieldVisibility("netmask");
     public Visibility NetworkGatewayVisibility => FieldVisibility("gateway", requireStaticNetwork: true);
@@ -375,11 +525,26 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public Visibility WirelessApSsidVisibility => FieldVisibility("apSsid");
     public Visibility WirelessApPskVisibility => FieldVisibility("apPsk");
     public Visibility WirelessApChannelVisibility => FieldVisibility("apChannel");
+    public string ImageBrightnessReadOnlyTooltip => ReadOnlyTooltip("brightness");
+    public string ImageContrastReadOnlyTooltip => ReadOnlyTooltip("contrast");
+    public string ImageSaturationReadOnlyTooltip => ReadOnlyTooltip("saturation");
+    public string ImageSharpnessReadOnlyTooltip => ReadOnlyTooltip("sharpness");
+    public string ImageHueReadOnlyTooltip => ReadOnlyTooltip("hue");
+    public string ImageMirrorReadOnlyTooltip => ReadOnlyTooltip("mirror");
+    public string ImageFlipReadOnlyTooltip => ReadOnlyTooltip("flip");
+    public string ImageDayNightReadOnlyTooltip => ReadOnlyTooltip("dayNight");
+    public string ImageIrModeReadOnlyTooltip => ReadOnlyTooltip("irMode");
+    public string ImageIrCutReadOnlyTooltip => ReadOnlyTooltip("irCut");
 
     public MainWindow()
     {
         InitializeComponent();
         DataContext = this;
+        _toastTimer.Tick += (_, _) =>
+        {
+            _toastTimer.Stop();
+            ToastVisibility = Visibility.Collapsed;
+        };
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -406,6 +571,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private async void RefreshRecordingIndex_Click(object sender, RoutedEventArgs e) => await RunAsync(RefreshRecordingIndexAsync);
     private async void ExportRecentClip_Click(object sender, RoutedEventArgs e) => await RunAsync(ExportRecentClipAsync);
     private async void RunNetworkRecovery_Click(object sender, RoutedEventArgs e) => await RunAsync(RunNetworkRecoveryAsync);
+    private async void RefreshSelected_Click(object sender, RoutedEventArgs e) => await RunAsync(RefreshSelectedAsync);
+    private void BrowseFirmware_Click(object sender, RoutedEventArgs e) => SelectFirmwareFile();
+    private async void UploadFirmware_Click(object sender, RoutedEventArgs e) => await RunAsync(UploadFirmwareAsync);
 
     private async Task RunAsync(Func<Task> action)
     {
@@ -416,7 +584,57 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         catch (Exception ex)
         {
             DiagnosticsText = ex.ToString();
+            ShowToast("Action failed. Check Advanced > Raw JSON.", success: false);
         }
+    }
+
+    private async Task RefreshSelectedAsync()
+    {
+        if (SelectedDevice is null)
+        {
+            await LoadDevicesAsync();
+            return;
+        }
+
+        await LoadTypedAsync();
+        await LoadValidationAsync();
+        await LoadTranscriptsAsync();
+        ShowToast("Camera refreshed.", success: true);
+    }
+
+    private void SelectFirmwareFile()
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "Select Firmware File",
+            Filter = "Firmware files (*.bin;*.img;*.zip)|*.bin;*.img;*.zip|All files (*.*)|*.*"
+        };
+        if (dialog.ShowDialog(this) == true)
+        {
+            FirmwareUploadPath = dialog.FileName;
+        }
+    }
+
+    private async Task UploadFirmwareAsync()
+    {
+        if (SelectedDevice is null)
+        {
+            MaintenanceState = "Select a device first.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(FirmwareUploadPath) || !File.Exists(FirmwareUploadPath))
+        {
+            MaintenanceState = "Select a valid firmware file first.";
+            ShowToast("Firmware file is missing.", success: false);
+            return;
+        }
+
+        var payload = new JsonObject
+        {
+            ["filePath"] = FirmwareUploadPath
+        };
+        await ExecuteMaintenanceAsync("FirmwareUpload", payload);
     }
 
     private async Task LoadDevicesAsync()
@@ -424,6 +642,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         var devices = await GetAsync<List<DeviceIdentity>>("/api/devices") ?? [];
         ReplaceCollection(Devices, devices);
         DiagnosticsText = JsonSerializer.Serialize(devices, SerializerOptions);
+        ShowToast($"Loaded {devices.Count} camera(s).", success: true);
     }
 
     private async Task DiscoverAsync()
@@ -431,6 +650,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         var devices = await PostAsync<List<DeviceIdentity>>("/api/devices/discover", null) ?? [];
         ReplaceCollection(Devices, devices);
         DiagnosticsText = JsonSerializer.Serialize(devices, SerializerOptions);
+        ShowToast($"Discovery found {devices.Count} camera(s).", success: true);
     }
 
     private async Task RefreshTypedAsync()
@@ -582,6 +802,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         await LoadSemanticTrustAsync();
         await LoadImageTruthAsync();
         await LoadTruthBadgeAsync();
+        LastSyncText = $"Last sync: {DateTime.Now:yyyy-MM-dd HH:mm:ss}";
         NotifyAllEditorProperties();
     }
 
@@ -633,6 +854,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         SetEnumOptions(VideoProfileOptions, "profile", new[] { "Baseline", "Main", "High" });
         SetEnumOptions(VideoResolutionOptions, "resolution", new[] { "1920x1080", "1280x720", "640x360" });
         SetEnumOptions(VideoDayNightOptions, "dayNight", new[] { "Auto", "Day", "Night" });
+        SetEnumOptions(VideoIrModeOptions, "irMode", new[] { "auto", "daylight", "night", "smart" });
         SetEnumOptions(VideoWdrOptions, "wdr", new[] { "Off", "On", "Auto" });
         SetEnumOptions(VideoIrCutOptions, "irCut", new[] { "Auto", "Day", "Night" });
         ApplyDependencyFilters();
@@ -839,6 +1061,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         if (changes.Count == 0)
         {
             DiagnosticsText = "No contract-supported field changes to apply.";
+            ShowToast("No changes to save.", success: false);
             return;
         }
 
@@ -865,6 +1088,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             result.ContractKey,
             result.ContractViolations
         }), SerializerOptions);
+        ShowToast(applied.All(result => result.Success) ? "Changes saved." : "Some changes failed to apply.", success: applied.All(result => result.Success));
         await LoadTypedAsync();
         await LoadValidationAsync();
         await LoadSemanticTrustAsync();
@@ -930,7 +1154,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         await LoadSemanticTrustAsync();
     }
 
-    private async Task ExecuteMaintenanceAsync(string operation)
+    private async Task ExecuteMaintenanceAsync(string operation, JsonObject? payload = null)
     {
         if (SelectedDevice is null)
         {
@@ -939,15 +1163,18 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         var prompt = operation.Equals("FactoryReset", StringComparison.OrdinalIgnoreCase)
             ? "Factory default is destructive. Continue?"
-            : "Reboot camera now?";
+            : operation.Equals("FirmwareUpload", StringComparison.OrdinalIgnoreCase)
+                ? "Upload firmware to this camera now?"
+                : "Reboot camera now?";
         if (MessageBox.Show(prompt, "Confirm Maintenance", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
         {
             return;
         }
 
-        var result = await PostAsync<MaintenanceResult>($"/api/devices/{SelectedDevice.Id}/maintenance/{operation}", new JsonObject());
+        var result = await PostAsync<MaintenanceResult>($"/api/devices/{SelectedDevice.Id}/maintenance/{operation}", payload ?? new JsonObject());
         MaintenanceState = result is null ? $"Failed {operation}" : $"{operation}: {(result.Success ? "ok" : "failed")}";
         DiagnosticsText = JsonSerializer.Serialize(result, SerializerOptions);
+        ShowToast(result?.Success == true ? $"{operation} completed." : $"{operation} failed.", success: result?.Success == true);
     }
 
     private async Task RunNetworkRecoveryAsync()
@@ -1135,6 +1362,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 OnPropertyChanged(nameof(CurrentControlUrl));
                 OnPropertyChanged(nameof(PredictedControlUrl));
             }
+
+            OnPropertyChanged(nameof(HasPendingChanges));
+            OnPropertyChanged(nameof(DirtyStateText));
         }
     }
 
@@ -1171,6 +1401,39 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
 
         return Visibility.Visible;
+    }
+
+    private Visibility OperatorFieldVisibility(string key)
+    {
+        if (!_fieldByKey.TryGetValue(key, out var field))
+        {
+            return Visibility.Collapsed;
+        }
+
+        if (field.SupportState.Equals(nameof(ContractSupportState.Unsupported), StringComparison.OrdinalIgnoreCase)
+            || field.SupportState.Equals(nameof(ContractSupportState.Uncertain), StringComparison.OrdinalIgnoreCase))
+        {
+            return Visibility.Collapsed;
+        }
+
+        if (field.WriteVerified || field.ReadVerified)
+        {
+            return Visibility.Visible;
+        }
+
+        return Visibility.Collapsed;
+    }
+
+    private string ReadOnlyTooltip(string key)
+    {
+        if (!_fieldByKey.TryGetValue(key, out var field))
+        {
+            return string.Empty;
+        }
+
+        return !CanEdit(key) && field.ReadVerified
+            ? "Read-only: this control is proven readable but not writable on this camera."
+            : string.Empty;
     }
 
     private string FieldState(string key)
@@ -1366,6 +1629,18 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private static double ParseDouble(string raw, double fallback)
         => double.TryParse(raw, out var parsed) ? parsed : fallback;
 
+    private static bool ParseBool(string raw)
+        => bool.TryParse(raw, out var parsed) && parsed;
+
+    private void ShowToast(string message, bool success)
+    {
+        ToastMessage = message;
+        ToastBackground = success ? "#245F3A" : "#7E3030";
+        ToastVisibility = Visibility.Visible;
+        _toastTimer.Stop();
+        _toastTimer.Start();
+    }
+
     private static string BuildUrlFromIpPort(string? ip, string? portRaw)
     {
         if (string.IsNullOrWhiteSpace(ip))
@@ -1385,25 +1660,32 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         foreach (var name in new[]
         {
-            nameof(VideoCodec), nameof(VideoProfile), nameof(VideoDayNight), nameof(VideoWdr), nameof(VideoIrCut),
+            nameof(VideoCodec), nameof(VideoProfile), nameof(VideoDayNight), nameof(VideoIrMode), nameof(VideoWdr), nameof(VideoIrCut),
             nameof(VideoResolution), nameof(VideoResolutionOptions),
             nameof(VideoBitrate), nameof(VideoBitrateSlider), nameof(VideoBitrateMin), nameof(VideoBitrateMax),
             nameof(VideoFpsHint),
-            nameof(VideoFrameRate), nameof(ImageBrightness), nameof(ImageBrightnessSlider), nameof(ImageBrightnessMin), nameof(ImageBrightnessMax),
-            nameof(ImageContrast), nameof(ImageSaturation), nameof(ImageHue), nameof(ImageSharpness),
+            nameof(VideoFrameRate), nameof(VideoKeyframeInterval), nameof(ImageBrightness), nameof(ImageBrightnessSlider), nameof(ImageBrightnessMin), nameof(ImageBrightnessMax),
+            nameof(ImageContrast), nameof(ImageContrastSlider), nameof(ImageSaturation), nameof(ImageSaturationSlider), nameof(ImageHue), nameof(ImageHueSlider), nameof(ImageSharpness), nameof(ImageSharpnessSlider),
+            nameof(ImageMirror), nameof(ImageFlip),
             nameof(ImageBrightnessBehaviorBadge), nameof(ImageContrastBehaviorBadge), nameof(ImageSaturationBehaviorBadge), nameof(ImageTruthSummary),
             nameof(NetworkIp), nameof(NetworkNetmask), nameof(NetworkGateway), nameof(NetworkDns), nameof(NetworkPort),
             nameof(CurrentControlUrl), nameof(PredictedControlUrl),
             nameof(WirelessApSsid), nameof(WirelessApChannel),
             nameof(VideoCodecState), nameof(VideoProfileState), nameof(NetworkIpState), nameof(WirelessApPskState),
-            nameof(CanEditVideoCodec), nameof(CanEditVideoProfile), nameof(CanEditVideoResolution), nameof(CanEditVideoDayNight), nameof(CanEditVideoWdr), nameof(CanEditVideoIrCut),
+            nameof(CanEditVideoCodec), nameof(CanEditVideoProfile), nameof(CanEditVideoResolution), nameof(CanEditVideoDayNight), nameof(CanEditVideoIrMode), nameof(CanEditVideoWdr), nameof(CanEditVideoIrCut),
+            nameof(CanEditImageBrightness), nameof(CanEditImageContrast), nameof(CanEditImageSaturation), nameof(CanEditImageSharpness), nameof(CanEditImageHue), nameof(CanEditImageMirror), nameof(CanEditImageFlip),
+            nameof(CanEditImageDayNight), nameof(CanEditImageIrMode), nameof(CanEditImageIrCut),
+            nameof(CanEditStreamBitrate), nameof(CanEditStreamFrameRate), nameof(CanEditStreamKeyframe),
             nameof(CanEditNetworkIp), nameof(CanEditNetworkNetmask), nameof(CanEditNetworkGateway), nameof(CanEditNetworkDns), nameof(CanEditNetworkPort),
             nameof(CanEditWirelessApSsid), nameof(CanEditWirelessApChannel),
             nameof(VideoCodecVisibility), nameof(VideoProfileVisibility), nameof(VideoDayNightVisibility), nameof(VideoWdrVisibility), nameof(VideoIrCutVisibility), nameof(VideoResolutionVisibility),
-            nameof(VideoBitrateVisibility), nameof(VideoFrameRateVisibility), nameof(ImageBrightnessVisibility), nameof(ImageContrastVisibility), nameof(ImageSaturationVisibility),
+            nameof(VideoBitrateVisibility), nameof(VideoFrameRateVisibility), nameof(StreamResolutionVisibility), nameof(StreamCodecVisibility), nameof(StreamProfileVisibility), nameof(StreamBitrateVisibility), nameof(StreamFpsVisibility), nameof(StreamKeyframeVisibility),
+            nameof(ImageBrightnessVisibility), nameof(ImageContrastVisibility), nameof(ImageSaturationVisibility), nameof(ImageMirrorVisibility), nameof(ImageFlipVisibility), nameof(ImageDayNightVisibility), nameof(ImageIrModeVisibility), nameof(ImageIrCutVisibility),
             nameof(ImageHueVisibility), nameof(ImageSharpnessVisibility), nameof(NetworkIpVisibility), nameof(NetworkNetmaskVisibility), nameof(NetworkGatewayVisibility),
             nameof(NetworkDnsVisibility), nameof(NetworkPortVisibility), nameof(WirelessApSsidVisibility), nameof(WirelessApPskVisibility), nameof(WirelessApChannelVisibility),
-            nameof(SelectedPersistenceField), nameof(LastReachableUrl)
+            nameof(ImageBrightnessReadOnlyTooltip), nameof(ImageContrastReadOnlyTooltip), nameof(ImageSaturationReadOnlyTooltip), nameof(ImageSharpnessReadOnlyTooltip), nameof(ImageHueReadOnlyTooltip),
+            nameof(ImageMirrorReadOnlyTooltip), nameof(ImageFlipReadOnlyTooltip), nameof(ImageDayNightReadOnlyTooltip), nameof(ImageIrModeReadOnlyTooltip), nameof(ImageIrCutReadOnlyTooltip),
+            nameof(HasPendingChanges), nameof(DirtyStateText), nameof(LastSyncText), nameof(SelectedPersistenceField), nameof(LastReachableUrl)
         })
         {
             OnPropertyChanged(name);
@@ -1474,6 +1756,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         if (!response.IsSuccessStatusCode)
         {
             DiagnosticsText = raw;
+            ShowToast("Request failed. See Advanced > Raw JSON.", success: false);
             return default;
         }
 
@@ -1489,6 +1772,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         if (!response.IsSuccessStatusCode)
         {
             DiagnosticsText = raw;
+            ShowToast("Request failed. See Advanced > Raw JSON.", success: false);
             return default;
         }
 

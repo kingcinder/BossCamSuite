@@ -7,39 +7,26 @@
         Title="BossCamSuite"
         Height="980"
         Width="1700"
-        Background="#101820"
-        Foreground="#F2EAD3">
+        Background="#0F1720"
+        Foreground="#F2F4F7">
     <Grid Margin="14">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="360"/>
-            <ColumnDefinition Width="10"/>
+            <ColumnDefinition Width="340"/>
+            <ColumnDefinition Width="12"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
         <Border Grid.Column="0" Padding="12" CornerRadius="12" Background="#17232E">
             <DockPanel>
-                <StackPanel DockPanel.Dock="Top">
-                    <TextBlock Text="BossCamSuite" FontSize="28" FontWeight="SemiBold"/>
-                    <TextBlock Text="5523-w settings/control operator console" Foreground="#D8C7A7" Margin="0,4,0,12"/>
-                    <WrapPanel Margin="0,0,0,8">
-                        <Button Margin="0,0,8,8" Padding="10,5" Click="LoadStore_Click">Load Store</Button>
+                <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+                    <TextBlock Text="BossCamSuite" FontSize="26" FontWeight="SemiBold"/>
+                    <TextBlock Text="Camera Settings" Foreground="#CFD7DE" Margin="0,4,0,12"/>
+                    <WrapPanel>
+                        <Button Margin="0,0,8,8" Padding="10,5" Click="LoadStore_Click">Load Cameras</Button>
                         <Button Margin="0,0,8,8" Padding="10,5" Click="Discover_Click">Discover</Button>
-                        <Button Margin="0,0,8,8" Padding="10,5" Click="RefreshTyped_Click">Refresh Typed</Button>
+                        <Button Margin="0,0,8,8" Padding="10,5" Click="RefreshSelected_Click">Refresh</Button>
                     </WrapPanel>
-                    <WrapPanel Margin="0,0,0,8">
-                        <ComboBox Width="180" Margin="0,0,8,8" ItemsSource="{Binding ProbeModes}" SelectedItem="{Binding SelectedProbeMode}" />
-                        <Button Margin="0,0,8,8" Padding="10,5" Click="ProbeSelected_Click">Run Probe</Button>
-                        <Button Margin="0,0,8,8" Padding="10,5" Click="ProbeKnownIps_Click">Probe 3 Live IPs</Button>
-                    </WrapPanel>
-                    <WrapPanel Margin="0,0,0,8">
-                        <Button Margin="0,0,8,8" Padding="10,5" Click="LoadSessions_Click">Probe Sessions</Button>
-                        <Button Margin="0,0,8,8" Padding="10,5" Click="LoadTranscripts_Click">Transcripts</Button>
-                        <Button Margin="0,0,8,8" Padding="10,5" Click="DiscoverConstraints_Click">Discover Constraints</Button>
-                        <Button Margin="0,0,8,8" Padding="10,5" Click="RunImageTruthSweep_Click">Image Truth Sweep</Button>
-                        <Button Margin="0,0,8,8" Padding="10,5" Click="PromoteFixtures_Click">Promote Fixtures</Button>
-                        <Button Margin="0,0,8,8" Padding="10,5" Click="NativeAssessment_Click">Native Gap</Button>
-                    </WrapPanel>
-                    <TextBlock Text="Devices" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                    <TextBlock Text="Cameras" FontSize="17" FontWeight="SemiBold" Margin="0,4,0,8"/>
                 </StackPanel>
                 <ListBox ItemsSource="{Binding Devices}" SelectedItem="{Binding SelectedDevice}" DisplayMemberPath="DisplayName" SelectionChanged="Devices_SelectionChanged" Background="#0E171E" BorderThickness="0"/>
             </DockPanel>
@@ -52,289 +39,268 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <Border Grid.Row="0" Padding="12" CornerRadius="12" Background="#A53D2C">
+            <Border Grid.Row="0" Padding="12" CornerRadius="12" Background="#2B3C4B">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <StackPanel>
-                        <TextBlock Text="{Binding SelectedDevice.DisplayName, TargetNullValue=No device selected}" FontSize="24" FontWeight="Bold"/>
+                        <TextBlock Text="{Binding SelectedDevice.DisplayName, TargetNullValue=No camera selected}" FontSize="24" FontWeight="Bold"/>
                         <TextBlock Text="{Binding SelectedDevice.IpAddress, StringFormat=IP: {0}, TargetNullValue=IP: -}"/>
                         <TextBlock Text="{Binding SelectedDevice.FirmwareVersion, StringFormat=Firmware: {0}, TargetNullValue=Firmware: -}"/>
                         <TextBlock Text="{Binding SelectedDevice.HardwareModel, StringFormat=Model: {0}, TargetNullValue=Model: -}"/>
-                        <TextBlock Text="{Binding HealthBadgeText}" FontWeight="SemiBold" Margin="0,6,0,0"/>
-                        <TextBlock Text="{Binding CapabilityBadgeText}" FontWeight="SemiBold"/>
-                        <TextBlock Text="{Binding FirmwareTruthBadge}" FontWeight="SemiBold"/>
+                        <WrapPanel Margin="0,8,0,0">
+                            <TextBlock Text="{Binding DirtyStateText}" FontWeight="SemiBold" Margin="0,0,18,0"/>
+                            <TextBlock Text="{Binding LastSyncText}" Foreground="#D5DEE7"/>
+                        </WrapPanel>
                     </StackPanel>
                     <WrapPanel Grid.Column="1" VerticalAlignment="Top">
-                        <Button Margin="0,0,8,8" Padding="10,5" Click="ApplyValidated_Click">Apply Validated</Button>
-                        <Button Margin="0,0,8,8" Padding="10,5" Click="ApplyExpert_Click">Apply Expert</Button>
-                        <ComboBox Width="170" Margin="0,0,8,8" ItemsSource="{Binding PersistenceFieldOptions}" SelectedItem="{Binding SelectedPersistenceField}"/>
-                        <Button Margin="0,0,8,8" Padding="10,5" Click="VerifyPersistence_Click">Verify Persistence</Button>
+                        <Button Margin="0,0,8,8" Padding="10,5" Click="RefreshSelected_Click">Refresh</Button>
+                        <Button Margin="0,0,8,8" Padding="10,5" Click="ApplyValidated_Click">Save Changes</Button>
+                        <Button Margin="0,0,8,8" Padding="10,5" Click="ApplyExpert_Click">Advanced Apply</Button>
                     </WrapPanel>
                 </Grid>
             </Border>
 
             <Grid Grid.Row="2">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="1.65*"/>
-                    <RowDefinition Height="8"/>
-                    <RowDefinition Height="1*"/>
-                </Grid.RowDefinitions>
-
-                <Border Grid.Row="0" Padding="10" CornerRadius="12" Background="#17232E">
+                <Border Padding="10" CornerRadius="12" Background="#17232E">
                     <TabControl>
-                        <TabItem Header="Video/Image">
+                        <TabItem Header="Camera">
+                            <StackPanel Margin="8">
+                                <TextBlock Text="Camera Identity" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="170"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Name" Foreground="#CFD7DE"/>
+                                    <TextBox Grid.Column="1" Text="{Binding SelectedDevice.DisplayName}" IsReadOnly="True"/>
+                                </Grid>
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="170"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="IP Address" Foreground="#CFD7DE"/>
+                                    <TextBox Grid.Column="1" Text="{Binding SelectedDevice.IpAddress}" IsReadOnly="True"/>
+                                </Grid>
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="170"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Model" Foreground="#CFD7DE"/>
+                                    <TextBox Grid.Column="1" Text="{Binding SelectedDevice.HardwareModel}" IsReadOnly="True"/>
+                                </Grid>
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="170"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Firmware" Foreground="#CFD7DE"/>
+                                    <TextBox Grid.Column="1" Text="{Binding SelectedDevice.FirmwareVersion}" IsReadOnly="True"/>
+                                </Grid>
+                            </StackPanel>
+                        </TabItem>
+
+                        <TabItem Header="Image">
                             <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                <StackPanel Margin="4">
-                                    <TextBlock Text="{Binding VideoEditorNotice}" Foreground="#E5D9BF" Margin="0,0,0,10"/>
-                                    <TextBlock Text="{Binding ImageTruthSummary}" Foreground="#FFD27A" Margin="0,0,0,10" TextWrapping="Wrap"/>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding VideoCodecVisibility}">
-                                        <TextBlock Width="140" Text="Codec" VerticalAlignment="Center"/>
-                                        <ComboBox Width="180" ItemsSource="{Binding VideoCodecOptions}" SelectedItem="{Binding VideoCodec}" IsEnabled="{Binding CanEditVideoCodec}"/>
-                                        <TextBlock Margin="12,0,0,0" Text="{Binding VideoCodecState}" VerticalAlignment="Center"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding VideoProfileVisibility}">
-                                        <TextBlock Width="140" Text="Profile" VerticalAlignment="Center"/>
-                                        <ComboBox Width="180" ItemsSource="{Binding VideoProfileOptions}" SelectedItem="{Binding VideoProfile}" IsEnabled="{Binding CanEditVideoProfile}"/>
-                                        <TextBlock Margin="12,0,0,0" Text="{Binding VideoProfileState}" VerticalAlignment="Center"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding VideoResolutionVisibility}">
-                                        <TextBlock Width="140" Text="Resolution" VerticalAlignment="Center"/>
-                                        <ComboBox Width="180" ItemsSource="{Binding VideoResolutionOptions}" SelectedItem="{Binding VideoResolution}" IsEnabled="{Binding CanEditVideoResolution}"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding VideoDayNightVisibility}">
+                                <StackPanel Margin="8">
+                                    <Grid Margin="0,0,0,10" Visibility="{Binding ImageBrightnessVisibility}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="140"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="68"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Brightness" VerticalAlignment="Center"/>
+                                        <Slider Grid.Column="1" Minimum="{Binding ImageBrightnessMin}" Maximum="{Binding ImageBrightnessMax}" Value="{Binding ImageBrightnessSlider}" IsEnabled="{Binding CanEditImageBrightness}" ToolTip="{Binding ImageBrightnessReadOnlyTooltip}" ToolTipService.ShowOnDisabled="True"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding ImageBrightness}" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                                    </Grid>
+                                    <Grid Margin="0,0,0,10" Visibility="{Binding ImageContrastVisibility}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="140"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="68"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Contrast" VerticalAlignment="Center"/>
+                                        <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding ImageContrastSlider}" IsEnabled="{Binding CanEditImageContrast}" ToolTip="{Binding ImageContrastReadOnlyTooltip}" ToolTipService.ShowOnDisabled="True"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding ImageContrast}" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                                    </Grid>
+                                    <Grid Margin="0,0,0,10" Visibility="{Binding ImageSaturationVisibility}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="140"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="68"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Saturation" VerticalAlignment="Center"/>
+                                        <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding ImageSaturationSlider}" IsEnabled="{Binding CanEditImageSaturation}" ToolTip="{Binding ImageSaturationReadOnlyTooltip}" ToolTipService.ShowOnDisabled="True"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding ImageSaturation}" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                                    </Grid>
+                                    <Grid Margin="0,0,0,10" Visibility="{Binding ImageSharpnessVisibility}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="140"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="68"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Sharpness" VerticalAlignment="Center"/>
+                                        <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding ImageSharpnessSlider}" IsEnabled="{Binding CanEditImageSharpness}" ToolTip="{Binding ImageSharpnessReadOnlyTooltip}" ToolTipService.ShowOnDisabled="True"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding ImageSharpness}" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                                    </Grid>
+                                    <Grid Margin="0,0,0,10" Visibility="{Binding ImageHueVisibility}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="140"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="68"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Hue" VerticalAlignment="Center"/>
+                                        <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding ImageHueSlider}" IsEnabled="{Binding CanEditImageHue}" ToolTip="{Binding ImageHueReadOnlyTooltip}" ToolTipService.ShowOnDisabled="True"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding ImageHue}" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                                    </Grid>
+
+                                    <CheckBox Content="Mirror" Margin="0,0,0,8" IsChecked="{Binding ImageMirror}" IsEnabled="{Binding CanEditImageMirror}" Visibility="{Binding ImageMirrorVisibility}" ToolTip="{Binding ImageMirrorReadOnlyTooltip}" ToolTipService.ShowOnDisabled="True"/>
+                                    <CheckBox Content="Flip" Margin="0,0,0,8" IsChecked="{Binding ImageFlip}" IsEnabled="{Binding CanEditImageFlip}" Visibility="{Binding ImageFlipVisibility}" ToolTip="{Binding ImageFlipReadOnlyTooltip}" ToolTipService.ShowOnDisabled="True"/>
+
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding ImageDayNightVisibility}">
                                         <TextBlock Width="140" Text="Day/Night" VerticalAlignment="Center"/>
-                                        <ComboBox Width="180" ItemsSource="{Binding VideoDayNightOptions}" SelectedItem="{Binding VideoDayNight}" IsEnabled="{Binding CanEditVideoDayNight}"/>
+                                        <ComboBox Width="220" ItemsSource="{Binding VideoDayNightOptions}" SelectedItem="{Binding VideoDayNight}" IsEnabled="{Binding CanEditImageDayNight}" ToolTip="{Binding ImageDayNightReadOnlyTooltip}" ToolTipService.ShowOnDisabled="True"/>
                                     </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding VideoWdrVisibility}">
-                                        <TextBlock Width="140" Text="WDR" VerticalAlignment="Center"/>
-                                        <ComboBox Width="180" ItemsSource="{Binding VideoWdrOptions}" SelectedItem="{Binding VideoWdr}" IsEnabled="{Binding CanEditVideoWdr}"/>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding ImageIrModeVisibility}">
+                                        <TextBlock Width="140" Text="IR Mode" VerticalAlignment="Center"/>
+                                        <ComboBox Width="220" ItemsSource="{Binding VideoIrModeOptions}" SelectedItem="{Binding VideoIrMode}" IsEnabled="{Binding CanEditImageIrMode}" ToolTip="{Binding ImageIrModeReadOnlyTooltip}" ToolTipService.ShowOnDisabled="True"/>
                                     </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding VideoIrCutVisibility}">
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding ImageIrCutVisibility}">
                                         <TextBlock Width="140" Text="IR Cut" VerticalAlignment="Center"/>
-                                        <ComboBox Width="180" ItemsSource="{Binding VideoIrCutOptions}" SelectedItem="{Binding VideoIrCut}" IsEnabled="{Binding CanEditVideoIrCut}"/>
+                                        <ComboBox Width="220" ItemsSource="{Binding VideoIrCutOptions}" SelectedItem="{Binding VideoIrCut}" IsEnabled="{Binding CanEditImageIrCut}" ToolTip="{Binding ImageIrCutReadOnlyTooltip}" ToolTipService.ShowOnDisabled="True"/>
                                     </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding VideoBitrateVisibility}">
-                                        <TextBlock Width="140" Text="Bitrate (kbps)" VerticalAlignment="Center"/>
-                                        <TextBox Width="110" Text="{Binding VideoBitrate}"/>
-                                        <Slider Width="200" Margin="10,0,0,0" Minimum="{Binding VideoBitrateMin}" Maximum="{Binding VideoBitrateMax}" Value="{Binding VideoBitrateSlider}" TickFrequency="64" IsSnapToTickEnabled="False"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding VideoFrameRateVisibility}">
-                                        <TextBlock Width="140" Text="Frame Rate" VerticalAlignment="Center"/>
-                                        <TextBox Width="110" Text="{Binding VideoFrameRate}"/>
-                                        <TextBlock Margin="12,0,0,0" Text="{Binding VideoFpsHint}" VerticalAlignment="Center"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding ImageBrightnessVisibility}">
-                                        <TextBlock Width="140" Text="Brightness" VerticalAlignment="Center"/>
-                                        <TextBox Width="110" Text="{Binding ImageBrightness}"/>
-                                        <Slider Width="200" Margin="10,0,0,0" Minimum="{Binding ImageBrightnessMin}" Maximum="{Binding ImageBrightnessMax}" Value="{Binding ImageBrightnessSlider}" />
-                                        <TextBlock Margin="12,0,0,0" Text="{Binding ImageBrightnessBehaviorBadge}" VerticalAlignment="Center"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding ImageContrastVisibility}">
-                                        <TextBlock Width="140" Text="Contrast" VerticalAlignment="Center"/>
-                                        <TextBox Width="110" Text="{Binding ImageContrast}"/>
-                                        <TextBlock Margin="12,0,0,0" Text="{Binding ImageContrastBehaviorBadge}" VerticalAlignment="Center"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding ImageSaturationVisibility}">
-                                        <TextBlock Width="140" Text="Saturation" VerticalAlignment="Center"/>
-                                        <TextBox Width="110" Text="{Binding ImageSaturation}"/>
-                                        <TextBlock Margin="12,0,0,0" Text="{Binding ImageSaturationBehaviorBadge}" VerticalAlignment="Center"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding ImageHueVisibility}">
-                                        <TextBlock Width="140" Text="Hue" VerticalAlignment="Center"/>
-                                        <TextBox Width="110" Text="{Binding ImageHue}"/>
-                                    </WrapPanel>
-                                    <WrapPanel Visibility="{Binding ImageSharpnessVisibility}">
-                                        <TextBlock Width="140" Text="Sharpness" VerticalAlignment="Center"/>
-                                        <TextBox Width="110" Text="{Binding ImageSharpness}"/>
-                                    </WrapPanel>
-                                    <Separator Margin="0,12,0,10"/>
-                                    <TextBlock Text="Promoted Hidden Candidates (Proven)" FontWeight="SemiBold" Margin="0,0,0,6"/>
-                                    <DataGrid ItemsSource="{Binding PromotedImageRows}" AutoGenerateColumns="False" Background="#0E171E" BorderThickness="0" MaxHeight="220">
-                                        <DataGrid.Columns>
-                                            <DataGridTextColumn Header="Field" Binding="{Binding FieldKey}" Width="*"/>
-                                            <DataGridTextColumn Header="Class" Binding="{Binding Classification}" Width="1.3*"/>
-                                            <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="1.2*"/>
-                                            <DataGridTextColumn Header="Endpoint" Binding="{Binding SourceEndpoint}" Width="2*"/>
-                                            <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="2*"/>
-                                        </DataGrid.Columns>
-                                    </DataGrid>
                                 </StackPanel>
                             </ScrollViewer>
                         </TabItem>
 
-                        <TabItem Header="Network/Wireless">
+                        <TabItem Header="Stream">
                             <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                <StackPanel Margin="4">
-                                    <TextBlock Text="Network-changing writes can break control connectivity. Reconnect hints are shown after apply." Foreground="#FFD27A" Margin="0,0,0,10"/>
+                                <StackPanel Margin="8">
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding StreamResolutionVisibility}">
+                                        <TextBlock Width="140" Text="Resolution" VerticalAlignment="Center"/>
+                                        <ComboBox Width="220" ItemsSource="{Binding VideoResolutionOptions}" SelectedItem="{Binding VideoResolution}" IsEnabled="{Binding CanEditVideoResolution}"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding StreamCodecVisibility}">
+                                        <TextBlock Width="140" Text="Codec" VerticalAlignment="Center"/>
+                                        <ComboBox Width="220" ItemsSource="{Binding VideoCodecOptions}" SelectedItem="{Binding VideoCodec}" IsEnabled="{Binding CanEditVideoCodec}"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding StreamProfileVisibility}">
+                                        <TextBlock Width="140" Text="Profile" VerticalAlignment="Center"/>
+                                        <ComboBox Width="220" ItemsSource="{Binding VideoProfileOptions}" SelectedItem="{Binding VideoProfile}" IsEnabled="{Binding CanEditVideoProfile}"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding StreamBitrateVisibility}">
+                                        <TextBlock Width="140" Text="Bitrate (kbps)" VerticalAlignment="Center"/>
+                                        <TextBox Width="220" Text="{Binding VideoBitrate}" IsEnabled="{Binding CanEditStreamBitrate}"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding StreamFpsVisibility}">
+                                        <TextBlock Width="140" Text="FPS" VerticalAlignment="Center"/>
+                                        <TextBox Width="220" Text="{Binding VideoFrameRate}" IsEnabled="{Binding CanEditStreamFrameRate}"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding StreamKeyframeVisibility}">
+                                        <TextBlock Width="140" Text="Keyframe" VerticalAlignment="Center"/>
+                                        <TextBox Width="220" Text="{Binding VideoKeyframeInterval}" IsEnabled="{Binding CanEditStreamKeyframe}"/>
+                                    </WrapPanel>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </TabItem>
+
+                        <TabItem Header="Network">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <StackPanel Margin="8">
                                     <WrapPanel Margin="0,0,0,8" Visibility="{Binding NetworkIpVisibility}">
                                         <TextBlock Width="140" Text="IP" VerticalAlignment="Center"/>
-                                        <TextBox Width="180" Text="{Binding NetworkIp}" IsEnabled="{Binding CanEditNetworkIp}"/>
-                                        <TextBlock Margin="12,0,0,0" Text="{Binding NetworkIpState}" VerticalAlignment="Center"/>
+                                        <TextBox Width="220" Text="{Binding NetworkIp}" IsEnabled="{Binding CanEditNetworkIp}"/>
                                     </WrapPanel>
                                     <WrapPanel Margin="0,0,0,8" Visibility="{Binding NetworkNetmaskVisibility}">
                                         <TextBlock Width="140" Text="Netmask" VerticalAlignment="Center"/>
-                                        <TextBox Width="180" Text="{Binding NetworkNetmask}" IsEnabled="{Binding CanEditNetworkNetmask}"/>
+                                        <TextBox Width="220" Text="{Binding NetworkNetmask}" IsEnabled="{Binding CanEditNetworkNetmask}"/>
                                     </WrapPanel>
                                     <WrapPanel Margin="0,0,0,8" Visibility="{Binding NetworkGatewayVisibility}">
                                         <TextBlock Width="140" Text="Gateway" VerticalAlignment="Center"/>
-                                        <TextBox Width="180" Text="{Binding NetworkGateway}" IsEnabled="{Binding CanEditNetworkGateway}"/>
+                                        <TextBox Width="220" Text="{Binding NetworkGateway}" IsEnabled="{Binding CanEditNetworkGateway}"/>
                                     </WrapPanel>
                                     <WrapPanel Margin="0,0,0,8" Visibility="{Binding NetworkDnsVisibility}">
                                         <TextBlock Width="140" Text="DNS" VerticalAlignment="Center"/>
-                                        <TextBox Width="180" Text="{Binding NetworkDns}" IsEnabled="{Binding CanEditNetworkDns}"/>
+                                        <TextBox Width="220" Text="{Binding NetworkDns}" IsEnabled="{Binding CanEditNetworkDns}"/>
                                     </WrapPanel>
                                     <WrapPanel Margin="0,0,0,8" Visibility="{Binding NetworkPortVisibility}">
                                         <TextBlock Width="140" Text="HTTP Port" VerticalAlignment="Center"/>
-                                        <TextBox Width="180" Text="{Binding NetworkPort}" IsEnabled="{Binding CanEditNetworkPort}"/>
+                                        <TextBox Width="220" Text="{Binding NetworkPort}" IsEnabled="{Binding CanEditNetworkPort}"/>
                                     </WrapPanel>
                                     <Separator Margin="0,8,0,8"/>
                                     <WrapPanel Margin="0,0,0,8" Visibility="{Binding WirelessApSsidVisibility}">
                                         <TextBlock Width="140" Text="AP SSID" VerticalAlignment="Center"/>
-                                        <TextBox Width="180" Text="{Binding WirelessApSsid}" IsEnabled="{Binding CanEditWirelessApSsid}"/>
+                                        <TextBox Width="220" Text="{Binding WirelessApSsid}" IsEnabled="{Binding CanEditWirelessApSsid}"/>
                                     </WrapPanel>
                                     <WrapPanel Margin="0,0,0,8" Visibility="{Binding WirelessApPskVisibility}">
                                         <TextBlock Width="140" Text="AP PSK" VerticalAlignment="Center"/>
-                                        <PasswordBox Width="180" PasswordChanged="WirelessPskPasswordChanged"/>
-                                        <TextBlock Margin="12,0,0,0" Text="{Binding WirelessApPskState}" VerticalAlignment="Center"/>
+                                        <PasswordBox Width="220" PasswordChanged="WirelessPskPasswordChanged"/>
                                     </WrapPanel>
                                     <WrapPanel Margin="0,0,0,8" Visibility="{Binding WirelessApChannelVisibility}">
                                         <TextBlock Width="140" Text="AP Channel" VerticalAlignment="Center"/>
-                                        <TextBox Width="180" Text="{Binding WirelessApChannel}" IsEnabled="{Binding CanEditWirelessApChannel}"/>
+                                        <TextBox Width="220" Text="{Binding WirelessApChannel}" IsEnabled="{Binding CanEditWirelessApChannel}"/>
                                     </WrapPanel>
-                                    <WrapPanel Margin="0,6,0,6">
-                                        <TextBlock Width="140" Text="Current URL" VerticalAlignment="Center"/>
-                                        <TextBlock Text="{Binding CurrentControlUrl}" VerticalAlignment="Center"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8">
-                                        <TextBlock Width="140" Text="Predicted URL" VerticalAlignment="Center"/>
-                                        <TextBlock Text="{Binding PredictedControlUrl}" VerticalAlignment="Center"/>
-                                    </WrapPanel>
-                                    <Button Width="190" Margin="0,0,0,6" Click="RunNetworkRecovery_Click">Run Recovery Probe</Button>
-                                    <TextBlock Text="{Binding NetworkRecoveryHint}" Foreground="#FFD27A" Margin="0,8,0,0"/>
-                                    <TextBlock Text="{Binding LastReachableUrl, StringFormat=Last Reachable URL: {0}}" Foreground="#E5D9BF" Margin="0,4,0,0"/>
                                 </StackPanel>
                             </ScrollViewer>
                         </TabItem>
 
-                        <TabItem Header="Users/Maintenance">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="1.1*"/>
-                                    <ColumnDefinition Width="8"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel>
-                                    <TextBlock Text="Users" FontWeight="SemiBold" Margin="0,0,0,6"/>
-                                    <ListBox ItemsSource="{Binding UserList}" Height="180" Background="#0E171E" BorderThickness="0"/>
-                                    <TextBlock Text="Password Change" FontWeight="SemiBold" Margin="0,10,0,6"/>
-                                    <WrapPanel Margin="0,0,0,6">
-                                        <TextBlock Width="120" Text="Username" VerticalAlignment="Center"/>
-                                        <TextBox Width="180" Text="{Binding PasswordChangeUsername}"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,6">
-                                        <TextBlock Width="120" Text="New Password" VerticalAlignment="Center"/>
-                                        <PasswordBox Width="180" PasswordChanged="PasswordChangePasswordChanged"/>
-                                    </WrapPanel>
-                                    <Button Width="160" Margin="0,6,0,0" Click="ApplyPasswordChange_Click">Apply Password Change</Button>
-                                </StackPanel>
-                                <StackPanel Grid.Column="2">
-                                    <TextBlock Text="Maintenance Actions" FontWeight="SemiBold" Margin="0,0,0,6"/>
-                                    <Button Width="180" Margin="0,0,0,8" Click="RebootCamera_Click">Reboot Camera</Button>
-                                    <Button Width="180" Margin="0,0,0,8" Click="FactoryDefault_Click">Factory Default</Button>
-                                    <TextBlock Text="{Binding MaintenanceState}" Foreground="#FFD27A" TextWrapping="Wrap"/>
-                                </StackPanel>
-                            </Grid>
-                        </TabItem>
-
-                        <TabItem Header="Recording">
-                            <StackPanel Margin="6">
-                                <WrapPanel Margin="0,0,0,8">
-                                    <Button Margin="0,0,8,8" Padding="10,5" Click="StartRecording_Click">Start Recording</Button>
-                                    <Button Margin="0,0,8,8" Padding="10,5" Click="StopRecording_Click">Stop Recording</Button>
-                                    <Button Margin="0,0,8,8" Padding="10,5" Click="RefreshRecordingIndex_Click">Refresh Index</Button>
-                                    <Button Margin="0,0,8,8" Padding="10,5" Click="ExportRecentClip_Click">Export Last 10m</Button>
+                        <TabItem Header="Maintenance">
+                            <StackPanel Margin="8">
+                                <WrapPanel Margin="0,0,0,10">
+                                    <Button Width="170" Margin="0,0,8,8" Click="RebootCamera_Click">Reboot</Button>
+                                    <Button Width="170" Margin="0,0,8,8" Click="FactoryDefault_Click">Factory Reset</Button>
                                 </WrapPanel>
-                                <TextBlock Text="{Binding RecordingState}" Foreground="#FFD27A" Margin="0,0,0,8"/>
-                                <TextBox Text="{Binding RecordingDiagnostics}" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextWrapping="NoWrap" Background="#0E171E" BorderThickness="0" Foreground="#F2EAD3" FontFamily="Consolas"/>
+                                <TextBlock Text="Firmware Upload" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                <WrapPanel Margin="0,0,0,8">
+                                    <TextBox Width="420" Text="{Binding FirmwareUploadPath}" IsReadOnly="True" Margin="0,0,8,8"/>
+                                    <Button Width="120" Margin="0,0,8,8" Click="BrowseFirmware_Click">Browse</Button>
+                                    <Button Width="140" Margin="0,0,8,8" Click="UploadFirmware_Click">Upload Firmware</Button>
+                                </WrapPanel>
+                                <TextBlock Text="{Binding MaintenanceState}" Foreground="#FFD27A" TextWrapping="Wrap"/>
                             </StackPanel>
                         </TabItem>
 
-                        <TabItem Header="Diagnostics/Expert">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="1.25*"/>
-                                    <ColumnDefinition Width="8"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
+                        <TabItem Header="Advanced">
+                            <Grid Margin="4">
                                 <Grid.RowDefinitions>
-                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="8"/>
                                     <RowDefinition Height="*"/>
                                 </Grid.RowDefinitions>
-                                <DataGrid ItemsSource="{Binding ValidationMatrix}" AutoGenerateColumns="False" Background="#0E171E" BorderThickness="0">
-                                    <DataGrid.Columns>
-                                        <DataGridTextColumn Header="Endpoint" Binding="{Binding Endpoint}" Width="3*" IsReadOnly="True"/>
-                                        <DataGridCheckBoxColumn Header="Read" Binding="{Binding ReadVerified}" Width="*"/>
-                                        <DataGridCheckBoxColumn Header="Write" Binding="{Binding WriteVerified}" Width="*"/>
-                                        <DataGridCheckBoxColumn Header="Persist" Binding="{Binding PersistsAfterReboot}" Width="*"/>
-                                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="*"/>
-                                        <DataGridTextColumn Header="Risk" Binding="{Binding DisruptionClass}" Width="*"/>
-                                        <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="2*"/>
-                                    </DataGrid.Columns>
-                                </DataGrid>
+                                <WrapPanel Grid.Row="0" Margin="0,0,0,4">
+                                    <ComboBox Width="170" Margin="0,0,8,8" ItemsSource="{Binding ProbeModes}" SelectedItem="{Binding SelectedProbeMode}"/>
+                                    <Button Margin="0,0,8,8" Padding="10,5" Click="ProbeSelected_Click">Run Probe</Button>
+                                    <Button Margin="0,0,8,8" Padding="10,5" Click="ProbeKnownIps_Click">Probe Known IPs</Button>
+                                    <Button Margin="0,0,8,8" Padding="10,5" Click="LoadSessions_Click">Probe Sessions</Button>
+                                    <Button Margin="0,0,8,8" Padding="10,5" Click="LoadTranscripts_Click">Transcripts</Button>
+                                    <Button Margin="0,0,8,8" Padding="10,5" Click="DiscoverConstraints_Click">Discover Constraints</Button>
+                                    <Button Margin="0,0,8,8" Padding="10,5" Click="RunImageTruthSweep_Click">Image Truth Sweep</Button>
+                                    <Button Margin="0,0,8,8" Padding="10,5" Click="PromoteFixtures_Click">Promote Fixtures</Button>
+                                    <Button Margin="0,0,8,8" Padding="10,5" Click="NativeAssessment_Click">Native Gap</Button>
+                                    <Button Margin="0,0,8,8" Padding="10,5" Click="RefreshTyped_Click">Refresh Typed</Button>
+                                    <ComboBox Width="170" Margin="0,0,8,8" ItemsSource="{Binding PersistenceFieldOptions}" SelectedItem="{Binding SelectedPersistenceField}"/>
+                                    <Button Margin="0,0,8,8" Padding="10,5" Click="VerifyPersistence_Click">Verify Persistence</Button>
+                                </WrapPanel>
+
                                 <TabControl Grid.Row="2">
-                                    <TabItem Header="Field Provenance">
-                                        <DataGrid ItemsSource="{Binding FieldProvenanceRows}" AutoGenerateColumns="False" Background="#0E171E" BorderThickness="0">
+                                    <TabItem Header="Truth Maps">
+                                        <DataGrid ItemsSource="{Binding ValidationMatrix}" AutoGenerateColumns="False" Background="#0E171E" BorderThickness="0">
                                             <DataGrid.Columns>
-                                                <DataGridTextColumn Header="Field" Binding="{Binding FieldKey}" Width="*"/>
-                                                <DataGridTextColumn Header="Contract" Binding="{Binding ContractKey}" Width="1.6*"/>
-                                                <DataGridTextColumn Header="Truth" Binding="{Binding TruthState}" Width="*"/>
-                                                <DataGridTextColumn Header="Support" Binding="{Binding SupportState}" Width="*"/>
-                                                <DataGridTextColumn Header="Validity" Binding="{Binding Validity}" Width="*"/>
-                                                <DataGridTextColumn Header="Endpoint" Binding="{Binding SourceEndpoint}" Width="2*"/>
-                                                <DataGridTextColumn Header="Path" Binding="{Binding RawSourcePath}" Width="2*"/>
+                                                <DataGridTextColumn Header="Endpoint" Binding="{Binding Endpoint}" Width="3*" IsReadOnly="True"/>
+                                                <DataGridCheckBoxColumn Header="Read" Binding="{Binding ReadVerified}" Width="*"/>
+                                                <DataGridCheckBoxColumn Header="Write" Binding="{Binding WriteVerified}" Width="*"/>
+                                                <DataGridCheckBoxColumn Header="Persist" Binding="{Binding PersistsAfterReboot}" Width="*"/>
+                                                <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="*"/>
+                                                <DataGridTextColumn Header="Risk" Binding="{Binding DisruptionClass}" Width="*"/>
+                                                <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="2*"/>
                                             </DataGrid.Columns>
                                         </DataGrid>
                                     </TabItem>
-                                    <TabItem Header="Semantic Timeline">
-                                        <DataGrid ItemsSource="{Binding SemanticHistoryRows}" AutoGenerateColumns="False" Background="#0E171E" BorderThickness="0">
-                                            <DataGrid.Columns>
-                                                <DataGridTextColumn Header="Time" Binding="{Binding Timestamp}" Width="1.2*"/>
-                                                <DataGridTextColumn Header="Field" Binding="{Binding FieldKey}" Width="*"/>
-                                                <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="1.4*"/>
-                                                <DataGridTextColumn Header="Endpoint" Binding="{Binding Endpoint}" Width="2*"/>
-                                                <DataGridTextColumn Header="Contract" Binding="{Binding ContractKey}" Width="1.8*"/>
-                                            </DataGrid.Columns>
-                                        </DataGrid>
-                                    </TabItem>
-                                    <TabItem Header="Constraints">
-                                        <DataGrid ItemsSource="{Binding ConstraintRows}" AutoGenerateColumns="False" Background="#0E171E" BorderThickness="0">
-                                            <DataGrid.Columns>
-                                                <DataGridTextColumn Header="Field" Binding="{Binding FieldKey}" Width="*"/>
-                                                <DataGridTextColumn Header="Contract" Binding="{Binding ContractKey}" Width="1.8*"/>
-                                                <DataGridTextColumn Header="Values" Binding="{Binding SupportedValues}" Width="2*"/>
-                                                <DataGridTextColumn Header="Min" Binding="{Binding Min}" Width="*"/>
-                                                <DataGridTextColumn Header="Max" Binding="{Binding Max}" Width="*"/>
-                                                <DataGridTextColumn Header="Quality" Binding="{Binding Quality}" Width="*"/>
-                                            </DataGrid.Columns>
-                                        </DataGrid>
-                                    </TabItem>
-                                    <TabItem Header="Dependencies">
-                                        <DataGrid ItemsSource="{Binding DependencyRows}" AutoGenerateColumns="False" Background="#0E171E" BorderThickness="0">
-                                            <DataGrid.Columns>
-                                                <DataGridTextColumn Header="Primary" Binding="{Binding PrimaryFieldKey}" Width="*"/>
-                                                <DataGridTextColumn Header="Depends On" Binding="{Binding DependsOnFieldKey}" Width="*"/>
-                                                <DataGridTextColumn Header="Depends Values" Binding="{Binding DependsOnValues}" Width="1.5*"/>
-                                                <DataGridTextColumn Header="Allowed Values" Binding="{Binding AllowedPrimaryValues}" Width="1.7*"/>
-                                                <DataGridTextColumn Header="Quality" Binding="{Binding Quality}" Width="*"/>
-                                                <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="1.6*"/>
-                                            </DataGrid.Columns>
-                                        </DataGrid>
-                                    </TabItem>
-                                    <TabItem Header="Image Inventory">
+                                    <TabItem Header="Inventory">
                                         <DataGrid ItemsSource="{Binding ImageInventoryRows}" AutoGenerateColumns="False" Background="#0E171E" BorderThickness="0">
                                             <DataGrid.Columns>
                                                 <DataGridTextColumn Header="Field" Binding="{Binding FieldKey}" Width="*"/>
@@ -347,29 +313,48 @@
                                             </DataGrid.Columns>
                                         </DataGrid>
                                     </TabItem>
-                                    <TabItem Header="Image Behavior">
-                                        <DataGrid ItemsSource="{Binding ImageBehaviorRows}" AutoGenerateColumns="False" Background="#0E171E" BorderThickness="0">
+                                    <TabItem Header="Classifications">
+                                        <DataGrid ItemsSource="{Binding PromotedImageRows}" AutoGenerateColumns="False" Background="#0E171E" BorderThickness="0">
                                             <DataGrid.Columns>
                                                 <DataGridTextColumn Header="Field" Binding="{Binding FieldKey}" Width="*"/>
-                                                <DataGridTextColumn Header="Safe Range" Binding="{Binding SafeRange}" Width="1.2*"/>
-                                                <DataGridTextColumn Header="Thresholds" Binding="{Binding Thresholds}" Width="1.5*"/>
-                                                <DataGridTextColumn Header="Catastrophic" Binding="{Binding CatastrophicValues}" Width="1.5*"/>
-                                                <DataGridTextColumn Header="Trigger" Binding="{Binding TriggerSequence}" Width="1.3*"/>
-                                                <DataGridTextColumn Header="Truth" Binding="{Binding TruthState}" Width="*"/>
+                                                <DataGridTextColumn Header="Class" Binding="{Binding Classification}" Width="1.3*"/>
+                                                <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="1.2*"/>
+                                                <DataGridTextColumn Header="Endpoint" Binding="{Binding SourceEndpoint}" Width="2*"/>
+                                                <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="2*"/>
                                             </DataGrid.Columns>
                                         </DataGrid>
                                     </TabItem>
+                                    <TabItem Header="Semantic">
+                                        <DataGrid ItemsSource="{Binding SemanticHistoryRows}" AutoGenerateColumns="False" Background="#0E171E" BorderThickness="0">
+                                            <DataGrid.Columns>
+                                                <DataGridTextColumn Header="Time" Binding="{Binding Timestamp}" Width="1.2*"/>
+                                                <DataGridTextColumn Header="Field" Binding="{Binding FieldKey}" Width="*"/>
+                                                <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="1.4*"/>
+                                                <DataGridTextColumn Header="Endpoint" Binding="{Binding Endpoint}" Width="2*"/>
+                                                <DataGridTextColumn Header="Contract" Binding="{Binding ContractKey}" Width="1.8*"/>
+                                            </DataGrid.Columns>
+                                        </DataGrid>
+                                    </TabItem>
+                                    <TabItem Header="Transcripts">
+                                        <TextBox Text="{Binding TranscriptPreview}" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextWrapping="NoWrap" Background="#0E171E" BorderThickness="0" Foreground="#F2EAD3" FontFamily="Consolas"/>
+                                    </TabItem>
+                                    <TabItem Header="Raw JSON">
+                                        <TextBox Text="{Binding DiagnosticsText}" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextWrapping="NoWrap" Background="#0E171E" BorderThickness="0" Foreground="#F2EAD3" FontFamily="Consolas"/>
+                                    </TabItem>
                                 </TabControl>
-                                <TextBox Grid.Column="2" Grid.RowSpan="3" Text="{Binding TranscriptPreview}" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextWrapping="NoWrap" Background="#0E171E" BorderThickness="0" Foreground="#F2EAD3" FontFamily="Consolas"/>
                             </Grid>
                         </TabItem>
                     </TabControl>
                 </Border>
 
-                <Border Grid.Row="2" Padding="10" CornerRadius="12" Background="#17232E">
-                    <TextBox Text="{Binding DiagnosticsText}" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextWrapping="NoWrap" Background="#0E171E" BorderThickness="0" Foreground="#F2EAD3" FontFamily="Consolas"/>
+                <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,10,10,0" Padding="12,8" CornerRadius="8" Background="{Binding ToastBackground}" Visibility="{Binding ToastVisibility}">
+                    <TextBlock Text="{Binding ToastMessage}" FontWeight="SemiBold"/>
                 </Border>
             </Grid>
         </Grid>
     </Grid>
 </Window>
+
+
+
+
