@@ -172,12 +172,9 @@ public abstract class HttpControlAdapterBase(IOptions<BossCamRuntimeOptions> opt
 
     private static void ApplyBasicAuth(HttpRequestMessage request, DeviceIdentity device)
     {
-        if (string.IsNullOrWhiteSpace(device.LoginName))
-        {
-            return;
-        }
-
-        var credential = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{device.LoginName}:{device.Password ?? string.Empty}"));
+        var login = string.IsNullOrWhiteSpace(device.LoginName) ? "admin" : device.LoginName;
+        var password = device.Password ?? string.Empty;
+        var credential = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{login}:{password}"));
         request.Headers.Authorization = new AuthenticationHeaderValue("Basic", credential);
     }
 }

@@ -1,0 +1,83 @@
+[
+  {
+    "ip": "10.0.0.4",
+    "field": "upnp.enabled",
+    "orig": true,
+    "attempt": false,
+    "actual": true,
+    "verified": false,
+    "status": 200
+  },
+  {
+    "ip": "10.0.0.4",
+    "field": "ddns.enabled",
+    "orig": false,
+    "attempt": true,
+    "actual": false,
+    "verified": false,
+    "status": 200
+  },
+  {
+    "ip": "10.0.0.4",
+    "field": "pppoe.enabled",
+    "orig": false,
+    "attempt": true,
+    "actual": false,
+    "verified": false,
+    "status": 200
+  },
+  {
+    "ip": "10.0.0.29",
+    "field": "upnp.enabled",
+    "orig": true,
+    "attempt": false,
+    "actual": true,
+    "verified": false,
+    "status": 200
+  },
+  {
+    "ip": "10.0.0.29",
+    "field": "ddns.enabled",
+    "orig": false,
+    "attempt": true,
+    "actual": false,
+    "verified": false,
+    "status": 200
+  },
+  {
+    "ip": "10.0.0.29",
+    "field": "pppoe.enabled",
+    "orig": false,
+    "attempt": true,
+    "actual": false,
+    "verified": false,
+    "status": 200
+  },
+  {
+    "ip": "10.0.0.227",
+    "field": "upnp.enabled",
+    "orig": true,
+    "attempt": false,
+    "actual": true,
+    "verified": false,
+    "status": 200
+  },
+  {
+    "ip": "10.0.0.227",
+    "field": "ddns.enabled",
+    "orig": false,
+    "attempt": true,
+    "actual": false,
+    "verified": false,
+    "status": 200
+  },
+  {
+    "ip": "10.0.0.227",
+    "field": "pppoe.enabled",
+    "orig": false,
+    "attempt": true,
+    "actual": false,
+    "verified": false,
+    "status": 200
+  }
+]

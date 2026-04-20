@@ -1,0 +1,164 @@
+[
+  {
+    "ip": "10.0.0.4",
+    "field": "brightnessLevel",
+    "orig": 50,
+    "attempt": 51,
+    "actual": 51,
+    "verified": true,
+    "status": 200
+  },
+  {
+    "ip": "10.0.0.4",
+    "field": "contrastLevel",
+    "orig": 50,
+    "attempt": 51,
+    "actual": 51,
+    "verified": true,
+    "status": 200
+  },
+  {
+    "ip": "10.0.0.4",
+    "field": "saturationLevel",
+    "orig": 50,
+    "attempt": 51,
+    "actual": 51,
+    "verified": true,
+    "status": 200
+  },
+  {
+    "ip": "10.0.0.4",
+    "field": "sharpnessLevel",
+    "orig": 50,
+    "attempt": 51,
+    "actual": 51,
+    "verified": true,
+    "status": 200
+  },
+  {
+    "ip": "10.0.0.4",
+    "field": "frameRate",
+    "orig": 13,
+    "attempt": 14,
+    "actual": 14,
+    "verified": true,
+    "status": 200
+  },
+  {
+    "ip": "10.0.0.4",
+    "field": "keyFrameInterval",
+    "orig": 26,
+    "attempt": 31,
+    "actual": 26,
+    "verified": false,
+    "status": 200
+  },
+  {
+    "ip": "10.0.0.29",
+    "field": "brightnessLevel",
+    "orig": 60,
+    "attempt": 61,
+    "actual": 61,
+    "verified": true,
+    "status": 200
+  },
+  {
+    "ip": "10.0.0.29",
+    "field": "contrastLevel",
+    "orig": 50,
+    "attempt": 51,
+    "actual": 51,
+    "verified": true,
+    "status": 200
+  },
+  {
+    "ip": "10.0.0.29",
+    "field": "saturationLevel",
+    "orig": 50,
+    "attempt": 51,
+    "actual": 51,
+    "verified": true,
+    "status": 200
+  },
+  {
+    "ip": "10.0.0.29",
+    "field": "sharpnessLevel",
+    "orig": 50,
+    "attempt": 51,
+    "actual": 51,
+    "verified": true,
+    "status": 200
+  },
+  {
+    "ip": "10.0.0.29",
+    "field": "frameRate",
+    "orig": 15,
+    "attempt": 16,
+    "actual": 15,
+    "verified": false,
+    "status": 200
+  },
+  {
+    "ip": "10.0.0.29",
+    "field": "keyFrameInterval",
+    "orig": 30,
+    "attempt": 35,
+    "actual": 30,
+    "verified": false,
+    "status": 200
+  },
+  {
+    "ip": "10.0.0.227",
+    "field": "brightnessLevel",
+    "orig": 50,
+    "attempt": 51,
+    "actual": 51,
+    "verified": true,
+    "status": 200
+  },
+  {
+    "ip": "10.0.0.227",
+    "field": "contrastLevel",
+    "orig": 50,
+    "attempt": 51,
+    "actual": 51,
+    "verified": true,
+    "status": 200
+  },
+  {
+    "ip": "10.0.0.227",
+    "field": "saturationLevel",
+    "orig": 50,
+    "attempt": 51,
+    "actual": 51,
+    "verified": true,
+    "status": 200
+  },
+  {
+    "ip": "10.0.0.227",
+    "field": "sharpnessLevel",
+    "orig": 50,
+    "attempt": 51,
+    "actual": 51,
+    "verified": true,
+    "status": 200
+  },
+  {
+    "ip": "10.0.0.227",
+    "field": "frameRate",
+    "orig": 10,
+    "attempt": 11,
+    "actual": 11,
+    "verified": true,
+    "status": 200
+  },
+  {
+    "ip": "10.0.0.227",
+    "field": "keyFrameInterval",
+    "orig": 20,
+    "attempt": 20,
+    "actual": 20,
+    "verified": true,
+    "status": 200
+  }
+]

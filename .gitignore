@@ -12,5 +12,6 @@ TestResults/
 *.db-wal
 
 *.log
+artifacts/
 
 src/BossCam.Service/appsettings.Development.json
