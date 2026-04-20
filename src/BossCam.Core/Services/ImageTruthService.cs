@@ -943,7 +943,15 @@ public sealed class ImageTruthService(
     }
 
     private sealed record FixtureBehaviorRow(string Field, decimal Orig, decimal Attempt, decimal Actual, bool Verified, int Status, string? Endpoint);
-    private sealed record LiveSemanticEvidenceRow(string Field, string Phase, bool Readable, string Status, string? Endpoint);
+    private sealed record LiveSemanticEvidenceRow(
+        string Field,
+        string Phase,
+        bool Readable,
+        string Status,
+        string? Endpoint,
+        string? Method,
+        string? Classification,
+        string? ReasonCode);
 
     private async Task<List<FixtureBehaviorRow>> LoadFixtureRowsForIpAsync(string? ipAddress, CancellationToken cancellationToken)
     {
@@ -1046,6 +1054,14 @@ public sealed class ImageTruthService(
             {
                 files.Add(path);
             }
+            foreach (var path in Directory.GetFiles(evidenceDir, "encode-shape-matrix-*.json", SearchOption.TopDirectoryOnly))
+            {
+                files.Add(path);
+            }
+            foreach (var path in Directory.GetFiles(evidenceDir, "encode-shape-summary-*.json", SearchOption.TopDirectoryOnly))
+            {
+                files.Add(path);
+            }
         }
 
         return files.ToList();
@@ -1093,7 +1109,10 @@ public sealed class ImageTruthService(
                     var status = node["status"]?.GetValue<string>() ?? "Unknown";
                     var readable = node["readable"]?.GetValue<bool>() == true;
                     var endpoint = node["endpoint"]?.GetValue<string>();
-                    rows.Add(new LiveSemanticEvidenceRow(field, phase, readable, status, endpoint));
+                    var method = node["method"]?.GetValue<string>();
+                    var classification = node["classification"]?.GetValue<string>();
+                    var reasonCode = node["reasonCode"]?.GetValue<string>();
+                    rows.Add(new LiveSemanticEvidenceRow(field, phase, readable, status, endpoint, method, classification, reasonCode));
                 }
             }
             catch (Exception ex)
@@ -1124,6 +1143,10 @@ public sealed class ImageTruthService(
                 continue;
             }
 
+            var explicitClassifications = fieldEvidence
+                .Where(static row => !string.IsNullOrWhiteSpace(row.Classification))
+                .Select(static row => row.Classification!)
+                .ToList();
             var hasReadable = fieldEvidence.Any(static row => row.Phase.Equals("read", StringComparison.OrdinalIgnoreCase) && row.Readable);
             var writeStatuses = fieldEvidence
                 .Where(static row => row.Phase.Equals("write", StringComparison.OrdinalIgnoreCase))
@@ -1135,6 +1158,12 @@ public sealed class ImageTruthService(
             var hasPrivate = fieldEvidence.Any(static row => row.Status.Equals("PrivatePathCandidate", StringComparison.OrdinalIgnoreCase));
 
             var updated = item;
+            if (explicitClassifications.Count > 0)
+            {
+                updated = ApplyExplicitClassification(updated, explicitClassifications, fieldEvidence);
+                output.Add(updated);
+                continue;
+            }
             if (hasWritable)
             {
                 updated = updated with
@@ -1220,6 +1249,205 @@ public sealed class ImageTruthService(
         }
 
         return output;
+    }
+
+    private static ImageControlInventoryItem ApplyExplicitClassification(
+        ImageControlInventoryItem current,
+        IReadOnlyCollection<string> classifications,
+        IReadOnlyCollection<LiveSemanticEvidenceRow> evidenceRows)
+    {
+        HiddenCandidateClassification? Pick(params HiddenCandidateClassification[] ordered)
+        {
+            foreach (var candidate in ordered)
+            {
+                if (classifications.Any(value => value.Equals(candidate.ToString(), StringComparison.OrdinalIgnoreCase)))
+                {
+                    return candidate;
+                }
+            }
+
+            return null;
+        }
+
+        var chosen = Pick(
+            HiddenCandidateClassification.Writable,
+            HiddenCandidateClassification.RequiresCommitTrigger,
+            HiddenCandidateClassification.AltWriteShapeRequired,
+            HiddenCandidateClassification.Ignored,
+            HiddenCandidateClassification.RejectedByFirmware,
+            HiddenCandidateClassification.PrivatePathCandidate,
+            HiddenCandidateClassification.LikelyUnsupported,
+            HiddenCandidateClassification.UnsupportedOnFirmware,
+            HiddenCandidateClassification.ReadableOnly,
+            HiddenCandidateClassification.NoSemanticProof,
+            HiddenCandidateClassification.HiddenAdjacentCandidate,
+            HiddenCandidateClassification.Uncertain) ?? HiddenCandidateClassification.Uncertain;
+        var reasons = evidenceRows
+            .Select(static row => row.ReasonCode)
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Cast<string>()
+            .ToArray();
+        var endpoint = evidenceRows
+            .Select(static row => row.Endpoint)
+            .FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value)) ?? current.SourceEndpoint;
+        var method = evidenceRows
+            .Select(static row => row.Method)
+            .FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value));
+        var notes = method is null
+            ? $"Live targeted classification={chosen}"
+            : $"Live targeted classification={chosen} via {method}";
+
+        return chosen switch
+        {
+            HiddenCandidateClassification.Writable => current with
+            {
+                Readable = true,
+                Writable = true,
+                WriteVerified = true,
+                SourceEndpoint = endpoint,
+                SupportState = ContractSupportState.Supported,
+                TruthState = ContractTruthState.Proven,
+                Status = ImageInventoryStatus.Writable,
+                CandidateClassification = chosen,
+                PromotedToUi = true,
+                ReasonCodes = reasons.Length == 0 ? ["live_semantic_write_readback"] : reasons,
+                Notes = notes
+            },
+            HiddenCandidateClassification.ReadableOnly => current with
+            {
+                Readable = true,
+                Writable = false,
+                WriteVerified = false,
+                SourceEndpoint = endpoint,
+                SupportState = ContractSupportState.Uncertain,
+                TruthState = ContractTruthState.Inferred,
+                Status = ImageInventoryStatus.Readable,
+                CandidateClassification = chosen,
+                PromotedToUi = true,
+                ReasonCodes = reasons.Length == 0 ? ["live_read_probe"] : reasons,
+                Notes = notes
+            },
+            HiddenCandidateClassification.RequiresCommitTrigger => current with
+            {
+                Readable = true,
+                Writable = false,
+                WriteVerified = false,
+                SourceEndpoint = endpoint,
+                SupportState = ContractSupportState.Uncertain,
+                TruthState = ContractTruthState.Inferred,
+                Status = ImageInventoryStatus.TransportSuccessNoSemanticChange,
+                CandidateClassification = chosen,
+                PromotedToUi = false,
+                ReasonCodes = reasons.Length == 0 ? ["requires_commit_trigger"] : reasons,
+                Notes = notes
+            },
+            HiddenCandidateClassification.AltWriteShapeRequired => current with
+            {
+                Readable = true,
+                Writable = false,
+                WriteVerified = false,
+                SourceEndpoint = endpoint,
+                SupportState = ContractSupportState.Uncertain,
+                TruthState = ContractTruthState.Inferred,
+                Status = ImageInventoryStatus.Uncertain,
+                CandidateClassification = chosen,
+                PromotedToUi = false,
+                ReasonCodes = reasons.Length == 0 ? ["alt_write_shape_required"] : reasons,
+                Notes = notes
+            },
+            HiddenCandidateClassification.Ignored => current with
+            {
+                Readable = true,
+                Writable = false,
+                WriteVerified = false,
+                SourceEndpoint = endpoint,
+                SupportState = ContractSupportState.Uncertain,
+                TruthState = ContractTruthState.Inferred,
+                Status = ImageInventoryStatus.TransportSuccessNoSemanticChange,
+                CandidateClassification = chosen,
+                PromotedToUi = false,
+                ReasonCodes = reasons.Length == 0 ? ["transport_success_no_semantic_change"] : reasons,
+                Notes = notes
+            },
+            HiddenCandidateClassification.PrivatePathCandidate => current with
+            {
+                Readable = true,
+                Writable = false,
+                WriteVerified = false,
+                SourceEndpoint = endpoint,
+                SupportState = ContractSupportState.Uncertain,
+                TruthState = ContractTruthState.Inferred,
+                Status = ImageInventoryStatus.HiddenAdjacentCandidate,
+                CandidateClassification = chosen,
+                PromotedToUi = false,
+                ReasonCodes = reasons.Length == 0 ? ["private_path_candidate"] : reasons,
+                Notes = notes
+            },
+            HiddenCandidateClassification.RejectedByFirmware => current with
+            {
+                Readable = current.Readable,
+                Writable = false,
+                WriteVerified = false,
+                SourceEndpoint = endpoint,
+                SupportState = ContractSupportState.Uncertain,
+                TruthState = ContractTruthState.Inferred,
+                Status = ImageInventoryStatus.Blocked,
+                CandidateClassification = chosen,
+                PromotedToUi = false,
+                ReasonCodes = reasons.Length == 0 ? ["repeated_live_rejection"] : reasons,
+                Notes = notes
+            },
+            HiddenCandidateClassification.LikelyUnsupported => current with
+            {
+                Readable = current.Readable,
+                Writable = false,
+                WriteVerified = false,
+                SourceEndpoint = endpoint,
+                SupportState = ContractSupportState.Uncertain,
+                TruthState = ContractTruthState.Inferred,
+                Status = ImageInventoryStatus.Uncertain,
+                CandidateClassification = chosen,
+                PromotedToUi = false,
+                ReasonCodes = reasons.Length == 0 ? ["repeated_live_failure_incomplete_evidence"] : reasons,
+                Notes = notes
+            },
+            HiddenCandidateClassification.UnsupportedOnFirmware => current with
+            {
+                Readable = false,
+                Writable = false,
+                WriteVerified = false,
+                SourceEndpoint = endpoint,
+                SupportState = ContractSupportState.Unsupported,
+                TruthState = ContractTruthState.Inferred,
+                Status = ImageInventoryStatus.Blocked,
+                CandidateClassification = chosen,
+                PromotedToUi = false,
+                ReasonCodes = reasons.Length == 0 ? ["repeated_live_failure_no_adjacent_evidence"] : reasons,
+                Notes = notes
+            },
+            HiddenCandidateClassification.NoSemanticProof => current with
+            {
+                Readable = current.Readable,
+                Writable = false,
+                WriteVerified = false,
+                SourceEndpoint = endpoint,
+                SupportState = ContractSupportState.Uncertain,
+                TruthState = ContractTruthState.Unverified,
+                Status = ImageInventoryStatus.Uncertain,
+                CandidateClassification = chosen,
+                PromotedToUi = false,
+                ReasonCodes = reasons.Length == 0 ? ["no_semantic_proof"] : reasons,
+                Notes = notes
+            },
+            _ => current with
+            {
+                SourceEndpoint = endpoint,
+                CandidateClassification = chosen,
+                ReasonCodes = reasons.Length == 0 ? current.ReasonCodes : reasons,
+                Notes = notes
+            }
+        };
     }
 
     private static string NormalizeFixtureFieldKey(string raw)

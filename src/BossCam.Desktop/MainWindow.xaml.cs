@@ -27,7 +27,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private string _transcriptPreview = string.Empty;
     private ProbeStageMode _selectedProbeMode = ProbeStageMode.SafeReadOnly;
     private TypedFieldRow? _selectedTypedField;
-    private string _videoEditorNotice = "Video editor follows endpoint-aware parser mappings. Unsupported fields remain disabled.";
+    private string _videoEditorNotice = "Video editor follows endpoint-aware parser mappings. Fields are only editable when proven writable; uncertain fields stay gated.";
     private string _networkRecoveryHint = "Recovery hint: if IP/port changes, update control URL to the new endpoint and rerun probe.";
     private string _maintenanceState = "No maintenance action executed.";
     private string _recordingState = "Recording idle.";
@@ -764,9 +764,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         var readOnly = inventory.Count(item => item.CandidateClassification == HiddenCandidateClassification.ReadableOnly);
         var hidden = inventory.Count(item => item.CandidateClassification == HiddenCandidateClassification.HiddenAdjacentCandidate);
         var needsAuth = inventory.Count(item => item.CandidateClassification == HiddenCandidateClassification.NoSemanticProof);
+        var altShape = inventory.Count(item => item.CandidateClassification == HiddenCandidateClassification.AltWriteShapeRequired);
         var likely = inventory.Count(item => item.CandidateClassification == HiddenCandidateClassification.LikelyUnsupported);
         var unsupported = inventory.Count(item => item.CandidateClassification == HiddenCandidateClassification.UnsupportedOnFirmware);
-        ImageTruthSummary = $"Inventory: {inventory.Count} fields | proven={writable} | read-only={readOnly} | hidden={hidden} | needs-auth/no-proof={needsAuth} | likely-unsupported={likely} | unsupported={unsupported}. Behavior maps={maps.Count}.";
+        ImageTruthSummary = $"Inventory: {inventory.Count} fields | proven={writable} | read-only={readOnly} | alt-write-shape={altShape} | hidden={hidden} | needs-auth/no-proof={needsAuth} | likely-unsupported={likely} | unsupported={unsupported}. Behavior maps={maps.Count}.";
         NotifyAllEditorProperties();
     }
 
@@ -778,6 +779,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             HiddenCandidateClassification.HiddenAdjacentCandidate => "Hidden candidate",
             HiddenCandidateClassification.PrivatePathCandidate => "Private path candidate",
             HiddenCandidateClassification.NoSemanticProof => "Needs live auth / No semantic proof",
+            HiddenCandidateClassification.AltWriteShapeRequired => "Alt write shape required",
             HiddenCandidateClassification.LikelyUnsupported => "Likely unsupported",
             HiddenCandidateClassification.UnsupportedOnFirmware => "Unsupported",
             HiddenCandidateClassification.RejectedByFirmware => "Rejected by firmware",

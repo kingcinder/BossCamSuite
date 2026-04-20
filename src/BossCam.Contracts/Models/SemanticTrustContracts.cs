@@ -132,6 +132,7 @@ public enum HiddenCandidateClassification
     Ignored,
     Dangerous,
     RequiresCommitTrigger,
+    AltWriteShapeRequired,
     HiddenAdjacentCandidate,
     PrivatePathCandidate,
     NoSemanticProof,
