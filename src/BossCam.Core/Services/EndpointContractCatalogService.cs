@@ -216,9 +216,39 @@ public sealed class EndpointContractCatalogService(
                     NumericField("bitrate", "Bitrate", "$.bitrate", 64, 16384),
                     NumericField("frameRate", "Frame Rate", "$.frameRate", 1, 60),
                     NumericField("keyframeInterval", "Keyframe Interval", "$.gop", 1, 240),
+                    NumericField("brightness", "Brightness", "$.brightnessLevel", 0, 100),
+                    NumericField("contrast", "Contrast", "$.contrastLevel", 0, 100),
+                    NumericField("saturation", "Saturation", "$.saturationLevel", 0, 100),
+                    NumericField("sharpness", "Sharpness", "$.sharpnessLevel", 0, 100),
+                    NumericField("hue", "Hue", "$.hueLevel", 0, 100),
+                    NumericField("gamma", "Gamma", "$.gammaLevel", 0, 100),
+                    EnumField("mirror", "Mirror", "$.mirror", ["Off", "On"]),
+                    EnumField("flip", "Flip", "$.flip", ["Off", "On"]),
                     EnumField("codec", "Codec", "$.codec", ["H264", "H265"], true),
                     EnumField("profile", "Profile", "$.profile", ["Baseline", "Main", "High"]),
                     StringField("resolution", "Resolution", "$.resolution", true)
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "video.encode.channel",
+                Endpoint = "/NetSDK/Video/encode/channel/*[/properties]",
+                Method = "PUT",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.VideoImage,
+                GroupName = "Video / Image",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.Safe,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
+                Fields =
+                [
+                    NumericField("bitrate", "Bitrate", "$.constantBitRate", 64, 16384),
+                    NumericField("frameRate", "Frame Rate", "$.frameRate", 1, 60),
+                    NumericField("keyframeInterval", "Keyframe Interval", "$.keyFrameInterval", 1, 240),
+                    EnumField("codec", "Codec", "$.codec", ["H264", "H265"]),
+                    EnumField("profile", "Profile", "$.profile", ["Baseline", "Main", "High"]),
+                    StringField("resolution", "Resolution", "$.resolution")
                 ]
             },
             new EndpointContract
@@ -235,11 +265,6 @@ public sealed class EndpointContractCatalogService(
                 ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
                 Fields =
                 [
-                    NumericField("brightness", "Brightness", "$.brightness", 0, 100),
-                    NumericField("contrast", "Contrast", "$.contrast", 0, 100),
-                    NumericField("saturation", "Saturation", "$.saturation", 0, 100),
-                    NumericField("hue", "Hue", "$.hue", 0, 100),
-                    NumericField("sharpness", "Sharpness", "$.sharpness", 0, 100),
                     NumericField("denoise", "Denoise", "$.denoise", 0, 100),
                     EnumField("wdr", "WDR", "$.wdr", ["Off", "On", "Auto"]),
                     EnumField("dayNight", "Day/Night", "$.dayNight", ["Auto", "Day", "Night"]),

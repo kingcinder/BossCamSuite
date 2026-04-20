@@ -33,12 +33,14 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private string _recordingState = "Recording idle.";
     private string _recordingDiagnostics = string.Empty;
     private string _firmwareTruthBadge = "Truth: unknown";
+    private string _imageTruthSummary = "Image truth not loaded.";
     private string _passwordChangeUsername = string.Empty;
     private string _passwordChangeValue = string.Empty;
     private string _wirelessApPsk = string.Empty;
     private string? _selectedPersistenceField;
     private string _lastReachableUrl = string.Empty;
     private readonly List<FieldDependencyRule> _dependencyRules = [];
+    private readonly Dictionary<string, ImageFieldBehaviorMap> _imageBehaviorByField = new(StringComparer.OrdinalIgnoreCase);
 
     public ObservableCollection<DeviceIdentity> Devices { get; } = [];
     public ObservableCollection<EndpointValidationResult> ValidationMatrix { get; } = [];
@@ -46,6 +48,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public ObservableCollection<SemanticWriteObservation> SemanticHistoryRows { get; } = [];
     public ObservableCollection<FieldConstraintRow> ConstraintRows { get; } = [];
     public ObservableCollection<FieldDependencyRuleRow> DependencyRows { get; } = [];
+    public ObservableCollection<ImageControlInventoryItem> ImageInventoryRows { get; } = [];
+    public ObservableCollection<ImageBehaviorRow> ImageBehaviorRows { get; } = [];
+    public ObservableCollection<PromotedImageRow> PromotedImageRows { get; } = [];
     public ObservableCollection<ProbeStageMode> ProbeModes { get; } = new(Enum.GetValues<ProbeStageMode>());
     public ObservableCollection<string> UserList { get; } = [];
     public ObservableCollection<string> PersistenceFieldOptions { get; } = [];
@@ -225,6 +230,19 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
     }
 
+    public string ImageTruthSummary
+    {
+        get => _imageTruthSummary;
+        set
+        {
+            if (_imageTruthSummary != value)
+            {
+                _imageTruthSummary = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
     public string LastReachableUrl
     {
         get => _lastReachableUrl;
@@ -318,6 +336,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public double VideoBitrateMax => HintMax("bitrate", 16384);
     public double ImageBrightnessMin => HintMin("brightness", 0);
     public double ImageBrightnessMax => HintMax("brightness", 100);
+    public string ImageBrightnessBehaviorBadge => BehaviorBadge("brightness");
+    public string ImageContrastBehaviorBadge => BehaviorBadge("contrast");
+    public string ImageSaturationBehaviorBadge => BehaviorBadge("saturation");
 
     // enable flags capability-driven
     public bool CanEditVideoCodec => CanEdit("codec");
@@ -371,6 +392,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private async void LoadSessions_Click(object sender, RoutedEventArgs e) => await RunAsync(LoadSessionsAsync);
     private async void LoadTranscripts_Click(object sender, RoutedEventArgs e) => await RunAsync(LoadTranscriptsAsync);
     private async void DiscoverConstraints_Click(object sender, RoutedEventArgs e) => await RunAsync(DiscoverConstraintsAsync);
+    private async void RunImageTruthSweep_Click(object sender, RoutedEventArgs e) => await RunAsync(RunImageTruthSweepAsync);
     private async void PromoteFixtures_Click(object sender, RoutedEventArgs e) => await RunAsync(PromoteFixturesAsync);
     private async void NativeAssessment_Click(object sender, RoutedEventArgs e) => await RunAsync(LoadNativeAssessmentAsync);
     private async void ApplyValidated_Click(object sender, RoutedEventArgs e) => await RunAsync(() => ApplyPendingEditsAsync(expertOverride: false));
@@ -498,6 +520,21 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         await LoadTypedAsync();
     }
 
+    private async Task RunImageTruthSweepAsync()
+    {
+        if (SelectedDevice is null)
+        {
+            DiagnosticsText = "Select a device first.";
+            return;
+        }
+
+        var request = new { includeBehaviorMapping = true, refreshFromDevice = true, exportRoot = "fixtures" };
+        var result = await PostAsync<JsonObject>($"/api/devices/{SelectedDevice.Id}/image/truth-sweep", request);
+        DiagnosticsText = result?.ToJsonString(new JsonSerializerOptions(SerializerOptions) { WriteIndented = true }) ?? "No response.";
+        await LoadImageTruthAsync();
+        await LoadTypedAsync();
+    }
+
     private async Task LoadNativeAssessmentAsync()
     {
         if (SelectedDevice is null)
@@ -543,6 +580,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         PopulateUserList();
         await LoadSemanticTrustAsync();
+        await LoadImageTruthAsync();
         await LoadTruthBadgeAsync();
         NotifyAllEditorProperties();
     }
@@ -678,6 +716,76 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         ApplyDependencyFilters();
     }
+
+    private async Task LoadImageTruthAsync()
+    {
+        if (SelectedDevice is null)
+        {
+            return;
+        }
+
+        var inventory = await GetAsync<List<ImageControlInventoryItem>>($"/api/devices/{SelectedDevice.Id}/image/inventory") ?? [];
+        var maps = await GetAsync<List<ImageFieldBehaviorMap>>($"/api/devices/{SelectedDevice.Id}/image/behavior-maps") ?? [];
+        ReplaceCollection(ImageInventoryRows, inventory.OrderBy(item => item.FieldKey, StringComparer.OrdinalIgnoreCase).ToList());
+        ReplaceCollection(PromotedImageRows, inventory
+            .Where(static item => item.PromotedToUi)
+            .OrderBy(item => item.FieldKey, StringComparer.OrdinalIgnoreCase)
+            .Select(item => new PromotedImageRow
+            {
+                FieldKey = item.FieldKey,
+                Classification = ClassificationBadge(item),
+                Status = item.Status.ToString(),
+                SourceEndpoint = item.SourceEndpoint,
+                Notes = string.IsNullOrWhiteSpace(item.Notes)
+                    ? string.Join(",", item.ReasonCodes)
+                    : $"{item.Notes} ({string.Join(",", item.ReasonCodes)})"
+            })
+            .ToList());
+        _imageBehaviorByField.Clear();
+        foreach (var map in maps)
+        {
+            _imageBehaviorByField[map.FieldKey] = map;
+        }
+
+        ReplaceCollection(ImageBehaviorRows, maps
+            .OrderBy(map => map.FieldKey, StringComparer.OrdinalIgnoreCase)
+            .Select(static map => new ImageBehaviorRow
+            {
+                FieldKey = map.FieldKey,
+                SafeRange = map.RecommendedRange,
+                Thresholds = string.Join(", ", map.Thresholds.Select(value => value.ToString("0.##"))),
+                CatastrophicValues = string.Join(", ", map.CatastrophicValues.Select(value => value.ToString("0.##"))),
+                TriggerSequence = map.TriggerSequence,
+                TruthState = map.TruthState.ToString()
+            })
+            .ToList());
+
+        var writable = inventory.Count(item => item.CandidateClassification == HiddenCandidateClassification.Writable);
+        var readOnly = inventory.Count(item => item.CandidateClassification == HiddenCandidateClassification.ReadableOnly);
+        var hidden = inventory.Count(item => item.CandidateClassification == HiddenCandidateClassification.HiddenAdjacentCandidate);
+        var needsAuth = inventory.Count(item => item.CandidateClassification == HiddenCandidateClassification.NoSemanticProof);
+        var likely = inventory.Count(item => item.CandidateClassification == HiddenCandidateClassification.LikelyUnsupported);
+        var unsupported = inventory.Count(item => item.CandidateClassification == HiddenCandidateClassification.UnsupportedOnFirmware);
+        ImageTruthSummary = $"Inventory: {inventory.Count} fields | proven={writable} | read-only={readOnly} | hidden={hidden} | needs-auth/no-proof={needsAuth} | likely-unsupported={likely} | unsupported={unsupported}. Behavior maps={maps.Count}.";
+        NotifyAllEditorProperties();
+    }
+
+    private static string ClassificationBadge(ImageControlInventoryItem item)
+        => item.CandidateClassification switch
+        {
+            HiddenCandidateClassification.Writable => "Proven",
+            HiddenCandidateClassification.ReadableOnly => "Read-only",
+            HiddenCandidateClassification.HiddenAdjacentCandidate => "Hidden candidate",
+            HiddenCandidateClassification.PrivatePathCandidate => "Private path candidate",
+            HiddenCandidateClassification.NoSemanticProof => "Needs live auth / No semantic proof",
+            HiddenCandidateClassification.LikelyUnsupported => "Likely unsupported",
+            HiddenCandidateClassification.UnsupportedOnFirmware => "Unsupported",
+            HiddenCandidateClassification.RejectedByFirmware => "Rejected by firmware",
+            HiddenCandidateClassification.RequiresCommitTrigger => "Requires commit trigger",
+            HiddenCandidateClassification.Dangerous => "Dangerous",
+            HiddenCandidateClassification.Ignored => "Ignored",
+            _ => item.CandidateClassification.ToString()
+        };
 
     private async Task LoadTranscriptsAsync()
     {
@@ -1095,6 +1203,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private double HintMin(string key, double fallback)
     {
+        if (_imageBehaviorByField.TryGetValue(key, out var behavior) && behavior.SafeMin is decimal safeMin)
+        {
+            return (double)safeMin;
+        }
+
         if (_editorHintByKey.TryGetValue(key, out var hint) && hint.Min is decimal min)
         {
             return (double)min;
@@ -1105,6 +1218,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private double HintMax(string key, double fallback)
     {
+        if (_imageBehaviorByField.TryGetValue(key, out var behavior) && behavior.SafeMax is decimal safeMax)
+        {
+            return (double)safeMax;
+        }
+
         if (_editorHintByKey.TryGetValue(key, out var hint) && hint.Max is decimal max)
         {
             return (double)max;
@@ -1141,6 +1259,25 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         {
             target.Add(value);
         }
+    }
+
+    private string BehaviorBadge(string fieldKey)
+    {
+        if (!_imageBehaviorByField.TryGetValue(fieldKey, out var behavior))
+        {
+            return "unmapped";
+        }
+
+        var threshold = behavior.Thresholds.Count > 0
+            ? $" thresholds:{string.Join("/", behavior.Thresholds.Select(value => value.ToString("0.##")))}"
+            : string.Empty;
+        var cliffs = behavior.CatastrophicValues.Count > 0
+            ? $" cliffs:{string.Join("/", behavior.CatastrophicValues.Select(value => value.ToString("0.##")))}"
+            : string.Empty;
+        var trigger = !string.IsNullOrWhiteSpace(behavior.TriggerSequence) && !behavior.TriggerSequence.Equals("none-observed", StringComparison.OrdinalIgnoreCase)
+            ? $" trigger:{behavior.TriggerSequence}"
+            : string.Empty;
+        return $"safe:{behavior.RecommendedRange}{threshold}{cliffs}{trigger}";
     }
 
     private void ApplyDependencyFilters()
@@ -1252,6 +1389,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             nameof(VideoFpsHint),
             nameof(VideoFrameRate), nameof(ImageBrightness), nameof(ImageBrightnessSlider), nameof(ImageBrightnessMin), nameof(ImageBrightnessMax),
             nameof(ImageContrast), nameof(ImageSaturation), nameof(ImageHue), nameof(ImageSharpness),
+            nameof(ImageBrightnessBehaviorBadge), nameof(ImageContrastBehaviorBadge), nameof(ImageSaturationBehaviorBadge), nameof(ImageTruthSummary),
             nameof(NetworkIp), nameof(NetworkNetmask), nameof(NetworkGateway), nameof(NetworkDns), nameof(NetworkPort),
             nameof(CurrentControlUrl), nameof(PredictedControlUrl),
             nameof(WirelessApSsid), nameof(WirelessApChannel),
@@ -1476,6 +1614,25 @@ public sealed class FieldConstraintRow
     public string Min { get; init; } = string.Empty;
     public string Max { get; init; } = string.Empty;
     public string Quality { get; init; } = string.Empty;
+    public string Notes { get; init; } = string.Empty;
+}
+
+public sealed class ImageBehaviorRow
+{
+    public string FieldKey { get; init; } = string.Empty;
+    public string SafeRange { get; init; } = string.Empty;
+    public string Thresholds { get; init; } = string.Empty;
+    public string CatastrophicValues { get; init; } = string.Empty;
+    public string TriggerSequence { get; init; } = string.Empty;
+    public string TruthState { get; init; } = string.Empty;
+}
+
+public sealed class PromotedImageRow
+{
+    public string FieldKey { get; init; } = string.Empty;
+    public string Classification { get; init; } = string.Empty;
+    public string Status { get; init; } = string.Empty;
+    public string SourceEndpoint { get; init; } = string.Empty;
     public string Notes { get; init; } = string.Empty;
 }
 

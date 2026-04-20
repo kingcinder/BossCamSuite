@@ -43,7 +43,10 @@ public sealed class SqliteApplicationStore(IOptions<BossCamRuntimeOptions> optio
                 "CREATE TABLE IF NOT EXISTS recording_segments (id TEXT PRIMARY KEY, device_id TEXT NOT NULL, profile_id TEXT NOT NULL, payload TEXT NOT NULL, indexed_at TEXT NOT NULL)",
                 "CREATE TABLE IF NOT EXISTS semantic_write_observations (id TEXT PRIMARY KEY, device_id TEXT NOT NULL, payload TEXT NOT NULL, timestamp TEXT NOT NULL)",
                 "CREATE TABLE IF NOT EXISTS field_constraint_profiles (constraint_key TEXT PRIMARY KEY, firmware_fingerprint TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL)",
-                "CREATE TABLE IF NOT EXISTS dependency_matrix_profiles (matrix_key TEXT PRIMARY KEY, firmware_fingerprint TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL)"
+                "CREATE TABLE IF NOT EXISTS dependency_matrix_profiles (matrix_key TEXT PRIMARY KEY, firmware_fingerprint TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL)",
+                "CREATE TABLE IF NOT EXISTS image_control_inventory (inventory_key TEXT PRIMARY KEY, device_id TEXT NOT NULL, firmware_fingerprint TEXT NOT NULL, payload TEXT NOT NULL, captured_at TEXT NOT NULL)",
+                "CREATE TABLE IF NOT EXISTS image_behavior_maps (behavior_key TEXT PRIMARY KEY, device_id TEXT NOT NULL, firmware_fingerprint TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL)",
+                "CREATE TABLE IF NOT EXISTS image_writable_test_sets (device_id TEXT PRIMARY KEY, firmware_fingerprint TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL)"
             };
 
             foreach (var text in commands)
@@ -508,6 +511,86 @@ public sealed class SqliteApplicationStore(IOptions<BossCamRuntimeOptions> optio
         return await QueryPayloadListAsync<DependencyMatrixProfile>("SELECT payload FROM dependency_matrix_profiles WHERE firmware_fingerprint = $firmware ORDER BY updated_at DESC", parameters => parameters.AddWithValue("$firmware", firmwareFingerprint), cancellationToken);
     }
 
+    public async Task SaveImageControlInventoryAsync(IEnumerable<ImageControlInventoryItem> items, CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            await using var connection = OpenConnection();
+            await connection.OpenAsync(cancellationToken);
+            foreach (var item in items)
+            {
+                await using var command = connection.CreateCommand();
+                command.CommandText = "INSERT INTO image_control_inventory (inventory_key, device_id, firmware_fingerprint, payload, captured_at) VALUES ($key, $device_id, $firmware, $payload, $captured_at) ON CONFLICT(inventory_key) DO UPDATE SET firmware_fingerprint = excluded.firmware_fingerprint, payload = excluded.payload, captured_at = excluded.captured_at";
+                command.Parameters.AddWithValue("$key", BuildImageInventoryKey(item));
+                command.Parameters.AddWithValue("$device_id", item.DeviceId.ToString());
+                command.Parameters.AddWithValue("$firmware", item.FirmwareFingerprint);
+                command.Parameters.AddWithValue("$payload", JsonSerializer.Serialize(item, _serializerOptions));
+                command.Parameters.AddWithValue("$captured_at", item.CapturedAt.ToString("O"));
+                await command.ExecuteNonQueryAsync(cancellationToken);
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task<IReadOnlyCollection<ImageControlInventoryItem>> GetImageControlInventoryAsync(Guid deviceId, CancellationToken cancellationToken)
+        => await QueryPayloadListAsync<ImageControlInventoryItem>("SELECT payload FROM image_control_inventory WHERE device_id = $id ORDER BY captured_at DESC", parameters => parameters.AddWithValue("$id", deviceId.ToString()), cancellationToken);
+
+    public async Task SaveImageBehaviorMapsAsync(IEnumerable<ImageFieldBehaviorMap> maps, CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            await using var connection = OpenConnection();
+            await connection.OpenAsync(cancellationToken);
+            foreach (var map in maps)
+            {
+                await using var command = connection.CreateCommand();
+                command.CommandText = "INSERT INTO image_behavior_maps (behavior_key, device_id, firmware_fingerprint, payload, updated_at) VALUES ($key, $device_id, $firmware, $payload, $updated_at) ON CONFLICT(behavior_key) DO UPDATE SET firmware_fingerprint = excluded.firmware_fingerprint, payload = excluded.payload, updated_at = excluded.updated_at";
+                command.Parameters.AddWithValue("$key", BuildImageBehaviorKey(map));
+                command.Parameters.AddWithValue("$device_id", map.DeviceId.ToString());
+                command.Parameters.AddWithValue("$firmware", map.FirmwareFingerprint);
+                command.Parameters.AddWithValue("$payload", JsonSerializer.Serialize(map, _serializerOptions));
+                command.Parameters.AddWithValue("$updated_at", map.UpdatedAt.ToString("O"));
+                await command.ExecuteNonQueryAsync(cancellationToken);
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task<IReadOnlyCollection<ImageFieldBehaviorMap>> GetImageBehaviorMapsAsync(Guid deviceId, CancellationToken cancellationToken)
+        => await QueryPayloadListAsync<ImageFieldBehaviorMap>("SELECT payload FROM image_behavior_maps WHERE device_id = $id ORDER BY updated_at DESC", parameters => parameters.AddWithValue("$id", deviceId.ToString()), cancellationToken);
+
+    public async Task SaveImageWritableTestSetAsync(ImageWritableTestSetProfile profile, CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            await using var connection = OpenConnection();
+            await connection.OpenAsync(cancellationToken);
+            await using var command = connection.CreateCommand();
+            command.CommandText = "INSERT INTO image_writable_test_sets (device_id, firmware_fingerprint, payload, updated_at) VALUES ($id, $firmware, $payload, $updated_at) ON CONFLICT(device_id) DO UPDATE SET firmware_fingerprint = excluded.firmware_fingerprint, payload = excluded.payload, updated_at = excluded.updated_at";
+            command.Parameters.AddWithValue("$id", profile.DeviceId.ToString());
+            command.Parameters.AddWithValue("$firmware", profile.FirmwareFingerprint);
+            command.Parameters.AddWithValue("$payload", JsonSerializer.Serialize(profile, _serializerOptions));
+            command.Parameters.AddWithValue("$updated_at", profile.UpdatedAt.ToString("O"));
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task<ImageWritableTestSetProfile?> GetImageWritableTestSetAsync(Guid deviceId, CancellationToken cancellationToken)
+        => await QuerySinglePayloadAsync<ImageWritableTestSetProfile>("SELECT payload FROM image_writable_test_sets WHERE device_id = $id", parameters => parameters.AddWithValue("$id", deviceId.ToString()), cancellationToken);
+
     private async Task UpsertPayloadAsync<T>(string tableName, string keyColumn, string key, T payload, DateTimeOffset timestamp, CancellationToken cancellationToken, string? deviceId = null)
     {
         await _gate.WaitAsync(cancellationToken);
@@ -642,6 +725,12 @@ public sealed class SqliteApplicationStore(IOptions<BossCamRuntimeOptions> optio
 
     private static string BuildDependencyMatrixKey(DependencyMatrixProfile profile)
         => $"{profile.FirmwareFingerprint}:{profile.GroupName}";
+
+    private static string BuildImageInventoryKey(ImageControlInventoryItem item)
+        => $"{item.DeviceId:N}:{item.FirmwareFingerprint}:{item.FieldKey}";
+
+    private static string BuildImageBehaviorKey(ImageFieldBehaviorMap map)
+        => $"{map.DeviceId:N}:{map.FirmwareFingerprint}:{map.FieldKey}:{map.ContractKey}";
 
     private static JsonSerializerOptions CreateSerializerOptions()
     {

@@ -17,6 +17,7 @@ public static class CoreServiceCollectionExtensions
         services.AddSingleton<CapabilityPromotionService>();
         services.AddSingleton<PersistenceVerificationService>();
         services.AddSingleton<SemanticTrustService>();
+        services.AddSingleton<ImageTruthService>();
         services.AddSingleton<ProbeSessionService>();
         services.AddSingleton<TransportBroker>();
         services.AddSingleton<RecordingService>();

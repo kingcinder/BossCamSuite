@@ -103,4 +103,10 @@ public interface IApplicationStore
     Task<IReadOnlyCollection<FieldConstraintProfile>> GetFieldConstraintProfilesAsync(string? firmwareFingerprint, CancellationToken cancellationToken);
     Task SaveDependencyMatrixProfilesAsync(IEnumerable<DependencyMatrixProfile> profiles, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<DependencyMatrixProfile>> GetDependencyMatrixProfilesAsync(string? firmwareFingerprint, CancellationToken cancellationToken);
+    Task SaveImageControlInventoryAsync(IEnumerable<ImageControlInventoryItem> items, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<ImageControlInventoryItem>> GetImageControlInventoryAsync(Guid deviceId, CancellationToken cancellationToken);
+    Task SaveImageBehaviorMapsAsync(IEnumerable<ImageFieldBehaviorMap> maps, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<ImageFieldBehaviorMap>> GetImageBehaviorMapsAsync(Guid deviceId, CancellationToken cancellationToken);
+    Task SaveImageWritableTestSetAsync(ImageWritableTestSetProfile profile, CancellationToken cancellationToken);
+    Task<ImageWritableTestSetProfile?> GetImageWritableTestSetAsync(Guid deviceId, CancellationToken cancellationToken);
 }

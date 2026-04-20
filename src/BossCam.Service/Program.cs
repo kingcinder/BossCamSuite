@@ -183,6 +183,25 @@ app.MapPost("/api/devices/{id:guid}/constraints/discover", async (Guid id, Const
     var result = await semanticTrustService.DiscoverConstraintsAsync(request with { DeviceId = id }, ct);
     return result is null ? Results.NotFound() : Results.Ok(result);
 });
+app.MapPost("/api/devices/{id:guid}/image/truth-sweep", async (Guid id, ImageTruthSweepRequest? request, ImageTruthService imageTruthService, CancellationToken ct) =>
+{
+    var result = await imageTruthService.RunImageTruthSweepAsync(
+        id,
+        request?.IncludeBehaviorMapping ?? true,
+        request?.RefreshFromDevice ?? true,
+        request?.ExportRoot,
+        ct);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
+app.MapGet("/api/devices/{id:guid}/image/inventory", async (Guid id, ImageTruthService imageTruthService, CancellationToken ct) =>
+    Results.Ok(await imageTruthService.GetInventoryAsync(id, ct)));
+app.MapGet("/api/devices/{id:guid}/image/writable-test-set", async (Guid id, ImageTruthService imageTruthService, CancellationToken ct) =>
+{
+    var result = await imageTruthService.GetWritableTestSetAsync(id, ct);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
+app.MapGet("/api/devices/{id:guid}/image/behavior-maps", async (Guid id, ImageTruthService imageTruthService, CancellationToken ct) =>
+    Results.Ok(await imageTruthService.GetBehaviorMapsAsync(id, ct)));
 app.MapPost("/api/devices/{id:guid}/network/recovery", async (Guid id, NetworkRecoveryContext context, SemanticTrustService semanticTrustService, CancellationToken ct) =>
     Results.Ok(await semanticTrustService.RecoverNetworkAsync(context with { DeviceId = id }, ct)));
 app.MapGet("/api/recordings", async (Guid? deviceId, IApplicationStore store, CancellationToken ct) => Results.Ok(await store.GetRecordingProfilesAsync(deviceId, ct)));
@@ -281,3 +300,4 @@ public sealed record TypedSettingApplyRequest(string FieldKey, JsonNode? Value, 
 public sealed record TypedSettingBatchApplyRequest(IReadOnlyCollection<TypedFieldChange> Changes, bool ExpertOverride);
 public sealed record PersistenceFieldVerifyRequest(string FieldKey, JsonNode? Value, bool RebootForVerification, bool ExpertOverride);
 public sealed record ContractFixturePromotionRequest(string ExportRoot);
+public sealed record ImageTruthSweepRequest(bool IncludeBehaviorMapping, bool RefreshFromDevice, string? ExportRoot);

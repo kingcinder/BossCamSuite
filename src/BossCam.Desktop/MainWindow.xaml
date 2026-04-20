@@ -35,6 +35,7 @@
                         <Button Margin="0,0,8,8" Padding="10,5" Click="LoadSessions_Click">Probe Sessions</Button>
                         <Button Margin="0,0,8,8" Padding="10,5" Click="LoadTranscripts_Click">Transcripts</Button>
                         <Button Margin="0,0,8,8" Padding="10,5" Click="DiscoverConstraints_Click">Discover Constraints</Button>
+                        <Button Margin="0,0,8,8" Padding="10,5" Click="RunImageTruthSweep_Click">Image Truth Sweep</Button>
                         <Button Margin="0,0,8,8" Padding="10,5" Click="PromoteFixtures_Click">Promote Fixtures</Button>
                         <Button Margin="0,0,8,8" Padding="10,5" Click="NativeAssessment_Click">Native Gap</Button>
                     </WrapPanel>
@@ -88,6 +89,7 @@
                             <ScrollViewer VerticalScrollBarVisibility="Auto">
                                 <StackPanel Margin="4">
                                     <TextBlock Text="{Binding VideoEditorNotice}" Foreground="#E5D9BF" Margin="0,0,0,10"/>
+                                    <TextBlock Text="{Binding ImageTruthSummary}" Foreground="#FFD27A" Margin="0,0,0,10" TextWrapping="Wrap"/>
                                     <WrapPanel Margin="0,0,0,8" Visibility="{Binding VideoCodecVisibility}">
                                         <TextBlock Width="140" Text="Codec" VerticalAlignment="Center"/>
                                         <ComboBox Width="180" ItemsSource="{Binding VideoCodecOptions}" SelectedItem="{Binding VideoCodec}" IsEnabled="{Binding CanEditVideoCodec}"/>
@@ -128,14 +130,17 @@
                                         <TextBlock Width="140" Text="Brightness" VerticalAlignment="Center"/>
                                         <TextBox Width="110" Text="{Binding ImageBrightness}"/>
                                         <Slider Width="200" Margin="10,0,0,0" Minimum="{Binding ImageBrightnessMin}" Maximum="{Binding ImageBrightnessMax}" Value="{Binding ImageBrightnessSlider}" />
+                                        <TextBlock Margin="12,0,0,0" Text="{Binding ImageBrightnessBehaviorBadge}" VerticalAlignment="Center"/>
                                     </WrapPanel>
                                     <WrapPanel Margin="0,0,0,8" Visibility="{Binding ImageContrastVisibility}">
                                         <TextBlock Width="140" Text="Contrast" VerticalAlignment="Center"/>
                                         <TextBox Width="110" Text="{Binding ImageContrast}"/>
+                                        <TextBlock Margin="12,0,0,0" Text="{Binding ImageContrastBehaviorBadge}" VerticalAlignment="Center"/>
                                     </WrapPanel>
                                     <WrapPanel Margin="0,0,0,8" Visibility="{Binding ImageSaturationVisibility}">
                                         <TextBlock Width="140" Text="Saturation" VerticalAlignment="Center"/>
                                         <TextBox Width="110" Text="{Binding ImageSaturation}"/>
+                                        <TextBlock Margin="12,0,0,0" Text="{Binding ImageSaturationBehaviorBadge}" VerticalAlignment="Center"/>
                                     </WrapPanel>
                                     <WrapPanel Margin="0,0,0,8" Visibility="{Binding ImageHueVisibility}">
                                         <TextBlock Width="140" Text="Hue" VerticalAlignment="Center"/>
@@ -145,6 +150,17 @@
                                         <TextBlock Width="140" Text="Sharpness" VerticalAlignment="Center"/>
                                         <TextBox Width="110" Text="{Binding ImageSharpness}"/>
                                     </WrapPanel>
+                                    <Separator Margin="0,12,0,10"/>
+                                    <TextBlock Text="Promoted Hidden Candidates (Proven)" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                    <DataGrid ItemsSource="{Binding PromotedImageRows}" AutoGenerateColumns="False" Background="#0E171E" BorderThickness="0" MaxHeight="220">
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="Field" Binding="{Binding FieldKey}" Width="*"/>
+                                            <DataGridTextColumn Header="Class" Binding="{Binding Classification}" Width="1.3*"/>
+                                            <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="1.2*"/>
+                                            <DataGridTextColumn Header="Endpoint" Binding="{Binding SourceEndpoint}" Width="2*"/>
+                                            <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="2*"/>
+                                        </DataGrid.Columns>
+                                    </DataGrid>
                                 </StackPanel>
                             </ScrollViewer>
                         </TabItem>
@@ -315,6 +331,31 @@
                                                 <DataGridTextColumn Header="Allowed Values" Binding="{Binding AllowedPrimaryValues}" Width="1.7*"/>
                                                 <DataGridTextColumn Header="Quality" Binding="{Binding Quality}" Width="*"/>
                                                 <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="1.6*"/>
+                                            </DataGrid.Columns>
+                                        </DataGrid>
+                                    </TabItem>
+                                    <TabItem Header="Image Inventory">
+                                        <DataGrid ItemsSource="{Binding ImageInventoryRows}" AutoGenerateColumns="False" Background="#0E171E" BorderThickness="0">
+                                            <DataGrid.Columns>
+                                                <DataGridTextColumn Header="Field" Binding="{Binding FieldKey}" Width="*"/>
+                                                <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="1.4*"/>
+                                                <DataGridTextColumn Header="Class" Binding="{Binding CandidateClassification}" Width="1.5*"/>
+                                                <DataGridCheckBoxColumn Header="Readable" Binding="{Binding Readable}" Width="*"/>
+                                                <DataGridCheckBoxColumn Header="Writable" Binding="{Binding Writable}" Width="*"/>
+                                                <DataGridTextColumn Header="Endpoint" Binding="{Binding SourceEndpoint}" Width="2*"/>
+                                                <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="2*"/>
+                                            </DataGrid.Columns>
+                                        </DataGrid>
+                                    </TabItem>
+                                    <TabItem Header="Image Behavior">
+                                        <DataGrid ItemsSource="{Binding ImageBehaviorRows}" AutoGenerateColumns="False" Background="#0E171E" BorderThickness="0">
+                                            <DataGrid.Columns>
+                                                <DataGridTextColumn Header="Field" Binding="{Binding FieldKey}" Width="*"/>
+                                                <DataGridTextColumn Header="Safe Range" Binding="{Binding SafeRange}" Width="1.2*"/>
+                                                <DataGridTextColumn Header="Thresholds" Binding="{Binding Thresholds}" Width="1.5*"/>
+                                                <DataGridTextColumn Header="Catastrophic" Binding="{Binding CatastrophicValues}" Width="1.5*"/>
+                                                <DataGridTextColumn Header="Trigger" Binding="{Binding TriggerSequence}" Width="1.3*"/>
+                                                <DataGridTextColumn Header="Truth" Binding="{Binding TruthState}" Width="*"/>
                                             </DataGrid.Columns>
                                         </DataGrid>
                                     </TabItem>

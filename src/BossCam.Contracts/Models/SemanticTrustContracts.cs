@@ -112,3 +112,164 @@ public sealed record NetworkRecoveryResult
     public IReadOnlyCollection<string> ProbedUrls { get; init; } = [];
     public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
 }
+
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum ImageInventoryStatus
+{
+    Readable,
+    Writable,
+    Blocked,
+    TransportSuccessNoSemanticChange,
+    HiddenAdjacentCandidate,
+    Uncertain
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum HiddenCandidateClassification
+{
+    ReadableOnly,
+    Writable,
+    Ignored,
+    Dangerous,
+    RequiresCommitTrigger,
+    HiddenAdjacentCandidate,
+    PrivatePathCandidate,
+    NoSemanticProof,
+    RejectedByFirmware,
+    LikelyUnsupported,
+    UnsupportedOnFirmware,
+    Uncertain
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum ImageBehaviorClass
+{
+    NoObservableChange,
+    MinorChange,
+    ModerateChange,
+    ThresholdJump,
+    CatastrophicDark,
+    CatastrophicBright,
+    TemporarySpikeThenSettles,
+    Unstable,
+    Clamped,
+    Ignored,
+    Rejected,
+    Uncertain
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum ImageCommitBehavior
+{
+    ImmediateApplied,
+    DelayedApplied,
+    StoredOnly,
+    RequiresSecondaryTrigger,
+    RequiresApplyEndpoint,
+    RequiresReboot,
+    Unknown
+}
+
+public sealed record ImageControlInventoryItem
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid DeviceId { get; init; }
+    public string FirmwareFingerprint { get; init; } = string.Empty;
+    public string FieldKey { get; init; } = string.Empty;
+    public string DisplayName { get; init; } = string.Empty;
+    public string SourceEndpoint { get; init; } = string.Empty;
+    public string SourcePath { get; init; } = string.Empty;
+    public bool Readable { get; init; }
+    public bool Writable { get; init; }
+    public bool WriteVerified { get; init; }
+    public ContractSupportState SupportState { get; init; } = ContractSupportState.Uncertain;
+    public ContractTruthState TruthState { get; init; } = ContractTruthState.Unverified;
+    public ImageInventoryStatus Status { get; init; } = ImageInventoryStatus.Uncertain;
+    public HiddenCandidateClassification CandidateClassification { get; init; } = HiddenCandidateClassification.Uncertain;
+    public bool PromotedToUi { get; init; }
+    public IReadOnlyCollection<string> ReasonCodes { get; init; } = [];
+    public string Notes { get; init; } = string.Empty;
+    public DateTimeOffset CapturedAt { get; init; } = DateTimeOffset.UtcNow;
+}
+
+public sealed record ImageWritableTestCase
+{
+    public string FieldKey { get; init; } = string.Empty;
+    public string DisplayName { get; init; } = string.Empty;
+    public string ContractKey { get; init; } = string.Empty;
+    public string SourceEndpoint { get; init; } = string.Empty;
+    public string SourcePath { get; init; } = string.Empty;
+    public JsonNode? BaselineValue { get; init; }
+    public IReadOnlyCollection<JsonNode?> CandidateValues { get; init; } = [];
+    public string Notes { get; init; } = string.Empty;
+}
+
+public sealed record ImageWritableTestSetProfile
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid DeviceId { get; init; }
+    public string FirmwareFingerprint { get; init; } = string.Empty;
+    public IReadOnlyCollection<ImageWritableTestCase> Cases { get; init; } = [];
+    public DateTimeOffset UpdatedAt { get; init; } = DateTimeOffset.UtcNow;
+}
+
+public sealed record OperationalImageMetric
+{
+    public string CaptureMode { get; init; } = "none";
+    public double? LuminanceMeanBefore { get; init; }
+    public double? LuminanceMeanAfter { get; init; }
+    public double? ContrastSpreadBefore { get; init; }
+    public double? ContrastSpreadAfter { get; init; }
+    public double? BlackClipBefore { get; init; }
+    public double? BlackClipAfter { get; init; }
+    public double? WhiteClipBefore { get; init; }
+    public double? WhiteClipAfter { get; init; }
+    public string Notes { get; init; } = string.Empty;
+}
+
+public sealed record ImageBehaviorPoint
+{
+    public JsonNode? AttemptedValue { get; init; }
+    public JsonNode? BaselineValue { get; init; }
+    public JsonNode? ImmediateValue { get; init; }
+    public JsonNode? Delayed1sValue { get; init; }
+    public JsonNode? Delayed3sValue { get; init; }
+    public JsonNode? Delayed5sValue { get; init; }
+    public SemanticWriteStatus SemanticStatus { get; init; } = SemanticWriteStatus.Unverified;
+    public ImageBehaviorClass BehaviorClass { get; init; } = ImageBehaviorClass.Uncertain;
+    public ImageCommitBehavior CommitBehavior { get; init; } = ImageCommitBehavior.Unknown;
+    public OperationalImageMetric OperationalMetric { get; init; } = new();
+    public string Notes { get; init; } = string.Empty;
+    public DateTimeOffset CapturedAt { get; init; } = DateTimeOffset.UtcNow;
+}
+
+public sealed record ImageFieldBehaviorMap
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid DeviceId { get; init; }
+    public string FirmwareFingerprint { get; init; } = string.Empty;
+    public string FieldKey { get; init; } = string.Empty;
+    public string DisplayName { get; init; } = string.Empty;
+    public string ContractKey { get; init; } = string.Empty;
+    public string SourceEndpoint { get; init; } = string.Empty;
+    public string SourcePath { get; init; } = string.Empty;
+    public IReadOnlyCollection<ImageBehaviorPoint> Points { get; init; } = [];
+    public decimal? SafeMin { get; init; }
+    public decimal? SafeMax { get; init; }
+    public IReadOnlyCollection<decimal> Thresholds { get; init; } = [];
+    public IReadOnlyCollection<decimal> CatastrophicValues { get; init; } = [];
+    public string RecommendedRange { get; init; } = string.Empty;
+    public string TriggerSequence { get; init; } = string.Empty;
+    public ContractTruthState TruthState { get; init; } = ContractTruthState.Unverified;
+    public DateTimeOffset UpdatedAt { get; init; } = DateTimeOffset.UtcNow;
+}
+
+public sealed record ImageTruthSweepResult
+{
+    public Guid DeviceId { get; init; }
+    public string FirmwareFingerprint { get; init; } = string.Empty;
+    public IReadOnlyCollection<ImageControlInventoryItem> Inventory { get; init; } = [];
+    public IReadOnlyCollection<ImageWritableTestCase> WritableTestSet { get; init; } = [];
+    public IReadOnlyCollection<ImageFieldBehaviorMap> BehaviorMaps { get; init; } = [];
+    public string Notes { get; init; } = string.Empty;
+}

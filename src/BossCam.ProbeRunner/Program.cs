@@ -19,6 +19,7 @@ var store = services.GetRequiredService<IApplicationStore>();
 var protocolCatalog = services.GetRequiredService<ProtocolCatalogService>();
 var discovery = services.GetRequiredService<DiscoveryCoordinator>();
 var probeSessions = services.GetRequiredService<ProbeSessionService>();
+var imageTruth = services.GetRequiredService<ImageTruthService>();
 var cli = ProbeCliOptions.Parse(args);
 
 await store.InitializeAsync(CancellationToken.None);
@@ -83,6 +84,28 @@ if (cli.ExportTruthSweep)
     Console.WriteLine($"Exported truth sweep report: {Path.GetFullPath(reportPath)}");
 }
 
+if (cli.ImageSweep)
+{
+    var targets = created.Where(session => session.DeviceId != Guid.Empty).Select(session => session.DeviceId).Distinct().ToList();
+    if (targets.Count == 0 && cli.DeviceId is Guid directId)
+    {
+        targets.Add(directId);
+    }
+
+    foreach (var deviceId in targets)
+    {
+        Console.WriteLine($"Running image truth sweep for device {deviceId} ...");
+        var result = await imageTruth.RunImageTruthSweepAsync(deviceId, includeBehaviorMapping: true, refreshFromDevice: true, cli.ExportDirectory ?? "fixtures", CancellationToken.None);
+        if (result is null)
+        {
+            Console.WriteLine("  image sweep skipped (device missing).");
+            continue;
+        }
+
+        Console.WriteLine($"  inventory={result.Inventory.Count} writable={result.WritableTestSet.Count} maps={result.BehaviorMaps.Count}");
+    }
+}
+
 Console.WriteLine("Probe runner complete.");
 
 internal sealed record ProbeCliOptions
@@ -99,6 +122,7 @@ internal sealed record ProbeCliOptions
     public string? ExportSummaryPath { get; init; }
     public bool ExportTruthSweep { get; init; }
     public string? TruthSweepPath { get; init; }
+    public bool ImageSweep { get; init; }
 
     public static ProbeCliOptions Parse(string[] args)
     {
@@ -151,7 +175,8 @@ internal sealed record ProbeCliOptions
             ExportDirectory = map.GetValueOrDefault("--export-dir"),
             ExportSummaryPath = map.GetValueOrDefault("--export-summary"),
             ExportTruthSweep = bool.TryParse(map.GetValueOrDefault("--export-truth-sweep"), out var exportTruth) && exportTruth,
-            TruthSweepPath = map.GetValueOrDefault("--truth-sweep-path")
+            TruthSweepPath = map.GetValueOrDefault("--truth-sweep-path"),
+            ImageSweep = bool.TryParse(map.GetValueOrDefault("--image-sweep"), out var imageSweep) && imageSweep
         };
     }
 }
