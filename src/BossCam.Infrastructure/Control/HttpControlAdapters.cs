@@ -193,7 +193,7 @@ public sealed class LanDirectNetSdkRestAdapter(
         ["Detection"] = ["/NetSDK/Video/motionDetection/channels", "/NetSDK/Video/motionDetection/channel/1", "/NetSDK/IO/alarmInput/channels", "/NetSDK/IO/alarmInput/channel/1", "/NetSDK/IO/alarmOutput/channels", "/NetSDK/IO/alarmOutput/channel/1"],
         ["PTZ"] = ["/NetSDK/PTZ/channels"],
         ["Stream"] = ["/NetSDK/Stream/channles", "/NetSDK/Stream/channel/ID"],
-        ["Image"] = ["/NetSDK/Image", "/NetSDK/Image/irCutFilter", "/NetSDK/Image/manualSharpness", "/NetSDK/Image/denoise3d", "/NetSDK/Image/wdr", "/NetSDK/Image/AF", "/NetSDK/Video/input/channel/1/privacyMask/1"],
+        ["Image"] = ["/NetSDK/Image", "/NetSDK/Image/irCutFilter", "/NetSDK/Image/manualSharpness", "/NetSDK/Image/denoise3d", "/NetSDK/Image/wdr", "/NetSDK/Image/gamma", "/NetSDK/Image/AF", "/NetSDK/Factory?cmd=WhiteLightCtrl", "/NetSDK/Factory?cmd=InfraRedCtrl", "/NetSDK/Video/input/channel/1/privacyMask/1"],
         ["Storage"] = ["/NetSDK/SDCard/status", "/NetSDK/SDCard/media/search", "/NetSDK/SDCard/format"]
     };
 

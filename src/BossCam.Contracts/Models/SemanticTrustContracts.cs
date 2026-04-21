@@ -127,17 +127,28 @@ public enum ImageInventoryStatus
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum HiddenCandidateClassification
 {
+    ProvenReadable,
+    ProvenWritable,
+    ProvenWritablePersistent,
     ReadableOnly,
     Writable,
     Ignored,
     Dangerous,
     RequiresCommitTrigger,
+    RequiresGroupedPayload,
+    RequiresReboot,
     AltWriteShapeRequired,
     HiddenAdjacentCandidate,
     PrivatePathCandidate,
+    ReadOnly,
+    HiddenCandidate,
     NoSemanticProof,
     RejectedByFirmware,
+    FirmwareVariantSpecific,
+    BlockedByAuth,
     LikelyUnsupported,
+    NotApplicableToHardware,
+    TrulyUnsupported,
     UnsupportedOnFirmware,
     Uncertain
 }

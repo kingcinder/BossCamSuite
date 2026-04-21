@@ -218,6 +218,7 @@ public sealed class EndpointContractCatalogService(
                     NumericField("saturation", "Saturation", "$.saturationLevel", 0, 100),
                     NumericField("sharpness", "Sharpness", "$.sharpnessLevel", 0, 100),
                     NumericField("hue", "Hue", "$.hueLevel", 0, 100),
+                    NumericField("gamma", "Gamma", "$.gammaLevel", 0, 100),
                     new ContractField
                     {
                         Key = "mirror",
@@ -332,6 +333,8 @@ public sealed class EndpointContractCatalogService(
                     EnumField("exposure", "Exposure", "$.exposureMode", ["auto", "bright", "dark"]),
                     EnumField("awb", "AWB", "$.awbMode", ["auto", "indoor", "outdoor"]),
                     EnumField("lowlight", "Lowlight", "$.lowlightMode", ["close", "only night", "day-night", "auto"]),
+                    NumericField("whiteLight", "White Light", "$.whiteLightLevel", 0, 100),
+                    NumericField("infrared", "Infrared", "$.infraRedLevel", 0, 100),
                     StringField("osd", "OSD", "$.osd.title")
                 ]
             },

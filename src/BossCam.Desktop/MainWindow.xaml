@@ -101,6 +101,22 @@
                                     <TextBlock Text="Firmware" Foreground="#CFD7DE"/>
                                     <TextBox Grid.Column="1" Text="{Binding SelectedDevice.FirmwareVersion}" IsReadOnly="True"/>
                                 </Grid>
+                                <Grid Margin="0,0,0,8" Visibility="{Binding CameraSerialVisibility}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="170"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Serial" Foreground="#CFD7DE"/>
+                                    <TextBox Grid.Column="1" Text="{Binding CameraSerial}" IsReadOnly="True"/>
+                                </Grid>
+                                <Grid Margin="0,0,0,8" Visibility="{Binding CameraMacVisibility}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="170"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="MAC" Foreground="#CFD7DE"/>
+                                    <TextBox Grid.Column="1" Text="{Binding CameraMac}" IsReadOnly="True"/>
+                                </Grid>
                             </StackPanel>
                         </TabItem>
 
@@ -167,6 +183,16 @@
                                         <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding ImageHueSlider}" IsEnabled="{Binding CanEditImageHue}" ToolTip="{Binding ImageHueReadOnlyTooltip}" ToolTipService.ShowOnDisabled="True"/>
                                         <TextBlock Grid.Column="2" Text="{Binding ImageHue}" VerticalAlignment="Center" HorizontalAlignment="Right"/>
                                     </Grid>
+                                    <Grid Margin="0,0,0,10" Visibility="{Binding ImageGammaVisibility}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="140"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="68"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Gamma" VerticalAlignment="Center"/>
+                                        <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding ImageGammaSlider}" IsEnabled="{Binding CanEditImageGamma}"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding ImageGamma}" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                                    </Grid>
                                     <Grid Margin="0,0,0,10" Visibility="{Binding ImageDenoiseVisibility}">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="140"/>
@@ -187,6 +213,30 @@
                                         <Slider Grid.Column="1" Minimum="1" Maximum="5" Value="{Binding ImageWdrStrengthSlider}" IsEnabled="{Binding CanEditImageWdrStrength}"/>
                                         <TextBlock Grid.Column="2" Text="{Binding ImageWdrStrength}" VerticalAlignment="Center" HorizontalAlignment="Right"/>
                                     </Grid>
+                                    <Grid Margin="0,0,0,10" Visibility="{Binding ImageWhiteLightVisibility}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="140"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="68"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="White Light" VerticalAlignment="Center"/>
+                                        <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding ImageWhiteLightSlider}" IsEnabled="{Binding CanEditImageWhiteLight}"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding ImageWhiteLight}" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                                    </Grid>
+                                    <Grid Margin="0,0,0,10" Visibility="{Binding ImageInfraredVisibility}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="140"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="68"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Infrared" VerticalAlignment="Center"/>
+                                        <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding ImageInfraredSlider}" IsEnabled="{Binding CanEditImageInfrared}"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding ImageInfrared}" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                                    </Grid>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding ImageOsdVisibility}">
+                                        <TextBlock Width="140" Text="OSD Label" VerticalAlignment="Center"/>
+                                        <TextBox Width="220" Text="{Binding ImageOsd}" IsEnabled="{Binding CanEditImageOsd}"/>
+                                    </WrapPanel>
 
                                     <CheckBox Content="Mirror" Margin="0,0,0,8" IsChecked="{Binding ImageMirror}" IsEnabled="{Binding CanEditImageMirror}" Visibility="{Binding ImageMirrorVisibility}" ToolTip="{Binding ImageMirrorReadOnlyTooltip}" ToolTipService.ShowOnDisabled="True"/>
                                     <CheckBox Content="Flip" Margin="0,0,0,8" IsChecked="{Binding ImageFlip}" IsEnabled="{Binding CanEditImageFlip}" Visibility="{Binding ImageFlipVisibility}" ToolTip="{Binding ImageFlipReadOnlyTooltip}" ToolTipService.ShowOnDisabled="True"/>
@@ -305,6 +355,10 @@
                                         <TextBlock Width="140" Text="NTP Server" VerticalAlignment="Center"/>
                                         <TextBox Width="220" Text="{Binding NetworkNtpServer}" IsEnabled="{Binding CanEditNetworkNtpServer}"/>
                                     </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding NetworkEseeIdVisibility}">
+                                        <TextBlock Width="140" Text="ESEE ID" VerticalAlignment="Center"/>
+                                        <TextBox Width="220" Text="{Binding NetworkEseeId}" IsReadOnly="True"/>
+                                    </WrapPanel>
                                     <Separator Margin="0,8,0,8"/>
                                     <WrapPanel Margin="0,0,0,8" Visibility="{Binding WirelessModeVisibility}">
                                         <TextBlock Width="140" Text="WiFi Mode" VerticalAlignment="Center"/>
@@ -366,8 +420,53 @@
                                         <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding MotionSensitivitySlider}" IsEnabled="{Binding CanEditMotionSensitivity}"/>
                                         <TextBlock Grid.Column="2" Text="{Binding MotionSensitivity}" VerticalAlignment="Center" HorizontalAlignment="Right"/>
                                     </Grid>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding PrivacyMaskEnabledVisibility}">
+                                        <TextBlock Width="140" Text="Privacy Mask" VerticalAlignment="Center"/>
+                                        <CheckBox IsChecked="{Binding PrivacyMaskEnabled}" IsEnabled="{Binding CanEditPrivacyMaskEnabled}" VerticalAlignment="Center"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding PrivacyMaskXVisibility}">
+                                        <TextBlock Width="140" Text="Mask X" VerticalAlignment="Center"/>
+                                        <TextBox Width="220" Text="{Binding PrivacyMaskX}" IsEnabled="{Binding CanEditPrivacyMaskX}"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding PrivacyMaskYVisibility}">
+                                        <TextBlock Width="140" Text="Mask Y" VerticalAlignment="Center"/>
+                                        <TextBox Width="220" Text="{Binding PrivacyMaskY}" IsEnabled="{Binding CanEditPrivacyMaskY}"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding PrivacyMaskWidthVisibility}">
+                                        <TextBlock Width="140" Text="Mask Width" VerticalAlignment="Center"/>
+                                        <TextBox Width="220" Text="{Binding PrivacyMaskWidth}" IsEnabled="{Binding CanEditPrivacyMaskWidth}"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding PrivacyMaskHeightVisibility}">
+                                        <TextBlock Width="140" Text="Mask Height" VerticalAlignment="Center"/>
+                                        <TextBox Width="220" Text="{Binding PrivacyMaskHeight}" IsEnabled="{Binding CanEditPrivacyMaskHeight}"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding AlarmInputStateVisibility}">
+                                        <TextBlock Width="140" Text="Alarm Input" VerticalAlignment="Center"/>
+                                        <TextBox Width="220" Text="{Binding AlarmInputState}" IsEnabled="{Binding CanEditAlarmInputState}"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding AlarmOutputStateVisibility}">
+                                        <TextBlock Width="140" Text="Alarm Output" VerticalAlignment="Center"/>
+                                        <TextBox Width="220" Text="{Binding AlarmOutputState}" IsEnabled="{Binding CanEditAlarmOutputState}"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding AlarmPulseDurationVisibility}">
+                                        <TextBlock Width="140" Text="Alarm Pulse (ms)" VerticalAlignment="Center"/>
+                                        <TextBox Width="220" Text="{Binding AlarmPulseDuration}" IsEnabled="{Binding CanEditAlarmPulseDuration}"/>
+                                    </WrapPanel>
                                 </StackPanel>
                             </ScrollViewer>
+                        </TabItem>
+                        <TabItem Header="Storage">
+                            <StackPanel Margin="8">
+                                <WrapPanel Margin="0,0,0,8" Visibility="{Binding SdStatusVisibility}">
+                                    <TextBlock Width="140" Text="SD Status" VerticalAlignment="Center"/>
+                                    <TextBox Width="220" Text="{Binding SdStatus}" IsReadOnly="True"/>
+                                </WrapPanel>
+                                <WrapPanel Margin="0,0,0,8" Visibility="{Binding SdMediaTypeVisibility}">
+                                    <TextBlock Width="140" Text="Media Type" VerticalAlignment="Center"/>
+                                    <TextBox Width="220" Text="{Binding SdMediaType}" IsReadOnly="True"/>
+                                </WrapPanel>
+                                <TextBlock Text="Storage state is read from camera media/search and status endpoints." Foreground="#CFD7DE" TextWrapping="Wrap"/>
+                            </StackPanel>
                         </TabItem>
 
                         <TabItem Header="Maintenance">
