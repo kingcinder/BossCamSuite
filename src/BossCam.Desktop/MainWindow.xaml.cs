@@ -68,6 +68,16 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public ObservableCollection<string> VideoIrModeOptions { get; } = [];
     public ObservableCollection<string> VideoWdrOptions { get; } = [];
     public ObservableCollection<string> VideoIrCutOptions { get; } = [];
+    public ObservableCollection<string> VideoIrCutMethodOptions { get; } = [];
+    public ObservableCollection<string> VideoSceneModeOptions { get; } = [];
+    public ObservableCollection<string> VideoExposureOptions { get; } = [];
+    public ObservableCollection<string> VideoAwbOptions { get; } = [];
+    public ObservableCollection<string> VideoLowlightOptions { get; } = [];
+    public ObservableCollection<string> VideoBitrateModeOptions { get; } = [];
+    public ObservableCollection<string> VideoDefinitionOptions { get; } = [];
+    public ObservableCollection<string> WirelessModeOptions { get; } = [];
+    public ObservableCollection<string> WirelessApModeOptions { get; } = [];
+    public ObservableCollection<string> MotionTypeOptions { get; } = [];
     public ObservableCollection<string> VideoResolutionOptions { get; } = [];
 
     public DeviceIdentity? SelectedDevice
@@ -355,8 +365,15 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public string VideoDayNight { get => GetValue("dayNight"); set => SetValue("dayNight", value); }
     public string VideoIrMode { get => GetValue("irMode"); set => SetValue("irMode", value); }
     public string VideoWdr { get => GetValue("wdr"); set => SetValue("wdr", value); }
+    public string VideoIrCutMethod { get => GetValue("irCutMethod"); set => SetValue("irCutMethod", value); }
+    public string VideoSceneMode { get => GetValue("sceneMode"); set => SetValue("sceneMode", value); }
+    public string VideoExposure { get => GetValue("exposure"); set => SetValue("exposure", value); }
+    public string VideoAwb { get => GetValue("awb"); set => SetValue("awb", value); }
+    public string VideoLowlight { get => GetValue("lowlight"); set => SetValue("lowlight", value); }
     public string VideoIrCut { get => GetValue("irCut"); set => SetValue("irCut", value); }
     public string VideoResolution { get => GetValue("resolution"); set => SetValue("resolution", value); }
+    public string VideoBitrateMode { get => GetValue("bitrateMode"); set => SetValue("bitrateMode", value); }
+    public string VideoDefinition { get => GetValue("definition"); set => SetValue("definition", value); }
     public string VideoBitrate { get => GetValue("bitrate"); set => SetValue("bitrate", value); }
     public double VideoBitrateSlider
     {
@@ -419,6 +436,36 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             OnPropertyChanged();
         }
     }
+    public string ImageManualSharpness { get => GetValue("manualSharpness"); set => SetValue("manualSharpness", value); }
+    public double ImageManualSharpnessSlider
+    {
+        get => ParseDouble(ImageManualSharpness, 170);
+        set
+        {
+            ImageManualSharpness = ((int)value).ToString();
+            OnPropertyChanged();
+        }
+    }
+    public string ImageDenoise { get => GetValue("denoise"); set => SetValue("denoise", value); }
+    public double ImageDenoiseSlider
+    {
+        get => ParseDouble(ImageDenoise, 1);
+        set
+        {
+            ImageDenoise = ((int)value).ToString();
+            OnPropertyChanged();
+        }
+    }
+    public string ImageWdrStrength { get => GetValue("wdrStrength"); set => SetValue("wdrStrength", value); }
+    public double ImageWdrStrengthSlider
+    {
+        get => ParseDouble(ImageWdrStrength, 3);
+        set
+        {
+            ImageWdrStrength = ((int)value).ToString();
+            OnPropertyChanged();
+        }
+    }
     public bool ImageMirror
     {
         get => ParseBool(GetValue("mirror"));
@@ -438,6 +485,40 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public string NetworkPort { get => GetValue("ports"); set => SetValue("ports", value); }
     public string WirelessApSsid { get => GetValue("apSsid"); set => SetValue("apSsid", value); }
     public string WirelessApChannel { get => GetValue("apChannel"); set => SetValue("apChannel", value); }
+    public string WirelessMode { get => GetValue("wirelessMode"); set => SetValue("wirelessMode", value); }
+    public string WirelessApMode { get => GetValue("apMode"); set => SetValue("apMode", value); }
+    public bool NetworkDhcpMode
+    {
+        get => ParseBool(GetValue("dhcpMode"));
+        set => SetValue("dhcpMode", value ? "true" : "false");
+    }
+    public bool NetworkEseeEnabled
+    {
+        get => ParseBool(GetValue("eseeEnabled"));
+        set => SetValue("eseeEnabled", value ? "true" : "false");
+    }
+    public bool NetworkNtpEnabled
+    {
+        get => ParseBool(GetValue("ntpEnabled"));
+        set => SetValue("ntpEnabled", value ? "true" : "false");
+    }
+    public string NetworkNtpServer { get => GetValue("ntpServerDomain"); set => SetValue("ntpServerDomain", value); }
+    public bool MotionEnabled
+    {
+        get => ParseBool(GetValue("motionEnabled"));
+        set => SetValue("motionEnabled", value ? "true" : "false");
+    }
+    public string MotionType { get => GetValue("motionType"); set => SetValue("motionType", value); }
+    public string MotionSensitivity { get => GetValue("motionSensitivity"); set => SetValue("motionSensitivity", value); }
+    public double MotionSensitivitySlider
+    {
+        get => ParseDouble(MotionSensitivity, 50);
+        set
+        {
+            MotionSensitivity = ((int)value).ToString();
+            OnPropertyChanged();
+        }
+    }
     public string? SelectedPersistenceField
     {
         get => _selectedPersistenceField;
@@ -472,17 +553,32 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public bool CanEditVideoDayNight => CanEdit("dayNight");
     public bool CanEditVideoIrMode => CanEdit("irMode");
     public bool CanEditVideoWdr => CanEdit("wdr");
+    public bool CanEditVideoIrCutMethod => CanEdit("irCutMethod");
+    public bool CanEditVideoSceneMode => CanEdit("sceneMode");
+    public bool CanEditVideoExposure => CanEdit("exposure");
+    public bool CanEditVideoAwb => CanEdit("awb");
+    public bool CanEditVideoLowlight => CanEdit("lowlight");
     public bool CanEditVideoIrCut => CanEdit("irCut");
+    public bool CanEditVideoBitrateMode => CanEdit("bitrateMode");
+    public bool CanEditVideoDefinition => CanEdit("definition");
     public bool CanEditImageBrightness => CanEdit("brightness");
     public bool CanEditImageContrast => CanEdit("contrast");
     public bool CanEditImageSaturation => CanEdit("saturation");
     public bool CanEditImageSharpness => CanEdit("sharpness");
+    public bool CanEditImageManualSharpness => CanEdit("manualSharpness");
+    public bool CanEditImageDenoise => CanEdit("denoise");
+    public bool CanEditImageWdrStrength => CanEdit("wdrStrength");
     public bool CanEditImageHue => CanEdit("hue");
     public bool CanEditImageMirror => CanEdit("mirror");
     public bool CanEditImageFlip => CanEdit("flip");
     public bool CanEditImageDayNight => CanEdit("dayNight");
     public bool CanEditImageIrMode => CanEdit("irMode");
     public bool CanEditImageIrCut => CanEdit("irCut");
+    public bool CanEditImageIrCutMethod => CanEdit("irCutMethod");
+    public bool CanEditImageSceneMode => CanEdit("sceneMode");
+    public bool CanEditImageExposure => CanEdit("exposure");
+    public bool CanEditImageAwb => CanEdit("awb");
+    public bool CanEditImageLowlight => CanEdit("lowlight");
     public bool CanEditStreamBitrate => CanEdit("bitrate");
     public bool CanEditStreamFrameRate => CanEdit("frameRate");
     public bool CanEditStreamKeyframe => CanEdit("keyframeInterval");
@@ -491,12 +587,26 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public bool CanEditNetworkGateway => CanEdit("gateway");
     public bool CanEditNetworkDns => CanEdit("dns");
     public bool CanEditNetworkPort => CanEdit("ports");
+    public bool CanEditNetworkDhcpMode => CanEdit("dhcpMode");
+    public bool CanEditNetworkEseeEnabled => CanEdit("eseeEnabled");
+    public bool CanEditNetworkNtpEnabled => CanEdit("ntpEnabled");
+    public bool CanEditNetworkNtpServer => CanEdit("ntpServerDomain");
+    public bool CanEditWirelessMode => CanEdit("wirelessMode");
+    public bool CanEditWirelessApMode => CanEdit("apMode");
     public bool CanEditWirelessApSsid => CanEdit("apSsid");
     public bool CanEditWirelessApChannel => CanEdit("apChannel");
+    public bool CanEditMotionEnabled => CanEdit("motionEnabled");
+    public bool CanEditMotionType => CanEdit("motionType");
+    public bool CanEditMotionSensitivity => CanEdit("motionSensitivity");
     public Visibility VideoCodecVisibility => FieldVisibility("codec");
     public Visibility VideoProfileVisibility => FieldVisibility("profile");
     public Visibility VideoDayNightVisibility => FieldVisibility("dayNight");
     public Visibility VideoWdrVisibility => FieldVisibility("wdr");
+    public Visibility VideoIrCutMethodVisibility => FieldVisibility("irCutMethod");
+    public Visibility VideoSceneModeVisibility => FieldVisibility("sceneMode");
+    public Visibility VideoExposureVisibility => FieldVisibility("exposure");
+    public Visibility VideoAwbVisibility => FieldVisibility("awb");
+    public Visibility VideoLowlightVisibility => FieldVisibility("lowlight");
     public Visibility VideoIrCutVisibility => FieldVisibility("irCut");
     public Visibility VideoBitrateVisibility => FieldVisibility("bitrate");
     public Visibility VideoFrameRateVisibility => FieldVisibility("frameRate");
@@ -504,12 +614,17 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public Visibility StreamResolutionVisibility => FieldVisibility("resolution");
     public Visibility StreamCodecVisibility => FieldVisibility("codec");
     public Visibility StreamProfileVisibility => FieldVisibility("profile");
+    public Visibility StreamBitrateModeVisibility => FieldVisibility("bitrateMode");
+    public Visibility StreamDefinitionVisibility => FieldVisibility("definition");
     public Visibility StreamBitrateVisibility => FieldVisibility("bitrate");
     public Visibility StreamFpsVisibility => FieldVisibility("frameRate");
     public Visibility StreamKeyframeVisibility => FieldVisibility("keyframeInterval");
     public Visibility ImageBrightnessVisibility => OperatorFieldVisibility("brightness");
     public Visibility ImageContrastVisibility => OperatorFieldVisibility("contrast");
     public Visibility ImageSaturationVisibility => OperatorFieldVisibility("saturation");
+    public Visibility ImageManualSharpnessVisibility => OperatorFieldVisibility("manualSharpness");
+    public Visibility ImageDenoiseVisibility => OperatorFieldVisibility("denoise");
+    public Visibility ImageWdrStrengthVisibility => OperatorFieldVisibility("wdrStrength");
     public Visibility ImageHueVisibility => OperatorFieldVisibility("hue");
     public Visibility ImageSharpnessVisibility => OperatorFieldVisibility("sharpness");
     public Visibility ImageMirrorVisibility => OperatorFieldVisibility("mirror");
@@ -517,18 +632,33 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public Visibility ImageDayNightVisibility => OperatorFieldVisibility("dayNight");
     public Visibility ImageIrModeVisibility => OperatorFieldVisibility("irMode");
     public Visibility ImageIrCutVisibility => OperatorFieldVisibility("irCut");
+    public Visibility ImageIrCutMethodVisibility => OperatorFieldVisibility("irCutMethod");
+    public Visibility ImageSceneModeVisibility => OperatorFieldVisibility("sceneMode");
+    public Visibility ImageExposureVisibility => OperatorFieldVisibility("exposure");
+    public Visibility ImageAwbVisibility => OperatorFieldVisibility("awb");
+    public Visibility ImageLowlightVisibility => OperatorFieldVisibility("lowlight");
     public Visibility NetworkIpVisibility => FieldVisibility("ip");
     public Visibility NetworkNetmaskVisibility => FieldVisibility("netmask");
     public Visibility NetworkGatewayVisibility => FieldVisibility("gateway", requireStaticNetwork: true);
     public Visibility NetworkDnsVisibility => FieldVisibility("dns", requireStaticNetwork: true);
     public Visibility NetworkPortVisibility => FieldVisibility("ports");
+    public Visibility NetworkDhcpModeVisibility => FieldVisibility("dhcpMode");
+    public Visibility NetworkEseeVisibility => FieldVisibility("eseeEnabled");
+    public Visibility NetworkNtpEnabledVisibility => FieldVisibility("ntpEnabled");
+    public Visibility NetworkNtpServerVisibility => FieldVisibility("ntpServerDomain");
+    public Visibility WirelessModeVisibility => FieldVisibility("wirelessMode");
+    public Visibility WirelessApModeVisibility => FieldVisibility("apMode");
     public Visibility WirelessApSsidVisibility => FieldVisibility("apSsid");
     public Visibility WirelessApPskVisibility => FieldVisibility("apPsk");
     public Visibility WirelessApChannelVisibility => FieldVisibility("apChannel");
+    public Visibility MotionEnabledVisibility => FieldVisibility("motionEnabled");
+    public Visibility MotionTypeVisibility => FieldVisibility("motionType");
+    public Visibility MotionSensitivityVisibility => FieldVisibility("motionSensitivity");
     public string ImageBrightnessReadOnlyTooltip => ReadOnlyTooltip("brightness");
     public string ImageContrastReadOnlyTooltip => ReadOnlyTooltip("contrast");
     public string ImageSaturationReadOnlyTooltip => ReadOnlyTooltip("saturation");
     public string ImageSharpnessReadOnlyTooltip => ReadOnlyTooltip("sharpness");
+    public string ImageManualSharpnessReadOnlyTooltip => ReadOnlyTooltip("manualSharpness");
     public string ImageHueReadOnlyTooltip => ReadOnlyTooltip("hue");
     public string ImageMirrorReadOnlyTooltip => ReadOnlyTooltip("mirror");
     public string ImageFlipReadOnlyTooltip => ReadOnlyTooltip("flip");
@@ -857,6 +987,16 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         SetEnumOptions(VideoIrModeOptions, "irMode", new[] { "auto", "daylight", "night", "smart" });
         SetEnumOptions(VideoWdrOptions, "wdr", new[] { "Off", "On", "Auto" });
         SetEnumOptions(VideoIrCutOptions, "irCut", new[] { "Auto", "Day", "Night" });
+        SetEnumOptions(VideoIrCutMethodOptions, "irCutMethod", new[] { "software", "hardware" });
+        SetEnumOptions(VideoSceneModeOptions, "sceneMode", new[] { "auto", "indoor", "outdoor" });
+        SetEnumOptions(VideoExposureOptions, "exposure", new[] { "auto", "bright", "dark" });
+        SetEnumOptions(VideoAwbOptions, "awb", new[] { "auto", "indoor", "outdoor" });
+        SetEnumOptions(VideoLowlightOptions, "lowlight", new[] { "close", "only night", "day-night", "auto" });
+        SetEnumOptions(VideoBitrateModeOptions, "bitrateMode", new[] { "CBR", "VBR" });
+        SetEnumOptions(VideoDefinitionOptions, "definition", new[] { "auto", "fluency", "HD", "BD" });
+        SetEnumOptions(WirelessModeOptions, "wirelessMode", new[] { "Station", "AP", "Disabled" });
+        SetEnumOptions(WirelessApModeOptions, "apMode", new[] { "Off", "On" });
+        SetEnumOptions(MotionTypeOptions, "motionType", new[] { "grid", "region" });
         ApplyDependencyFilters();
     }
 
@@ -1660,30 +1800,30 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         foreach (var name in new[]
         {
-            nameof(VideoCodec), nameof(VideoProfile), nameof(VideoDayNight), nameof(VideoIrMode), nameof(VideoWdr), nameof(VideoIrCut),
+            nameof(VideoCodec), nameof(VideoProfile), nameof(VideoDayNight), nameof(VideoIrMode), nameof(VideoWdr), nameof(VideoIrCut), nameof(VideoIrCutMethod), nameof(VideoSceneMode), nameof(VideoExposure), nameof(VideoAwb), nameof(VideoLowlight), nameof(VideoBitrateMode), nameof(VideoDefinition),
             nameof(VideoResolution), nameof(VideoResolutionOptions),
             nameof(VideoBitrate), nameof(VideoBitrateSlider), nameof(VideoBitrateMin), nameof(VideoBitrateMax),
             nameof(VideoFpsHint),
             nameof(VideoFrameRate), nameof(VideoKeyframeInterval), nameof(ImageBrightness), nameof(ImageBrightnessSlider), nameof(ImageBrightnessMin), nameof(ImageBrightnessMax),
-            nameof(ImageContrast), nameof(ImageContrastSlider), nameof(ImageSaturation), nameof(ImageSaturationSlider), nameof(ImageHue), nameof(ImageHueSlider), nameof(ImageSharpness), nameof(ImageSharpnessSlider),
+            nameof(ImageContrast), nameof(ImageContrastSlider), nameof(ImageSaturation), nameof(ImageSaturationSlider), nameof(ImageHue), nameof(ImageHueSlider), nameof(ImageSharpness), nameof(ImageSharpnessSlider), nameof(ImageManualSharpness), nameof(ImageManualSharpnessSlider), nameof(ImageDenoise), nameof(ImageDenoiseSlider), nameof(ImageWdrStrength), nameof(ImageWdrStrengthSlider),
             nameof(ImageMirror), nameof(ImageFlip),
             nameof(ImageBrightnessBehaviorBadge), nameof(ImageContrastBehaviorBadge), nameof(ImageSaturationBehaviorBadge), nameof(ImageTruthSummary),
-            nameof(NetworkIp), nameof(NetworkNetmask), nameof(NetworkGateway), nameof(NetworkDns), nameof(NetworkPort),
+            nameof(NetworkIp), nameof(NetworkNetmask), nameof(NetworkGateway), nameof(NetworkDns), nameof(NetworkPort), nameof(NetworkDhcpMode), nameof(NetworkEseeEnabled), nameof(NetworkNtpEnabled), nameof(NetworkNtpServer), nameof(WirelessMode), nameof(WirelessApMode), nameof(MotionEnabled), nameof(MotionType), nameof(MotionSensitivity), nameof(MotionSensitivitySlider),
             nameof(CurrentControlUrl), nameof(PredictedControlUrl),
             nameof(WirelessApSsid), nameof(WirelessApChannel),
             nameof(VideoCodecState), nameof(VideoProfileState), nameof(NetworkIpState), nameof(WirelessApPskState),
-            nameof(CanEditVideoCodec), nameof(CanEditVideoProfile), nameof(CanEditVideoResolution), nameof(CanEditVideoDayNight), nameof(CanEditVideoIrMode), nameof(CanEditVideoWdr), nameof(CanEditVideoIrCut),
-            nameof(CanEditImageBrightness), nameof(CanEditImageContrast), nameof(CanEditImageSaturation), nameof(CanEditImageSharpness), nameof(CanEditImageHue), nameof(CanEditImageMirror), nameof(CanEditImageFlip),
-            nameof(CanEditImageDayNight), nameof(CanEditImageIrMode), nameof(CanEditImageIrCut),
+            nameof(CanEditVideoCodec), nameof(CanEditVideoProfile), nameof(CanEditVideoResolution), nameof(CanEditVideoDayNight), nameof(CanEditVideoIrMode), nameof(CanEditVideoWdr), nameof(CanEditVideoIrCut), nameof(CanEditVideoIrCutMethod), nameof(CanEditVideoSceneMode), nameof(CanEditVideoExposure), nameof(CanEditVideoAwb), nameof(CanEditVideoLowlight), nameof(CanEditVideoBitrateMode), nameof(CanEditVideoDefinition),
+            nameof(CanEditImageBrightness), nameof(CanEditImageContrast), nameof(CanEditImageSaturation), nameof(CanEditImageSharpness), nameof(CanEditImageManualSharpness), nameof(CanEditImageDenoise), nameof(CanEditImageWdrStrength), nameof(CanEditImageHue), nameof(CanEditImageMirror), nameof(CanEditImageFlip),
+            nameof(CanEditImageDayNight), nameof(CanEditImageIrMode), nameof(CanEditImageIrCut), nameof(CanEditImageIrCutMethod), nameof(CanEditImageSceneMode), nameof(CanEditImageExposure), nameof(CanEditImageAwb), nameof(CanEditImageLowlight), nameof(CanEditMotionEnabled), nameof(CanEditMotionType), nameof(CanEditMotionSensitivity),
             nameof(CanEditStreamBitrate), nameof(CanEditStreamFrameRate), nameof(CanEditStreamKeyframe),
-            nameof(CanEditNetworkIp), nameof(CanEditNetworkNetmask), nameof(CanEditNetworkGateway), nameof(CanEditNetworkDns), nameof(CanEditNetworkPort),
+            nameof(CanEditNetworkIp), nameof(CanEditNetworkNetmask), nameof(CanEditNetworkGateway), nameof(CanEditNetworkDns), nameof(CanEditNetworkPort), nameof(CanEditNetworkDhcpMode), nameof(CanEditNetworkEseeEnabled), nameof(CanEditNetworkNtpEnabled), nameof(CanEditNetworkNtpServer), nameof(CanEditWirelessMode), nameof(CanEditWirelessApMode),
             nameof(CanEditWirelessApSsid), nameof(CanEditWirelessApChannel),
-            nameof(VideoCodecVisibility), nameof(VideoProfileVisibility), nameof(VideoDayNightVisibility), nameof(VideoWdrVisibility), nameof(VideoIrCutVisibility), nameof(VideoResolutionVisibility),
-            nameof(VideoBitrateVisibility), nameof(VideoFrameRateVisibility), nameof(StreamResolutionVisibility), nameof(StreamCodecVisibility), nameof(StreamProfileVisibility), nameof(StreamBitrateVisibility), nameof(StreamFpsVisibility), nameof(StreamKeyframeVisibility),
-            nameof(ImageBrightnessVisibility), nameof(ImageContrastVisibility), nameof(ImageSaturationVisibility), nameof(ImageMirrorVisibility), nameof(ImageFlipVisibility), nameof(ImageDayNightVisibility), nameof(ImageIrModeVisibility), nameof(ImageIrCutVisibility),
+            nameof(VideoCodecVisibility), nameof(VideoProfileVisibility), nameof(VideoDayNightVisibility), nameof(VideoWdrVisibility), nameof(VideoIrCutVisibility), nameof(VideoIrCutMethodVisibility), nameof(VideoSceneModeVisibility), nameof(VideoExposureVisibility), nameof(VideoAwbVisibility), nameof(VideoLowlightVisibility), nameof(VideoResolutionVisibility),
+            nameof(VideoBitrateVisibility), nameof(VideoFrameRateVisibility), nameof(StreamResolutionVisibility), nameof(StreamCodecVisibility), nameof(StreamProfileVisibility), nameof(StreamBitrateModeVisibility), nameof(StreamDefinitionVisibility), nameof(StreamBitrateVisibility), nameof(StreamFpsVisibility), nameof(StreamKeyframeVisibility),
+            nameof(ImageBrightnessVisibility), nameof(ImageContrastVisibility), nameof(ImageSaturationVisibility), nameof(ImageManualSharpnessVisibility), nameof(ImageDenoiseVisibility), nameof(ImageWdrStrengthVisibility), nameof(ImageMirrorVisibility), nameof(ImageFlipVisibility), nameof(ImageDayNightVisibility), nameof(ImageIrModeVisibility), nameof(ImageIrCutVisibility), nameof(ImageIrCutMethodVisibility), nameof(ImageSceneModeVisibility), nameof(ImageExposureVisibility), nameof(ImageAwbVisibility), nameof(ImageLowlightVisibility),
             nameof(ImageHueVisibility), nameof(ImageSharpnessVisibility), nameof(NetworkIpVisibility), nameof(NetworkNetmaskVisibility), nameof(NetworkGatewayVisibility),
-            nameof(NetworkDnsVisibility), nameof(NetworkPortVisibility), nameof(WirelessApSsidVisibility), nameof(WirelessApPskVisibility), nameof(WirelessApChannelVisibility),
-            nameof(ImageBrightnessReadOnlyTooltip), nameof(ImageContrastReadOnlyTooltip), nameof(ImageSaturationReadOnlyTooltip), nameof(ImageSharpnessReadOnlyTooltip), nameof(ImageHueReadOnlyTooltip),
+            nameof(NetworkDnsVisibility), nameof(NetworkPortVisibility), nameof(NetworkDhcpModeVisibility), nameof(NetworkEseeVisibility), nameof(NetworkNtpEnabledVisibility), nameof(NetworkNtpServerVisibility), nameof(WirelessModeVisibility), nameof(WirelessApModeVisibility), nameof(WirelessApSsidVisibility), nameof(WirelessApPskVisibility), nameof(WirelessApChannelVisibility), nameof(MotionEnabledVisibility), nameof(MotionTypeVisibility), nameof(MotionSensitivityVisibility),
+            nameof(ImageBrightnessReadOnlyTooltip), nameof(ImageContrastReadOnlyTooltip), nameof(ImageSaturationReadOnlyTooltip), nameof(ImageSharpnessReadOnlyTooltip), nameof(ImageManualSharpnessReadOnlyTooltip), nameof(ImageHueReadOnlyTooltip),
             nameof(ImageMirrorReadOnlyTooltip), nameof(ImageFlipReadOnlyTooltip), nameof(ImageDayNightReadOnlyTooltip), nameof(ImageIrModeReadOnlyTooltip), nameof(ImageIrCutReadOnlyTooltip),
             nameof(HasPendingChanges), nameof(DirtyStateText), nameof(LastSyncText), nameof(SelectedPersistenceField), nameof(LastReachableUrl)
         })

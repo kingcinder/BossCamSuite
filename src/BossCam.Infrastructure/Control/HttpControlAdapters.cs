@@ -190,11 +190,11 @@ public sealed class LanDirectNetSdkRestAdapter(
         ["Network"] = ["/NetSDK/Network/interfaces", "/NetSDK/Network/Ports", "/NetSDK/Network/Dns", "/NetSDK/Network/Esee"],
         ["Audio"] = ["/NetSDK/Audio/input/channels", "/NetSDK/Audio/encode/channels"],
         ["Video"] = ["/NetSDK/Video/input/channel/1", "/NetSDK/Video/encode/channels", "/NetSDK/Video/encode/channel/101/properties", "/NetSDK/Video/encode/channel/102/properties"],
-        ["Detection"] = ["/NetSDK/Video/motionDetection/channels", "/NetSDK/IO/alarmInput/channels", "/NetSDK/IO/alarmOutput/channels"],
+        ["Detection"] = ["/NetSDK/Video/motionDetection/channels", "/NetSDK/Video/motionDetection/channel/1", "/NetSDK/IO/alarmInput/channels", "/NetSDK/IO/alarmInput/channel/1", "/NetSDK/IO/alarmOutput/channels", "/NetSDK/IO/alarmOutput/channel/1"],
         ["PTZ"] = ["/NetSDK/PTZ/channels"],
         ["Stream"] = ["/NetSDK/Stream/channles", "/NetSDK/Stream/channel/ID"],
-        ["Storage"] = ["/NetSDK/SDCard/status", "/NetSDK/SDCard/media/search"],
-        ["Image"] = ["/NetSDK/Image", "/NetSDK/Image/irCutFilter", "/NetSDK/Image/manualSharpness", "/NetSDK/Image/denoise3d", "/NetSDK/Image/wdr", "/NetSDK/Image/AF"]
+        ["Image"] = ["/NetSDK/Image", "/NetSDK/Image/irCutFilter", "/NetSDK/Image/manualSharpness", "/NetSDK/Image/denoise3d", "/NetSDK/Image/wdr", "/NetSDK/Image/AF", "/NetSDK/Video/input/channel/1/privacyMask/1"],
+        ["Storage"] = ["/NetSDK/SDCard/status", "/NetSDK/SDCard/media/search", "/NetSDK/SDCard/format"]
     };
 
     public string Name => nameof(LanDirectNetSdkRestAdapter);

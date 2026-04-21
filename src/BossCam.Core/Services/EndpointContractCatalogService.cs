@@ -259,6 +259,7 @@ public sealed class EndpointContractCatalogService(
                     NumericField("keyframeInterval", "Keyframe Interval", "$.keyFrameInterval", 1, 240),
                     EnumField("codec", "Codec", "$.codecType", ["H.264", "H.265", "H.264+", "H.265+", "MJPEG"]),
                     EnumField("profile", "Profile", "$.h264Profile", ["baseline", "main", "high"]),
+                    EnumField("bitrateMode", "Bitrate Mode", "$.bitRateControlType", ["CBR", "VBR"]),
                     EnumField("definition", "Definition", "$.definition", ["auto", "fluency", "HD", "BD"]),
                     StringField("resolution", "Resolution", "$.resolution")
                 ]
@@ -311,6 +312,8 @@ public sealed class EndpointContractCatalogService(
                 Fields =
                 [
                     NumericField("denoise", "Denoise", "$.denoise3d.denoise3dStrength", 0, 5),
+                    NumericField("manualSharpness", "Manual Sharpness", "$.manualSharpness.sharpnessLevel", 0, 255),
+                    NumericField("wdrStrength", "WDR Strength", "$.WDR.WDRStrength", 1, 5),
                     new ContractField
                     {
                         Key = "wdr",
@@ -325,9 +328,28 @@ public sealed class EndpointContractCatalogService(
                     EnumField("irMode", "IR Mode", "$.irCutFilter.irCutMode", ["auto", "daylight", "night", "ir", "light", "smart"]),
                     EnumField("irCut", "IR Cut", "$.irCutFilter.irCutMode", ["auto", "daylight", "night", "ir", "light", "smart"]),
                     EnumField("irCutMethod", "IR Cut Method", "$.irCutFilter.irCutControlMode", ["software", "hardware"]),
-                    StringField("exposure", "Exposure", "$.exposureMode"),
-                    StringField("awb", "AWB", "$.awbMode"),
+                    EnumField("sceneMode", "Scene Mode", "$.sceneMode", ["auto", "indoor", "outdoor"]),
+                    EnumField("exposure", "Exposure", "$.exposureMode", ["auto", "bright", "dark"]),
+                    EnumField("awb", "AWB", "$.awbMode", ["auto", "indoor", "outdoor"]),
+                    EnumField("lowlight", "Lowlight", "$.lowlightMode", ["close", "only night", "day-night", "auto"]),
                     StringField("osd", "OSD", "$.osd.title")
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "image.manualSharpness",
+                Endpoint = "/NetSDK/Image/manualSharpness[/properties]",
+                Method = "PUT",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.VideoImage,
+                GroupName = "Video / Image",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.Safe,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
+                Fields =
+                [
+                    NumericField("manualSharpness", "Manual Sharpness", "$.sharpnessLevel", 0, 255)
                 ]
             },
             new EndpointContract
@@ -353,7 +375,8 @@ public sealed class EndpointContractCatalogService(
                         Writable = true,
                         DisruptionClass = DisruptionClass.Safe,
                         Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "live-observed" }
-                    }
+                    },
+                    NumericField("wdrStrength", "WDR Strength", "$.WDRStrength", 1, 5)
                 ]
             },
             new EndpointContract
@@ -462,6 +485,101 @@ public sealed class EndpointContractCatalogService(
                     }
                 ]
             },
+            new EndpointContract
+            {
+                ContractKey = "video.privacy.mask",
+                Endpoint = "/NetSDK/Video/input/channel/*/privacyMask/*[/properties]",
+                Method = "PUT",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.MotionPrivacyAlarms,
+                GroupName = "Motion / Privacy / Alarms",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.Safe,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
+                Fields =
+                [
+                    new ContractField
+                    {
+                        Key = "privacyMaskEnabled",
+                        DisplayName = "Privacy Mask Enabled",
+                        SourcePath = "$.enabled",
+                        Kind = ContractFieldKind.Boolean,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.Safe,
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "ipc-sdk-v1.4" }
+                    },
+                    NumericField("privacyMaskX", "Privacy Mask X", "$.regionX", 0, 100),
+                    NumericField("privacyMaskY", "Privacy Mask Y", "$.regionY", 0, 100),
+                    NumericField("privacyMaskWidth", "Privacy Mask Width", "$.regionWidth", 0, 100),
+                    NumericField("privacyMaskHeight", "Privacy Mask Height", "$.regionHeight", 0, 100)
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "motion.detection.channel",
+                Endpoint = "/NetSDK/Video/motionDetection/channel/*[/properties]",
+                Method = "PUT",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.MotionPrivacyAlarms,
+                GroupName = "Motion / Privacy / Alarms",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.ServiceImpacting,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
+                Fields =
+                [
+                    new ContractField
+                    {
+                        Key = "motionEnabled",
+                        DisplayName = "Motion Enabled",
+                        SourcePath = "$.enabled",
+                        Kind = ContractFieldKind.Boolean,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.ServiceImpacting,
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "ipc-sdk-v1.4" }
+                    },
+                    EnumField("motionType", "Motion Type", "$.detectionType", ["grid", "region"]),
+                    NumericField("motionSensitivity", "Motion Sensitivity", "$.detectionGrid.sensitivityLevel", 0, 100)
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "alarm.input.channel",
+                Endpoint = "/NetSDK/IO/alarmInput/channel/*[/properties]",
+                Method = "PUT",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.MotionPrivacyAlarms,
+                GroupName = "Motion / Privacy / Alarms",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.ServiceImpacting,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
+                Fields =
+                [
+                    EnumField("alarmInputDefaultState", "Alarm Input Default State", "$.active.defaultState", ["high", "low"]),
+                    EnumField("alarmInputActiveState", "Alarm Input Active State", "$.active.activeState", ["high", "low"])
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "alarm.output.channel",
+                Endpoint = "/NetSDK/IO/alarmOutput/channel/*[/properties]",
+                Method = "PUT",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.MotionPrivacyAlarms,
+                GroupName = "Motion / Privacy / Alarms",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.ServiceImpacting,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
+                Fields =
+                [
+                    EnumField("alarmOutputDefaultState", "Alarm Output Default State", "$.active.defaultState", ["high", "low"]),
+                    EnumField("alarmOutputActiveState", "Alarm Output Active State", "$.active.activeState", ["high", "low"]),
+                    NumericField("alarmPulseDuration", "Alarm Pulse Duration", "$.pulseDuration", 1000, 300000)
+                ]
+            },
             // Network / Wireless
             new EndpointContract
             {
@@ -483,6 +601,7 @@ public sealed class EndpointContractCatalogService(
                     IpField("netmask", "Netmask", "$.netmask", true),
                     IpField("gateway", "Gateway", "$.gateway"),
                     IpField("dns", "DNS", "$.dns"),
+                    EnumField("addressingType", "Addressing Type", "$.lan.addressingType", ["static", "dynamic"]),
                     new ContractField
                     {
                         Key = "ports",
@@ -504,7 +623,8 @@ public sealed class EndpointContractCatalogService(
                         DisruptionClass = DisruptionClass.NetworkChanging,
                         Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "manifest" }
                     },
-                    StringField("esee", "ESEE", "$.esee", false, DisruptionClass.NetworkChanging)
+                    StringField("esee", "ESEE", "$.esee", false, DisruptionClass.NetworkChanging),
+                    StringField("ntpServerDomain", "NTP Server", "$.ntpServerDomain")
                 ]
             },
             new EndpointContract
@@ -532,7 +652,8 @@ public sealed class EndpointContractCatalogService(
                         Writable = true,
                         DisruptionClass = DisruptionClass.NetworkChanging,
                         Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "ipcamsuite-endpoint-catalog" }
-                    }
+                    },
+                    StringField("eseeId", "ESEE ID", "$.eseeId")
                 ]
             },
             new EndpointContract
@@ -552,6 +673,7 @@ public sealed class EndpointContractCatalogService(
                 Fields =
                 [
                     EnumField("wirelessMode", "Wireless Mode", "$.wirelessMode", ["Station", "AP", "Disabled"]),
+                    EnumField("wirelessModeSdk", "Wireless Mode (SDK)", "$.wirelessMode", ["none", "accessPoint", "stationMode"]),
                     EnumField("apMode", "AP Mode", "$.ap.mode", ["Off", "On"]),
                     StringField("apSsid", "AP SSID", "$.ap.ssid", false, DisruptionClass.NetworkChanging),
                     new ContractField
@@ -577,6 +699,67 @@ public sealed class EndpointContractCatalogService(
                         Validation = new ContractValidationRule { Min = 1, Max = 14 },
                         Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "manifest" }
                     }
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "system.time.ntp",
+                Endpoint = "/NetSDK/System/time/ntp[/properties]",
+                Method = "PUT",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.UsersMaintenance,
+                GroupName = "Users / Maintenance",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.Safe,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
+                Fields =
+                [
+                    new ContractField
+                    {
+                        Key = "ntpEnabled",
+                        DisplayName = "NTP Enabled",
+                        SourcePath = "$.ntpEnabled",
+                        Kind = ContractFieldKind.Boolean,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.Safe,
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "ipc-sdk-v1.4" }
+                    },
+                    StringField("ntpServerDomain", "NTP Server", "$.ntpServerDomain")
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "storage.sdcard.status",
+                Endpoint = "/NetSDK/SDCard/status",
+                Method = "GET",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.StoragePlayback,
+                GroupName = "Storage / Playback",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.Safe,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = false, PartialWriteAllowed = false },
+                Fields =
+                [
+                    StringField("sdStatus", "SD Card Status", "$.status", writable: false)
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "storage.sdcard.media.search",
+                Endpoint = "/NetSDK/SDCard/media/search",
+                Method = "GET",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.StoragePlayback,
+                GroupName = "Storage / Playback",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.Safe,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = false, PartialWriteAllowed = false },
+                Fields =
+                [
+                    StringField("sdMediaType", "SD Media Type", "$.type", writable: false)
                 ]
             },
             // Users / Maintenance
@@ -625,6 +808,36 @@ public sealed class EndpointContractCatalogService(
                         ExpertOnly = true,
                         DisruptionClass = DisruptionClass.ServiceImpacting,
                         Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "private-manifest" }
+                    }
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "users.private.password",
+                Endpoint = "/user/set_pass.xml",
+                Method = "POST",
+                Surface = ContractSurface.PrivateCgiXml,
+                GroupKind = TypedSettingGroupKind.UsersMaintenance,
+                GroupName = "Users / Maintenance",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.ServiceImpacting,
+                ExpertOnly = true,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = false, PartialWriteAllowed = true },
+                Fields =
+                [
+                    StringField("username", "Username", "$.username") with { ExpertOnly = true },
+                    new ContractField
+                    {
+                        Key = "newPassword",
+                        DisplayName = "New Password",
+                        SourcePath = "$.newPassword",
+                        Kind = ContractFieldKind.Password,
+                        Writable = true,
+                        ExpertOnly = true,
+                        DisruptionClass = DisruptionClass.ServiceImpacting,
+                        Validation = new ContractValidationRule { MinLength = 8, MaxLength = 63, Sensitive = true },
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "ipcamsuite-private-manifest" }
                     }
                 ]
             },

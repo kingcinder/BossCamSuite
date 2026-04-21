@@ -147,6 +147,16 @@
                                         <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding ImageSharpnessSlider}" IsEnabled="{Binding CanEditImageSharpness}" ToolTip="{Binding ImageSharpnessReadOnlyTooltip}" ToolTipService.ShowOnDisabled="True"/>
                                         <TextBlock Grid.Column="2" Text="{Binding ImageSharpness}" VerticalAlignment="Center" HorizontalAlignment="Right"/>
                                     </Grid>
+                                    <Grid Margin="0,0,0,10" Visibility="{Binding ImageManualSharpnessVisibility}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="140"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="68"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Manual Sharpness" VerticalAlignment="Center"/>
+                                        <Slider Grid.Column="1" Minimum="0" Maximum="255" Value="{Binding ImageManualSharpnessSlider}" IsEnabled="{Binding CanEditImageManualSharpness}" ToolTip="{Binding ImageManualSharpnessReadOnlyTooltip}" ToolTipService.ShowOnDisabled="True"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding ImageManualSharpness}" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                                    </Grid>
                                     <Grid Margin="0,0,0,10" Visibility="{Binding ImageHueVisibility}">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="140"/>
@@ -156,6 +166,26 @@
                                         <TextBlock Text="Hue" VerticalAlignment="Center"/>
                                         <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding ImageHueSlider}" IsEnabled="{Binding CanEditImageHue}" ToolTip="{Binding ImageHueReadOnlyTooltip}" ToolTipService.ShowOnDisabled="True"/>
                                         <TextBlock Grid.Column="2" Text="{Binding ImageHue}" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                                    </Grid>
+                                    <Grid Margin="0,0,0,10" Visibility="{Binding ImageDenoiseVisibility}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="140"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="68"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Denoise" VerticalAlignment="Center"/>
+                                        <Slider Grid.Column="1" Minimum="0" Maximum="5" Value="{Binding ImageDenoiseSlider}" IsEnabled="{Binding CanEditImageDenoise}"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding ImageDenoise}" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                                    </Grid>
+                                    <Grid Margin="0,0,0,10" Visibility="{Binding ImageWdrStrengthVisibility}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="140"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="68"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="WDR Strength" VerticalAlignment="Center"/>
+                                        <Slider Grid.Column="1" Minimum="1" Maximum="5" Value="{Binding ImageWdrStrengthSlider}" IsEnabled="{Binding CanEditImageWdrStrength}"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding ImageWdrStrength}" VerticalAlignment="Center" HorizontalAlignment="Right"/>
                                     </Grid>
 
                                     <CheckBox Content="Mirror" Margin="0,0,0,8" IsChecked="{Binding ImageMirror}" IsEnabled="{Binding CanEditImageMirror}" Visibility="{Binding ImageMirrorVisibility}" ToolTip="{Binding ImageMirrorReadOnlyTooltip}" ToolTipService.ShowOnDisabled="True"/>
@@ -172,6 +202,26 @@
                                     <WrapPanel Margin="0,0,0,8" Visibility="{Binding ImageIrCutVisibility}">
                                         <TextBlock Width="140" Text="IR Cut" VerticalAlignment="Center"/>
                                         <ComboBox Width="220" ItemsSource="{Binding VideoIrCutOptions}" SelectedItem="{Binding VideoIrCut}" IsEnabled="{Binding CanEditImageIrCut}" ToolTip="{Binding ImageIrCutReadOnlyTooltip}" ToolTipService.ShowOnDisabled="True"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding ImageIrCutMethodVisibility}">
+                                        <TextBlock Width="140" Text="IR Cut Method" VerticalAlignment="Center"/>
+                                        <ComboBox Width="220" ItemsSource="{Binding VideoIrCutMethodOptions}" SelectedItem="{Binding VideoIrCutMethod}" IsEnabled="{Binding CanEditImageIrCutMethod}"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding ImageSceneModeVisibility}">
+                                        <TextBlock Width="140" Text="Scene Mode" VerticalAlignment="Center"/>
+                                        <ComboBox Width="220" ItemsSource="{Binding VideoSceneModeOptions}" SelectedItem="{Binding VideoSceneMode}" IsEnabled="{Binding CanEditImageSceneMode}"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding ImageExposureVisibility}">
+                                        <TextBlock Width="140" Text="Exposure" VerticalAlignment="Center"/>
+                                        <ComboBox Width="220" ItemsSource="{Binding VideoExposureOptions}" SelectedItem="{Binding VideoExposure}" IsEnabled="{Binding CanEditImageExposure}"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding ImageAwbVisibility}">
+                                        <TextBlock Width="140" Text="AWB" VerticalAlignment="Center"/>
+                                        <ComboBox Width="220" ItemsSource="{Binding VideoAwbOptions}" SelectedItem="{Binding VideoAwb}" IsEnabled="{Binding CanEditImageAwb}"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding ImageLowlightVisibility}">
+                                        <TextBlock Width="140" Text="Lowlight" VerticalAlignment="Center"/>
+                                        <ComboBox Width="220" ItemsSource="{Binding VideoLowlightOptions}" SelectedItem="{Binding VideoLowlight}" IsEnabled="{Binding CanEditImageLowlight}"/>
                                     </WrapPanel>
                                 </StackPanel>
                             </ScrollViewer>
@@ -191,6 +241,14 @@
                                     <WrapPanel Margin="0,0,0,8" Visibility="{Binding StreamProfileVisibility}">
                                         <TextBlock Width="140" Text="Profile" VerticalAlignment="Center"/>
                                         <ComboBox Width="220" ItemsSource="{Binding VideoProfileOptions}" SelectedItem="{Binding VideoProfile}" IsEnabled="{Binding CanEditVideoProfile}"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding StreamBitrateModeVisibility}">
+                                        <TextBlock Width="140" Text="Bitrate Mode" VerticalAlignment="Center"/>
+                                        <ComboBox Width="220" ItemsSource="{Binding VideoBitrateModeOptions}" SelectedItem="{Binding VideoBitrateMode}" IsEnabled="{Binding CanEditVideoBitrateMode}"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding StreamDefinitionVisibility}">
+                                        <TextBlock Width="140" Text="Definition" VerticalAlignment="Center"/>
+                                        <ComboBox Width="220" ItemsSource="{Binding VideoDefinitionOptions}" SelectedItem="{Binding VideoDefinition}" IsEnabled="{Binding CanEditVideoDefinition}"/>
                                     </WrapPanel>
                                     <WrapPanel Margin="0,0,0,8" Visibility="{Binding StreamBitrateVisibility}">
                                         <TextBlock Width="140" Text="Bitrate (kbps)" VerticalAlignment="Center"/>
@@ -231,7 +289,31 @@
                                         <TextBlock Width="140" Text="HTTP Port" VerticalAlignment="Center"/>
                                         <TextBox Width="220" Text="{Binding NetworkPort}" IsEnabled="{Binding CanEditNetworkPort}"/>
                                     </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding NetworkDhcpModeVisibility}">
+                                        <TextBlock Width="140" Text="DHCP" VerticalAlignment="Center"/>
+                                        <CheckBox IsChecked="{Binding NetworkDhcpMode}" IsEnabled="{Binding CanEditNetworkDhcpMode}" VerticalAlignment="Center"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding NetworkEseeVisibility}">
+                                        <TextBlock Width="140" Text="ESEE Enabled" VerticalAlignment="Center"/>
+                                        <CheckBox IsChecked="{Binding NetworkEseeEnabled}" IsEnabled="{Binding CanEditNetworkEseeEnabled}" VerticalAlignment="Center"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding NetworkNtpEnabledVisibility}">
+                                        <TextBlock Width="140" Text="NTP Enabled" VerticalAlignment="Center"/>
+                                        <CheckBox IsChecked="{Binding NetworkNtpEnabled}" IsEnabled="{Binding CanEditNetworkNtpEnabled}" VerticalAlignment="Center"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding NetworkNtpServerVisibility}">
+                                        <TextBlock Width="140" Text="NTP Server" VerticalAlignment="Center"/>
+                                        <TextBox Width="220" Text="{Binding NetworkNtpServer}" IsEnabled="{Binding CanEditNetworkNtpServer}"/>
+                                    </WrapPanel>
                                     <Separator Margin="0,8,0,8"/>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding WirelessModeVisibility}">
+                                        <TextBlock Width="140" Text="WiFi Mode" VerticalAlignment="Center"/>
+                                        <ComboBox Width="220" ItemsSource="{Binding WirelessModeOptions}" SelectedItem="{Binding WirelessMode}" IsEnabled="{Binding CanEditWirelessMode}"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding WirelessApModeVisibility}">
+                                        <TextBlock Width="140" Text="AP Mode" VerticalAlignment="Center"/>
+                                        <ComboBox Width="220" ItemsSource="{Binding WirelessApModeOptions}" SelectedItem="{Binding WirelessApMode}" IsEnabled="{Binding CanEditWirelessApMode}"/>
+                                    </WrapPanel>
                                     <WrapPanel Margin="0,0,0,8" Visibility="{Binding WirelessApSsidVisibility}">
                                         <TextBlock Width="140" Text="AP SSID" VerticalAlignment="Center"/>
                                         <TextBox Width="220" Text="{Binding WirelessApSsid}" IsEnabled="{Binding CanEditWirelessApSsid}"/>
@@ -244,6 +326,46 @@
                                         <TextBlock Width="140" Text="AP Channel" VerticalAlignment="Center"/>
                                         <TextBox Width="220" Text="{Binding WirelessApChannel}" IsEnabled="{Binding CanEditWirelessApChannel}"/>
                                     </WrapPanel>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </TabItem>
+                        <TabItem Header="Users">
+                            <StackPanel Margin="8">
+                                <TextBlock Text="Users" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                <ListBox Height="120" ItemsSource="{Binding UserList}" Margin="0,0,0,10"/>
+                                <WrapPanel Margin="0,0,0,8">
+                                    <TextBlock Width="140" Text="Username" VerticalAlignment="Center"/>
+                                    <TextBox Width="220" Text="{Binding PasswordChangeUsername}"/>
+                                </WrapPanel>
+                                <WrapPanel Margin="0,0,0,8">
+                                    <TextBlock Width="140" Text="New Password" VerticalAlignment="Center"/>
+                                    <PasswordBox Width="220" PasswordChanged="PasswordChangePasswordChanged"/>
+                                </WrapPanel>
+                                <Button Width="180" Click="ApplyPasswordChange_Click">Apply Password Change</Button>
+                            </StackPanel>
+                        </TabItem>
+
+                        <TabItem Header="Motion/Alarm">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <StackPanel Margin="8">
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding MotionEnabledVisibility}">
+                                        <TextBlock Width="140" Text="Motion Enabled" VerticalAlignment="Center"/>
+                                        <CheckBox IsChecked="{Binding MotionEnabled}" IsEnabled="{Binding CanEditMotionEnabled}" VerticalAlignment="Center"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding MotionTypeVisibility}">
+                                        <TextBlock Width="140" Text="Motion Type" VerticalAlignment="Center"/>
+                                        <ComboBox Width="220" ItemsSource="{Binding MotionTypeOptions}" SelectedItem="{Binding MotionType}" IsEnabled="{Binding CanEditMotionType}"/>
+                                    </WrapPanel>
+                                    <Grid Margin="0,0,0,10" Visibility="{Binding MotionSensitivityVisibility}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="140"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="68"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Sensitivity" VerticalAlignment="Center"/>
+                                        <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding MotionSensitivitySlider}" IsEnabled="{Binding CanEditMotionSensitivity}"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding MotionSensitivity}" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                                    </Grid>
                                 </StackPanel>
                             </ScrollViewer>
                         </TabItem>
