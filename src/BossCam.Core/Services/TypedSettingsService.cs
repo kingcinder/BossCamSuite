@@ -836,20 +836,47 @@ public sealed class TypedSettingsService(
                 : contractField?.EnumValues.Count > 0
                     ? contractField.EnumValues.Select(item => JsonValue.Create(item.Value)).ToArray()
                     : Array.Empty<JsonNode?>();
+            var descriptor = new ControlPointDescriptor
+            {
+                FieldKey = field.FieldKey,
+                DisplayName = field.DisplayName,
+                ContractKey = field.ContractKey ?? string.Empty,
+                Endpoint = field.SourceEndpoint,
+                SourcePath = contractField?.SourcePath ?? field.RawSourcePath,
+                Kind = contractField?.Kind ?? InferKind(field.TypedValue),
+                Writable = field.WriteVerified || contractField?.Writable == true,
+                ExpertOnly = field.ExpertOnly || contractField?.ExpertOnly == true,
+                FullObjectWriteRequired = contracts.FirstOrDefault(candidate => candidate.ContractKey.Equals(field.ContractKey, StringComparison.OrdinalIgnoreCase))?.ObjectShape.FullObjectWriteRequired ?? true,
+                PartialWriteAllowed = contracts.FirstOrDefault(candidate => candidate.ContractKey.Equals(field.ContractKey, StringComparison.OrdinalIgnoreCase))?.ObjectShape.PartialWriteAllowed ?? false,
+                EnumValues = enumValues
+                    .OfType<JsonValue>()
+                    .Select(static value => value.ToJsonString().Trim('"'))
+                    .ToArray(),
+                Min = constraint?.Min ?? contractField?.Validation.Min,
+                Max = constraint?.Max ?? contractField?.Validation.Max,
+                DependencyRules = dependencyRules
+            };
+            var typing = ControlPointClassifier.Classify(descriptor);
 
             output.Add(new EditorHint
             {
                 FieldKey = field.FieldKey,
                 Label = field.DisplayName,
-                EditorKind = ToEditorKind(contractField?.Kind),
+                EditorKind = ControlPointClassifier.ToLegacyEditorKind(typing),
                 EnumValues = enumValues.Length > 0 ? new JsonArray(enumValues) : null,
-                Min = constraint?.Min ?? contractField?.Validation.Min,
-                Max = constraint?.Max ?? contractField?.Validation.Max,
+                Min = descriptor.Min,
+                Max = descriptor.Max,
                 DisruptionClass = field.DisruptionClass,
                 ExpertOnly = field.ExpertOnly,
                 Writable = field.WriteVerified,
                 ContractKey = field.ContractKey,
                 TruthState = contractField?.Evidence.TruthState ?? ContractTruthState.Unverified,
+                PrimitiveType = typing.PrimitiveType,
+                ControlType = typing.ControlType,
+                ControlTraits = typing.Traits,
+                RecommendedWidget = typing.RecommendedWidget,
+                NormalUiEligible = typing.NormalUiEligible,
+                TypeBlocker = typing.TypeBlocker,
                 Unit = dependencyRules.Count == 0
                     ? null
                     : string.Join(" | ", dependencyRules.Select(static rule => $"{rule.DependsOnFieldKey}:{string.Join("/", rule.DependsOnValues)}=>{string.Join("/", rule.AllowedPrimaryValues)}"))
@@ -859,15 +886,18 @@ public sealed class TypedSettingsService(
         return output;
     }
 
-    private static string ToEditorKind(ContractFieldKind? kind)
-        => kind switch
+    private static ContractFieldKind InferKind(JsonNode? value)
+    {
+        return value switch
         {
-            ContractFieldKind.Enum => "enum",
-            ContractFieldKind.Number or ContractFieldKind.Integer or ContractFieldKind.Port => "number",
-            ContractFieldKind.Password => "password",
-            ContractFieldKind.Boolean => "bool",
-            _ => "text"
+            JsonObject => ContractFieldKind.Object,
+            JsonArray => ContractFieldKind.Array,
+            JsonValue node when node.TryGetValue<bool>(out _) => ContractFieldKind.Boolean,
+            JsonValue node when node.TryGetValue<int>(out _) => ContractFieldKind.Integer,
+            JsonValue node when node.TryGetValue<decimal>(out _) => ContractFieldKind.Number,
+            _ => ContractFieldKind.String
         };
+    }
 
     private static ContractSupportState ResolveSupportState(EndpointValidationResult? validation, ContractField field)
     {

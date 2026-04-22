@@ -99,6 +99,11 @@ app.MapPost("/api/devices/{id:guid}/settings/write", async (Guid id, WritePlan p
 });
 app.MapGet("/api/devices/{id:guid}/settings/typed", async (Guid id, TypedSettingsService typedSettingsService, CancellationToken ct) =>
     Results.Ok(await typedSettingsService.GetTypedSettingsAsync(id, ct)));
+app.MapGet("/api/devices/{id:guid}/control-points", async (Guid id, ControlPointInventoryService controlPointInventoryService, CancellationToken ct) =>
+{
+    var result = await controlPointInventoryService.GetReportAsync(id, ct);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
 app.MapPost("/api/devices/{id:guid}/settings/typed/refresh", async (Guid id, TypedSettingsService typedSettingsService, CancellationToken ct) =>
     Results.Ok(await typedSettingsService.NormalizeDeviceAsync(id, refreshFromDevice: true, ct)));
 app.MapPost("/api/devices/{id:guid}/settings/typed/apply", async (Guid id, TypedSettingApplyRequest request, TypedSettingsService typedSettingsService, CancellationToken ct) =>

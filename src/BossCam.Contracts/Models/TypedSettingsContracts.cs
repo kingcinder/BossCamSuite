@@ -39,6 +39,12 @@ public sealed record EditorHint
     public bool Writable { get; init; }
     public string? ContractKey { get; init; }
     public ContractTruthState TruthState { get; init; } = ContractTruthState.Unverified;
+    public ControlPointPrimitiveType PrimitiveType { get; init; } = ControlPointPrimitiveType.Unknown;
+    public ControlPointValueType? ControlType { get; init; }
+    public IReadOnlyCollection<ControlPointTrait> ControlTraits { get; init; } = [];
+    public ControlPointWidgetKind RecommendedWidget { get; init; } = ControlPointWidgetKind.HiddenInNormalUi;
+    public bool NormalUiEligible { get; init; }
+    public string? TypeBlocker { get; init; }
 }
 
 public sealed record NormalizedSettingField

@@ -257,11 +257,11 @@
                                     </WrapPanel>
                                     <WrapPanel Margin="0,0,0,8" Visibility="{Binding ImageOsdDateFormatVisibility}">
                                         <TextBlock Width="140" Text="Date Format" VerticalAlignment="Center"/>
-                                        <TextBox Width="220" Text="{Binding ImageOsdDateFormat}" IsEnabled="{Binding CanEditImageOsdDateFormat}"/>
+                                        <ComboBox Width="220" ItemsSource="{Binding VideoOsdDateFormatOptions}" SelectedItem="{Binding ImageOsdDateFormat}" IsEnabled="{Binding CanEditImageOsdDateFormat}"/>
                                     </WrapPanel>
                                     <WrapPanel Margin="0,0,0,8" Visibility="{Binding ImageOsdTimeFormatVisibility}">
                                         <TextBlock Width="140" Text="Time Format" VerticalAlignment="Center"/>
-                                        <TextBox Width="220" Text="{Binding ImageOsdTimeFormat}" IsEnabled="{Binding CanEditImageOsdTimeFormat}"/>
+                                        <ComboBox Width="220" ItemsSource="{Binding VideoOsdTimeFormatOptions}" SelectedItem="{Binding ImageOsdTimeFormat}" IsEnabled="{Binding CanEditImageOsdTimeFormat}"/>
                                     </WrapPanel>
                                     <WrapPanel Margin="0,0,0,8" Visibility="{Binding ImageOsdDisplayWeekVisibility}">
                                         <TextBlock Width="140" Text="Display Weekday" VerticalAlignment="Center"/>
@@ -662,15 +662,19 @@
                                         </DataGrid>
                                     </TabItem>
                                     <TabItem Header="Inventory">
-                                        <DataGrid ItemsSource="{Binding ImageInventoryRows}" AutoGenerateColumns="False" Background="#0E171E" BorderThickness="0">
+                                        <DataGrid ItemsSource="{Binding ControlPointInventoryRows}" AutoGenerateColumns="False" Background="#0E171E" BorderThickness="0">
                                             <DataGrid.Columns>
+                                                <DataGridTextColumn Header="Family" Binding="{Binding Family}" Width="1.2*"/>
                                                 <DataGridTextColumn Header="Field" Binding="{Binding FieldKey}" Width="*"/>
-                                                <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="1.4*"/>
-                                                <DataGridTextColumn Header="Class" Binding="{Binding CandidateClassification}" Width="1.5*"/>
-                                                <DataGridCheckBoxColumn Header="Readable" Binding="{Binding Readable}" Width="*"/>
-                                                <DataGridCheckBoxColumn Header="Writable" Binding="{Binding Writable}" Width="*"/>
-                                                <DataGridTextColumn Header="Endpoint" Binding="{Binding SourceEndpoint}" Width="2*"/>
-                                                <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="2*"/>
+                                                <DataGridTextColumn Header="Type" Binding="{Binding ControlType}" Width="1.3*"/>
+                                                <DataGridTextColumn Header="Primitive" Binding="{Binding PrimitiveType}" Width="1.1*"/>
+                                                <DataGridTextColumn Header="State" Binding="{Binding ReadWriteState}" Width="1.3*"/>
+                                                <DataGridTextColumn Header="Widget" Binding="{Binding RecommendedWidget}" Width="1.1*"/>
+                                                <DataGridCheckBoxColumn Header="Normal UI" Binding="{Binding NormalUiEligible}" Width="0.9*"/>
+                                                <DataGridCheckBoxColumn Header="Mismatch" Binding="{Binding ExistingWidgetMismatch}" Width="0.9*"/>
+                                                <DataGridTextColumn Header="Endpoint" Binding="{Binding Endpoint}" Width="2*"/>
+                                                <DataGridTextColumn Header="Write Shape" Binding="{Binding WriteShape}" Width="1.8*"/>
+                                                <DataGridTextColumn Header="Blocker" Binding="{Binding ExactBlocker}" Width="2*"/>
                                             </DataGrid.Columns>
                                         </DataGrid>
                                     </TabItem>

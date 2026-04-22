@@ -18,6 +18,76 @@ namespace BossCam.Desktop;
 public partial class MainWindow : Window, INotifyPropertyChanged
 {
     private static readonly JsonSerializerOptions SerializerOptions = CreateSerializerOptions();
+    private static readonly IReadOnlyDictionary<string, ControlPointWidgetKind> CurrentWidgetKinds = new Dictionary<string, ControlPointWidgetKind>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["codec"] = ControlPointWidgetKind.Dropdown,
+        ["profile"] = ControlPointWidgetKind.Dropdown,
+        ["dayNight"] = ControlPointWidgetKind.Dropdown,
+        ["irMode"] = ControlPointWidgetKind.Dropdown,
+        ["irCut"] = ControlPointWidgetKind.Dropdown,
+        ["irCutMethod"] = ControlPointWidgetKind.Dropdown,
+        ["sceneMode"] = ControlPointWidgetKind.Dropdown,
+        ["exposure"] = ControlPointWidgetKind.Dropdown,
+        ["awb"] = ControlPointWidgetKind.Dropdown,
+        ["lowlight"] = ControlPointWidgetKind.Dropdown,
+        ["resolution"] = ControlPointWidgetKind.Dropdown,
+        ["bitrateMode"] = ControlPointWidgetKind.Dropdown,
+        ["definition"] = ControlPointWidgetKind.Dropdown,
+        ["wirelessMode"] = ControlPointWidgetKind.Dropdown,
+        ["apMode"] = ControlPointWidgetKind.Dropdown,
+        ["motionType"] = ControlPointWidgetKind.Dropdown,
+        ["osdDateFormat"] = ControlPointWidgetKind.Dropdown,
+        ["osdTimeFormat"] = ControlPointWidgetKind.Dropdown,
+        ["brightness"] = ControlPointWidgetKind.Slider,
+        ["contrast"] = ControlPointWidgetKind.Slider,
+        ["saturation"] = ControlPointWidgetKind.Slider,
+        ["sharpness"] = ControlPointWidgetKind.Slider,
+        ["hue"] = ControlPointWidgetKind.Slider,
+        ["gamma"] = ControlPointWidgetKind.Slider,
+        ["manualSharpness"] = ControlPointWidgetKind.Slider,
+        ["denoise"] = ControlPointWidgetKind.Slider,
+        ["wdrStrength"] = ControlPointWidgetKind.Slider,
+        ["whiteLight"] = ControlPointWidgetKind.Slider,
+        ["infrared"] = ControlPointWidgetKind.Slider,
+        ["motionSensitivity"] = ControlPointWidgetKind.Slider,
+        ["mirror"] = ControlPointWidgetKind.Toggle,
+        ["flip"] = ControlPointWidgetKind.Toggle,
+        ["audioEnabled"] = ControlPointWidgetKind.Toggle,
+        ["osdChannelNameEnabled"] = ControlPointWidgetKind.Toggle,
+        ["osdDateTimeEnabled"] = ControlPointWidgetKind.Toggle,
+        ["osdDisplayWeek"] = ControlPointWidgetKind.Toggle,
+        ["motionEnabled"] = ControlPointWidgetKind.Toggle,
+        ["alarmEnabled"] = ControlPointWidgetKind.Toggle,
+        ["alarmBuzzer"] = ControlPointWidgetKind.Toggle,
+        ["eseeEnabled"] = ControlPointWidgetKind.Toggle,
+        ["ntpEnabled"] = ControlPointWidgetKind.Toggle,
+        ["dhcpMode"] = ControlPointWidgetKind.Toggle,
+        ["bitrate"] = ControlPointWidgetKind.NumericInput,
+        ["frameRate"] = ControlPointWidgetKind.NumericInput,
+        ["keyframeInterval"] = ControlPointWidgetKind.NumericInput,
+        ["audioBitRate"] = ControlPointWidgetKind.NumericInput,
+        ["audioSampleRate"] = ControlPointWidgetKind.NumericInput,
+        ["osd"] = ControlPointWidgetKind.TextInput,
+        ["osdChannelNameText"] = ControlPointWidgetKind.TextInput,
+        ["ip"] = ControlPointWidgetKind.TextInput,
+        ["netmask"] = ControlPointWidgetKind.TextInput,
+        ["gateway"] = ControlPointWidgetKind.TextInput,
+        ["dns"] = ControlPointWidgetKind.TextInput,
+        ["ports"] = ControlPointWidgetKind.TextInput,
+        ["ntpServerDomain"] = ControlPointWidgetKind.TextInput,
+        ["eseeId"] = ControlPointWidgetKind.TextInput,
+        ["apSsid"] = ControlPointWidgetKind.TextInput,
+        ["apPsk"] = ControlPointWidgetKind.TextInput,
+        ["apChannel"] = ControlPointWidgetKind.TextInput,
+        ["alarmInputActiveState"] = ControlPointWidgetKind.TextInput,
+        ["alarmOutputActiveState"] = ControlPointWidgetKind.TextInput,
+        ["alarmPulseDuration"] = ControlPointWidgetKind.TextInput,
+        ["privacyMaskEnabled"] = ControlPointWidgetKind.Toggle,
+        ["privacyMaskX"] = ControlPointWidgetKind.TextInput,
+        ["privacyMaskY"] = ControlPointWidgetKind.TextInput,
+        ["privacyMaskWidth"] = ControlPointWidgetKind.TextInput,
+        ["privacyMaskHeight"] = ControlPointWidgetKind.TextInput
+    };
     private readonly HttpClient _httpClient = new() { BaseAddress = new Uri("http://127.0.0.1:5317") };
     private readonly Dictionary<string, TypedFieldRow> _fieldByKey = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, EditorHint> _editorHintByKey = new(StringComparer.OrdinalIgnoreCase);
@@ -68,6 +138,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public ObservableCollection<FieldConstraintRow> ConstraintRows { get; } = [];
     public ObservableCollection<FieldDependencyRuleRow> DependencyRows { get; } = [];
     public ObservableCollection<ImageControlInventoryItem> ImageInventoryRows { get; } = [];
+    public ObservableCollection<ControlPointInventoryItem> ControlPointInventoryRows { get; } = [];
     public ObservableCollection<ImageBehaviorRow> ImageBehaviorRows { get; } = [];
     public ObservableCollection<PromotedImageRow> PromotedImageRows { get; } = [];
     public ObservableCollection<ProbeStageMode> ProbeModes { get; } = new(Enum.GetValues<ProbeStageMode>());
@@ -84,6 +155,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public ObservableCollection<string> VideoExposureOptions { get; } = [];
     public ObservableCollection<string> VideoAwbOptions { get; } = [];
     public ObservableCollection<string> VideoLowlightOptions { get; } = [];
+    public ObservableCollection<string> VideoOsdDateFormatOptions { get; } = [];
+    public ObservableCollection<string> VideoOsdTimeFormatOptions { get; } = [];
     public ObservableCollection<string> VideoBitrateModeOptions { get; } = [];
     public ObservableCollection<string> VideoDefinitionOptions { get; } = [];
     public ObservableCollection<string> WirelessModeOptions { get; } = [];
@@ -1357,9 +1430,26 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         PopulateUserList();
         await LoadSemanticTrustAsync();
         await LoadImageTruthAsync();
+        await LoadControlPointInventoryAsync();
         await LoadTruthBadgeAsync();
         LastSyncText = $"Last sync: {DateTime.Now:yyyy-MM-dd HH:mm:ss}";
         NotifyAllEditorProperties();
+    }
+
+    private async Task LoadControlPointInventoryAsync()
+    {
+        if (SelectedDevice is null)
+        {
+            ControlPointInventoryRows.Clear();
+            return;
+        }
+
+        var report = await GetAsync<ControlPointInventoryReport>($"/api/devices/{SelectedDevice.Id}/control-points");
+        ReplaceCollection(ControlPointInventoryRows, report?.Families
+            .SelectMany(static family => family.Controls)
+            .OrderBy(static item => item.Family, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static item => item.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToList() ?? []);
     }
 
     private async Task LoadTruthBadgeAsync()
@@ -1418,6 +1508,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         SetEnumOptions(VideoExposureOptions, "exposure", new[] { "auto", "bright", "dark" });
         SetEnumOptions(VideoAwbOptions, "awb", new[] { "auto", "indoor", "outdoor" });
         SetEnumOptions(VideoLowlightOptions, "lowlight", new[] { "close", "only night", "day-night", "auto" });
+        SetEnumOptions(VideoOsdDateFormatOptions, "osdDateFormat", new[] { "YYYY-MM-DD", "MM-DD-YYYY", "DD-MM-YYYY" });
+        SetEnumOptions(VideoOsdTimeFormatOptions, "osdTimeFormat", new[] { "24h", "12h" });
         SetEnumOptions(VideoBitrateModeOptions, "bitrateMode", new[] { "CBR", "VBR" });
         SetEnumOptions(VideoDefinitionOptions, "definition", new[] { "auto", "fluency", "HD", "BD" });
         SetEnumOptions(WirelessModeOptions, "wirelessMode", new[] { "Station", "AP", "Disabled" });
@@ -2071,6 +2163,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private bool CanEdit(string key)
     {
+        if (!HasWidgetTruth(key))
+        {
+            return false;
+        }
+
         if (!_fieldByKey.TryGetValue(key, out var field))
         {
             return _groupedRetestByField.TryGetValue(key, out var grouped)
@@ -2106,6 +2203,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             return Visibility.Collapsed;
         }
 
+        if (!HasWidgetTruth(key))
+        {
+            return Visibility.Collapsed;
+        }
+
         if (requireStaticNetwork)
         {
             var dhcpMode = GetValue("dhcpMode");
@@ -2135,7 +2237,32 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             return Visibility.Collapsed;
         }
 
+        if (!HasWidgetTruth(key))
+        {
+            return Visibility.Collapsed;
+        }
+
         return Visibility.Visible;
+    }
+
+    private bool HasWidgetTruth(string key)
+    {
+        if (!_editorHintByKey.TryGetValue(key, out var hint))
+        {
+            return false;
+        }
+
+        if (!hint.NormalUiEligible || hint.ControlType is null)
+        {
+            return false;
+        }
+
+        if (!CurrentWidgetKinds.TryGetValue(key, out var currentWidget))
+        {
+            return true;
+        }
+
+        return currentWidget == hint.RecommendedWidget;
     }
 
     private string ReadOnlyTooltip(string key)
