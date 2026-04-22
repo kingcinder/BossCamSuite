@@ -212,6 +212,8 @@ app.MapPost("/api/devices/{id:guid}/grouped-config/retest-unsupported", async (G
     Results.Ok(await groupedConfigService.RetestUnsupportedFieldsAsync(id, request ?? new GroupedRetestRequest(), ct)));
 app.MapPost("/api/devices/{id:guid}/grouped-config/probe-families", async (Guid id, GroupedFamilyProbeRequest? request, GroupedConfigService groupedConfigService, CancellationToken ct) =>
     Results.Ok(await groupedConfigService.ProbeGroupedFamiliesAsync(id, request ?? new GroupedFamilyProbeRequest(), ct)));
+app.MapPost("/api/devices/{id:guid}/grouped-config/probe-pipeline-ownership", async (Guid id, PipelineOwnershipProbeRequest? request, GroupedConfigService groupedConfigService, CancellationToken ct) =>
+    Results.Ok(await groupedConfigService.ProbePipelineOwnershipAsync(id, request ?? new PipelineOwnershipProbeRequest(), ct)));
 app.MapGet("/api/grouped-config/sdk-field-catalog", (GroupedConfigService groupedConfigService) =>
     Results.Ok(groupedConfigService.GetSdkFieldCatalog()));
 app.MapPost("/api/devices/{id:guid}/grouped-config/force-enumerate-sdk-fields", async (Guid id, ForcedEnumerationRequest? request, GroupedConfigService groupedConfigService, CancellationToken ct) =>

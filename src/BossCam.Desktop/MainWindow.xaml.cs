@@ -1002,6 +1002,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private async void LoadTranscripts_Click(object sender, RoutedEventArgs e) => await RunAsync(LoadTranscriptsAsync);
     private async void DiscoverConstraints_Click(object sender, RoutedEventArgs e) => await RunAsync(DiscoverConstraintsAsync);
     private async void RunImageTruthSweep_Click(object sender, RoutedEventArgs e) => await RunAsync(RunImageTruthSweepAsync);
+    private async void ProbePipelineOwnership_Click(object sender, RoutedEventArgs e) => await RunAsync(ProbePipelineOwnershipAsync);
     private async void ProbeGroupedFamilies_Click(object sender, RoutedEventArgs e) => await RunAsync(ProbeGroupedFamiliesAsync);
     private async void RetestUnsupportedGrouped_Click(object sender, RoutedEventArgs e) => await RunAsync(RetestUnsupportedGroupedAsync);
     private async void ForceEnumerateSdkFields_Click(object sender, RoutedEventArgs e) => await RunAsync(ForceEnumerateSdkFieldsAsync);
@@ -1283,6 +1284,31 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             .OrderBy(static group => group.Key.ToString())
             .Select(group => $"{group.Key}={group.Count()}"));
         ShowToast($"Grouped family probe: {summary}", success: true);
+    }
+
+    private async Task ProbePipelineOwnershipAsync()
+    {
+        if (SelectedDevice is null)
+        {
+            DiagnosticsText = "Select a device first.";
+            return;
+        }
+
+        var request = new PipelineOwnershipProbeRequest
+        {
+            RefreshFromDevice = true,
+            ExpertOverride = true
+        };
+        var result = await PostAsync<PipelineOwnershipProbeReport>($"/api/devices/{SelectedDevice.Id}/grouped-config/probe-pipeline-ownership", request);
+        DiagnosticsText = JsonSerializer.Serialize(result, SerializerOptions);
+        await LoadTypedAsync();
+        await LoadImageTruthAsync();
+
+        var summary = string.Join(", ", result?.Fields
+            .GroupBy(static item => item.Classification)
+            .OrderBy(static group => group.Key.ToString())
+            .Select(group => $"{group.Key}={group.Count()}") ?? []);
+        ShowToast($"Pipeline ownership: {summary}", success: result is not null);
     }
 
     private async Task LoadNativeAssessmentAsync()

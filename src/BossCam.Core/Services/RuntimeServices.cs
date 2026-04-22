@@ -175,7 +175,11 @@ public sealed class SettingsService(
         var rollbackAttempted = false;
         var rollbackSucceeded = false;
 
-        if (result.Success && preReadResult.Response is JsonObject preObject && postReadResult.Response is JsonNode postNode && !JsonNode.DeepEquals(preReadResult.Response, postNode))
+        if (plan.AllowRollback
+            && result.Success
+            && preReadResult.Response is JsonObject preObject
+            && postReadResult.Response is JsonNode postNode
+            && !JsonNode.DeepEquals(preReadResult.Response, postNode))
         {
             rollbackAttempted = true;
             var rollbackResult = await adapter.ApplyAsync(device, new WritePlan
@@ -186,7 +190,8 @@ public sealed class SettingsService(
                 Method = plan.Method,
                 Payload = preObject,
                 SnapshotBeforeWrite = false,
-                RequireWriteVerification = false
+                RequireWriteVerification = false,
+                AllowRollback = false
             }, cancellationToken);
             rollbackSucceeded = rollbackResult.Success;
         }

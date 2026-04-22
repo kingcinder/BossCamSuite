@@ -81,6 +81,70 @@ public sealed record GroupedFamilyProbeRequest
     public IReadOnlyCollection<string> FieldKeys { get; init; } = [];
 }
 
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum FieldPipelineGroup
+{
+    Isp,
+    TransformDisplay,
+    ModeHardware,
+    VideoEncode
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum OwnershipWriteClassification
+{
+    Writable,
+    WritableDifferentEndpoint,
+    ReadableOnly,
+    Unsupported
+}
+
+public sealed record PipelineOwnershipProbeRequest
+{
+    public bool RefreshFromDevice { get; init; } = true;
+    public bool ExpertOverride { get; init; } = true;
+}
+
+public sealed record PipelineOwnershipFieldResult
+{
+    public string FieldKey { get; init; } = string.Empty;
+    public string DisplayName { get; init; } = string.Empty;
+    public FieldPipelineGroup Pipeline { get; init; } = FieldPipelineGroup.Isp;
+    public string RequestedEndpoint { get; init; } = string.Empty;
+    public string? AlternateEndpoint { get; init; }
+    public string EffectiveEndpoint { get; init; } = string.Empty;
+    public string SourcePath { get; init; } = string.Empty;
+    public OwnershipWriteClassification Classification { get; init; } = OwnershipWriteClassification.ReadableOnly;
+    public JsonNode? BaselineValue { get; init; }
+    public JsonNode? AttemptedValue { get; init; }
+    public JsonNode? ResultValue { get; init; }
+    public bool AlternateEndpointAvailable { get; init; }
+    public string Notes { get; init; } = string.Empty;
+}
+
+public sealed record EncodeFullObjectProbeResult
+{
+    public string Endpoint { get; init; } = string.Empty;
+    public JsonObject? BaselinePayload { get; init; }
+    public JsonObject? AttemptedPayload { get; init; }
+    public JsonNode? ResultValue { get; init; }
+    public bool WriteAccepted { get; init; }
+    public OwnershipWriteClassification Classification { get; init; } = OwnershipWriteClassification.ReadableOnly;
+    public string Notes { get; init; } = string.Empty;
+}
+
+public sealed record PipelineOwnershipProbeReport
+{
+    public Guid DeviceId { get; init; }
+    public string IpAddress { get; init; } = string.Empty;
+    public string FirmwareFingerprint { get; init; } = string.Empty;
+    public JsonObject? VideoInputShape { get; init; }
+    public JsonObject? ImageShape { get; init; }
+    public IReadOnlyCollection<PipelineOwnershipFieldResult> Fields { get; init; } = [];
+    public EncodeFullObjectProbeResult? EncodeProbe { get; init; }
+    public DateTimeOffset CapturedAt { get; init; } = DateTimeOffset.UtcNow;
+}
+
 public sealed record SdkFieldDefinition
 {
     public GroupedConfigKind GroupKind { get; init; } = GroupedConfigKind.ImageConfig;

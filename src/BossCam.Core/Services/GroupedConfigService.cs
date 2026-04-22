@@ -110,6 +110,128 @@ public sealed class GroupedConfigService(
         return results;
     }
 
+    public async Task<PipelineOwnershipProbeReport?> ProbePipelineOwnershipAsync(Guid deviceId, PipelineOwnershipProbeRequest request, CancellationToken cancellationToken)
+    {
+        if (request.RefreshFromDevice)
+        {
+            _ = await typedSettingsService.NormalizeDeviceAsync(deviceId, refreshFromDevice: true, cancellationToken);
+            _ = await settingsService.ReadAsync(deviceId, cancellationToken);
+        }
+
+        var device = await store.GetDeviceAsync(deviceId, cancellationToken);
+        if (device is null)
+        {
+            return null;
+        }
+
+        var normalizedFields = await store.GetNormalizedSettingFieldsAsync(deviceId, cancellationToken);
+        var firmware = BuildFirmwareFingerprint(device, normalizedFields);
+        var videoInputShape = await ReadEndpointObjectDirectAsync(deviceId, "/NetSDK/Video/input/channel/1", cancellationToken);
+        var imageShape = await ReadEndpointObjectDirectAsync(deviceId, "/NetSDK/Image", cancellationToken);
+        var groupedResults = new List<GroupedUnsupportedRetestResult>();
+        var fields = new List<PipelineOwnershipFieldResult>
+        {
+            BuildStaticPipelineResult(device, firmware, "brightness", "Brightness", FieldPipelineGroup.Isp, "/NetSDK/Video/input/channel/1", "$.brightnessLevel", TryGetPathValue(videoInputShape, "$.brightnessLevel"), groupedResults),
+            BuildStaticPipelineResult(device, firmware, "contrast", "Contrast", FieldPipelineGroup.Isp, "/NetSDK/Video/input/channel/1", "$.contrastLevel", TryGetPathValue(videoInputShape, "$.contrastLevel"), groupedResults),
+            BuildStaticPipelineResult(device, firmware, "saturation", "Saturation", FieldPipelineGroup.Isp, "/NetSDK/Video/input/channel/1", "$.saturationLevel", TryGetPathValue(videoInputShape, "$.saturationLevel"), groupedResults),
+            BuildStaticPipelineResult(device, firmware, "sharpness", "Sharpness", FieldPipelineGroup.Isp, "/NetSDK/Video/input/channel/1", "$.sharpnessLevel", TryGetPathValue(videoInputShape, "$.sharpnessLevel"), groupedResults)
+        };
+
+        var hue = await ProbeHueOwnershipAsync(device, firmware, request.ExpertOverride, cancellationToken);
+        fields.Add(hue.Field);
+        groupedResults.Add(hue.GroupedResult);
+
+        var flip = await ProbeVideoInputBooleanAsync(
+            device,
+            firmware,
+            "flip",
+            "Flip",
+            "$.flipEnabled",
+            "/NetSDK/Video/input/channel/1",
+            "/NetSDK/Video/input/channel/1/flip",
+            request.ExpertOverride,
+            cancellationToken);
+        fields.Add(flip.Field);
+        groupedResults.Add(flip.GroupedResult);
+
+        var mirror = await ProbeVideoInputBooleanAsync(
+            device,
+            firmware,
+            "mirror",
+            "Mirror",
+            "$.mirrorEnabled",
+            "/NetSDK/Video/input/channel/1",
+            "/NetSDK/Video/input/channel/1/mirror",
+            request.ExpertOverride,
+            cancellationToken);
+        fields.Add(mirror.Field);
+        groupedResults.Add(mirror.GroupedResult);
+
+        var sceneMode = await ProbeFullObjectFieldAsync(
+            device,
+            firmware,
+            "sceneMode",
+            "Scene Mode",
+            FieldPipelineGroup.ModeHardware,
+            "/NetSDK/Image",
+            "$.sceneMode",
+            static baseline => NextEnumValue(baseline, ["auto", "indoor", "outdoor"]),
+            request.ExpertOverride,
+            cancellationToken);
+        fields.Add(sceneMode.Field);
+        groupedResults.Add(sceneMode.GroupedResult);
+
+        var irCut = await ProbeFullObjectFieldAsync(
+            device,
+            firmware,
+            "irCut",
+            "IR Cut",
+            FieldPipelineGroup.ModeHardware,
+            "/NetSDK/Image/irCutFilter",
+            "$.irCutMode",
+            static baseline => NextEnumValue(baseline, ["auto", "daylight", "night"]),
+            request.ExpertOverride,
+            cancellationToken);
+        fields.Add(irCut.Field);
+        groupedResults.Add(irCut.GroupedResult);
+
+        var dayNight = await ProbeFullObjectFieldAsync(
+            device,
+            firmware,
+            "dayNight",
+            "Day/Night",
+            FieldPipelineGroup.ModeHardware,
+            "/NetSDK/Image",
+            "$.lowlightMode",
+            static baseline => NextEnumValue(baseline, ["close", "only night", "day-night", "auto"]),
+            request.ExpertOverride,
+            cancellationToken);
+        fields.Add(dayNight.Field);
+        groupedResults.Add(dayNight.GroupedResult);
+
+        var encode = await ProbeEncodeFullObjectAsync(device, firmware, request.ExpertOverride, cancellationToken);
+        if (encode.GroupedResult is not null)
+        {
+            groupedResults.Add(encode.GroupedResult);
+        }
+
+        await store.SaveGroupedRetestResultsAsync(groupedResults, cancellationToken);
+        await SaveGroupedProfilesAsync(device, normalizedFields, groupedResults, cancellationToken);
+        await PromoteRetestedFieldsAsync(device.Id, groupedResults, cancellationToken);
+        await PromoteImageInventoryAsync(device.Id, groupedResults, cancellationToken);
+
+        return new PipelineOwnershipProbeReport
+        {
+            DeviceId = device.Id,
+            IpAddress = device.IpAddress ?? string.Empty,
+            FirmwareFingerprint = firmware,
+            VideoInputShape = videoInputShape,
+            ImageShape = imageShape,
+            Fields = fields,
+            EncodeProbe = encode.Report
+        };
+    }
+
     private sealed record FamilyProbeDefinition(
         string Name,
         string Endpoint,
@@ -126,6 +248,408 @@ public sealed class GroupedConfigService(
         string SourcePath,
         Func<JsonObject, JsonNode?, JsonNode?> CandidateFactory,
         Func<JsonObject, JsonObject?>? RelatedFieldPayloadFactory = null);
+
+    private static PipelineOwnershipFieldResult BuildStaticPipelineResult(
+        DeviceIdentity device,
+        string firmware,
+        string fieldKey,
+        string displayName,
+        FieldPipelineGroup pipeline,
+        string endpoint,
+        string sourcePath,
+        JsonNode? baselineValue,
+        ICollection<GroupedUnsupportedRetestResult> groupedResults)
+    {
+        groupedResults.Add(new GroupedUnsupportedRetestResult
+        {
+            DeviceId = device.Id,
+            FirmwareFingerprint = firmware,
+            IpAddress = device.IpAddress ?? string.Empty,
+            GroupKind = GroupedConfigKind.ImageConfig,
+            ContractKey = $"pipeline.{fieldKey}",
+            FieldKey = fieldKey,
+            SourceEndpoint = endpoint,
+            SourcePath = sourcePath,
+            BaselineValue = baselineValue?.DeepClone(),
+            AttemptedValue = baselineValue?.DeepClone(),
+            ImmediateValue = baselineValue?.DeepClone(),
+            Behavior = GroupedApplyBehavior.ImmediateApplied,
+            Classification = ForcedFieldClassification.Writable,
+            BaselineFieldPresent = baselineValue is not null,
+            DefinitionSource = "pipeline-ownership",
+            Notes = "Previously proven live on the grouped image-input family."
+        });
+
+        return new PipelineOwnershipFieldResult
+        {
+            FieldKey = fieldKey,
+            DisplayName = displayName,
+            Pipeline = pipeline,
+            RequestedEndpoint = endpoint,
+            EffectiveEndpoint = endpoint,
+            SourcePath = sourcePath,
+            Classification = OwnershipWriteClassification.Writable,
+            BaselineValue = baselineValue?.DeepClone(),
+            ResultValue = baselineValue?.DeepClone(),
+            Notes = "Previously proven live on the grouped image-input family."
+        };
+    }
+
+    private async Task<(PipelineOwnershipFieldResult Field, GroupedUnsupportedRetestResult GroupedResult)> ProbeHueOwnershipAsync(
+        DeviceIdentity device,
+        string firmware,
+        bool expertOverride,
+        CancellationToken cancellationToken)
+    {
+        const string groupedEndpoint = "/NetSDK/Video/input/channel/1";
+        const string scalarEndpoint = "/NetSDK/Video/input/channel/1/hueLevel";
+        var root = await ReadEndpointObjectDirectAsync(device.Id, groupedEndpoint, cancellationToken);
+        var baseline = TryGetPathValue(root, "$.hueLevel");
+        var candidate = JsonValue.Create((int)Clamp((TryToDecimal(baseline) ?? 50) == 60 ? 50 : 60, 0, 100));
+        var groupedValue = baseline?.DeepClone();
+        var scalarValue = baseline?.DeepClone();
+        var groupedMessage = string.Empty;
+        var scalarMessage = string.Empty;
+
+        if (root is not null)
+        {
+            var groupedPayload = (JsonObject)root.DeepClone();
+            SetPathValue(groupedPayload, "$.hueLevel", candidate);
+            var groupedWrite = await ExecutePlanAsync(device.Id, groupedEndpoint, "PUT", groupedPayload, expertOverride, cancellationToken);
+            groupedMessage = groupedWrite?.Message ?? string.Empty;
+            groupedValue = await ReadEndpointValueDirectAsync(device.Id, scalarEndpoint, "$", cancellationToken);
+            _ = await ExecutePlanAsync(device.Id, groupedEndpoint, "PUT", (JsonObject)root.DeepClone(), expertOverride: true, cancellationToken);
+        }
+
+        var scalarRead = await ExecutePlanAsync(device.Id, scalarEndpoint, "GET", null, expertOverride: true, cancellationToken);
+        var scalarAvailable = scalarRead?.Success == true;
+        if (scalarAvailable)
+        {
+            var scalarWrite = await ExecutePlanAsync(
+                device.Id,
+                scalarEndpoint,
+                "PUT",
+                new JsonObject { ["hueLevel"] = candidate.DeepClone() },
+                expertOverride,
+                cancellationToken);
+            scalarMessage = scalarWrite?.Message ?? string.Empty;
+            scalarValue = await ReadEndpointValueDirectAsync(device.Id, scalarEndpoint, "$", cancellationToken);
+            _ = await ExecutePlanAsync(
+                device.Id,
+                scalarEndpoint,
+                "PUT",
+                new JsonObject { ["hueLevel"] = baseline?.DeepClone() ?? JsonValue.Create(50) },
+                expertOverride: true,
+                cancellationToken);
+        }
+
+        var classification = scalarAvailable && ValuesEquivalent(scalarValue, candidate)
+            ? OwnershipWriteClassification.WritableDifferentEndpoint
+            : groupedValue is not null && ValuesEquivalent(groupedValue, candidate)
+                ? OwnershipWriteClassification.Writable
+                : OwnershipWriteClassification.ReadableOnly;
+        var effectiveEndpoint = classification == OwnershipWriteClassification.WritableDifferentEndpoint ? scalarEndpoint : groupedEndpoint;
+        var effectiveValue = classification == OwnershipWriteClassification.WritableDifferentEndpoint ? scalarValue : groupedValue;
+        var notes = classification switch
+        {
+            OwnershipWriteClassification.WritableDifferentEndpoint => $"owner={scalarEndpoint}; groupedEndpointAcceptedButReadbackStayed={groupedValue?.ToJsonString() ?? "null"}; scalarMessage={scalarMessage}",
+            OwnershipWriteClassification.Writable => $"owner={groupedEndpoint}; groupedMessage={groupedMessage}",
+            _ => $"groupedMessage={groupedMessage}; scalarAvailable={scalarAvailable}; scalarMessage={scalarMessage}"
+        };
+
+        return
+        (
+            new PipelineOwnershipFieldResult
+            {
+                FieldKey = "hue",
+                DisplayName = "Hue",
+                Pipeline = FieldPipelineGroup.TransformDisplay,
+                RequestedEndpoint = groupedEndpoint,
+                AlternateEndpoint = scalarEndpoint,
+                EffectiveEndpoint = effectiveEndpoint,
+                SourcePath = classification == OwnershipWriteClassification.WritableDifferentEndpoint ? "$" : "$.hueLevel",
+                Classification = classification,
+                BaselineValue = baseline?.DeepClone(),
+                AttemptedValue = candidate.DeepClone(),
+                ResultValue = effectiveValue?.DeepClone(),
+                AlternateEndpointAvailable = scalarAvailable,
+                Notes = notes
+            },
+            new GroupedUnsupportedRetestResult
+            {
+                DeviceId = device.Id,
+                FirmwareFingerprint = firmware,
+                IpAddress = device.IpAddress ?? string.Empty,
+                GroupKind = GroupedConfigKind.ImageConfig,
+                ContractKey = "pipeline.hue",
+                FieldKey = "hue",
+                SourceEndpoint = effectiveEndpoint,
+                SourcePath = classification == OwnershipWriteClassification.WritableDifferentEndpoint ? "$" : "$.hueLevel",
+                BaselineValue = baseline?.DeepClone(),
+                AttemptedValue = candidate.DeepClone(),
+                ImmediateValue = effectiveValue?.DeepClone(),
+                FirstWriteSucceeded = classification is OwnershipWriteClassification.Writable or OwnershipWriteClassification.WritableDifferentEndpoint,
+                Behavior = classification is OwnershipWriteClassification.Writable or OwnershipWriteClassification.WritableDifferentEndpoint
+                    ? GroupedApplyBehavior.ImmediateApplied
+                    : GroupedApplyBehavior.Unapplied,
+                Classification = classification is OwnershipWriteClassification.Writable or OwnershipWriteClassification.WritableDifferentEndpoint
+                    ? ForcedFieldClassification.Writable
+                    : ForcedFieldClassification.ReadableOnly,
+                BaselineFieldPresent = baseline is not null,
+                DefinitionSource = "pipeline-ownership",
+                Notes = notes
+            }
+        );
+    }
+
+    private async Task<(PipelineOwnershipFieldResult Field, GroupedUnsupportedRetestResult GroupedResult)> ProbeVideoInputBooleanAsync(
+        DeviceIdentity device,
+        string firmware,
+        string fieldKey,
+        string displayName,
+        string sourcePath,
+        string groupedEndpoint,
+        string leafEndpoint,
+        bool expertOverride,
+        CancellationToken cancellationToken)
+    {
+        var root = await ReadEndpointObjectDirectAsync(device.Id, groupedEndpoint, cancellationToken);
+        var baseline = TryGetPathValue(root, sourcePath);
+        var candidate = JsonValue.Create(!ParseBool(baseline));
+        var resultValue = baseline?.DeepClone();
+        var writeMessage = string.Empty;
+
+        if (root is not null)
+        {
+            var payload = (JsonObject)root.DeepClone();
+            SetPathValue(payload, sourcePath, candidate);
+            var write = await ExecutePlanAsync(device.Id, groupedEndpoint, "PUT", payload, expertOverride, cancellationToken);
+            writeMessage = write?.Message ?? string.Empty;
+            resultValue = await ReadEndpointValueDirectAsync(device.Id, groupedEndpoint, sourcePath, cancellationToken);
+            _ = await ExecutePlanAsync(device.Id, groupedEndpoint, "PUT", (JsonObject)root.DeepClone(), expertOverride: true, cancellationToken);
+        }
+
+        var leafRead = await ExecutePlanAsync(device.Id, leafEndpoint, "GET", null, expertOverride: true, cancellationToken);
+        var leafAvailable = leafRead?.Success == true;
+        var classification = ValuesEquivalent(resultValue, candidate)
+            ? OwnershipWriteClassification.Writable
+            : OwnershipWriteClassification.ReadableOnly;
+        var notes = classification == OwnershipWriteClassification.Writable
+            ? $"owner={groupedEndpoint}; leafAvailable={leafAvailable}; groupedMessage={writeMessage}"
+            : $"groupedMessage={writeMessage}; leafAvailable={leafAvailable}";
+
+        return
+        (
+            new PipelineOwnershipFieldResult
+            {
+                FieldKey = fieldKey,
+                DisplayName = displayName,
+                Pipeline = FieldPipelineGroup.TransformDisplay,
+                RequestedEndpoint = groupedEndpoint,
+                AlternateEndpoint = leafEndpoint,
+                EffectiveEndpoint = groupedEndpoint,
+                SourcePath = sourcePath,
+                Classification = classification,
+                BaselineValue = baseline?.DeepClone(),
+                AttemptedValue = candidate.DeepClone(),
+                ResultValue = resultValue?.DeepClone(),
+                AlternateEndpointAvailable = leafAvailable,
+                Notes = notes
+            },
+            new GroupedUnsupportedRetestResult
+            {
+                DeviceId = device.Id,
+                FirmwareFingerprint = firmware,
+                IpAddress = device.IpAddress ?? string.Empty,
+                GroupKind = GroupedConfigKind.ImageConfig,
+                ContractKey = $"pipeline.{fieldKey}",
+                FieldKey = fieldKey,
+                SourceEndpoint = groupedEndpoint,
+                SourcePath = sourcePath,
+                BaselineValue = baseline?.DeepClone(),
+                AttemptedValue = candidate.DeepClone(),
+                ImmediateValue = resultValue?.DeepClone(),
+                FirstWriteSucceeded = classification == OwnershipWriteClassification.Writable,
+                Behavior = classification == OwnershipWriteClassification.Writable ? GroupedApplyBehavior.ImmediateApplied : GroupedApplyBehavior.Unapplied,
+                Classification = classification == OwnershipWriteClassification.Writable ? ForcedFieldClassification.Writable : ForcedFieldClassification.ReadableOnly,
+                BaselineFieldPresent = baseline is not null,
+                DefinitionSource = "pipeline-ownership",
+                Notes = notes
+            }
+        );
+    }
+
+    private async Task<(PipelineOwnershipFieldResult Field, GroupedUnsupportedRetestResult GroupedResult)> ProbeFullObjectFieldAsync(
+        DeviceIdentity device,
+        string firmware,
+        string fieldKey,
+        string displayName,
+        FieldPipelineGroup pipeline,
+        string endpoint,
+        string sourcePath,
+        Func<JsonNode?, JsonNode?> candidateFactory,
+        bool expertOverride,
+        CancellationToken cancellationToken)
+    {
+        var root = await ReadEndpointObjectDirectAsync(device.Id, endpoint, cancellationToken);
+        var baseline = TryGetPathValue(root, sourcePath);
+        var candidate = candidateFactory(baseline);
+        if (root is null || candidate is null)
+        {
+            var notes = root is null ? "Endpoint was not readable." : "No alternate candidate value was available.";
+            return
+            (
+                new PipelineOwnershipFieldResult
+                {
+                    FieldKey = fieldKey,
+                    DisplayName = displayName,
+                    Pipeline = pipeline,
+                    RequestedEndpoint = endpoint,
+                    EffectiveEndpoint = endpoint,
+                    SourcePath = sourcePath,
+                    Classification = OwnershipWriteClassification.ReadableOnly,
+                    BaselineValue = baseline?.DeepClone(),
+                    Notes = notes
+                },
+                new GroupedUnsupportedRetestResult
+                {
+                    DeviceId = device.Id,
+                    FirmwareFingerprint = firmware,
+                    IpAddress = device.IpAddress ?? string.Empty,
+                    GroupKind = GroupedConfigKind.ImageConfig,
+                    ContractKey = $"pipeline.{fieldKey}",
+                    FieldKey = fieldKey,
+                    SourceEndpoint = endpoint,
+                    SourcePath = sourcePath,
+                    BaselineValue = baseline?.DeepClone(),
+                    Behavior = GroupedApplyBehavior.Unapplied,
+                    Classification = ForcedFieldClassification.ReadableOnly,
+                    BaselineFieldPresent = baseline is not null,
+                    DefinitionSource = "pipeline-ownership",
+                    Notes = notes
+                }
+            );
+        }
+
+        var payload = (JsonObject)root.DeepClone();
+        SetPathValue(payload, sourcePath, candidate);
+        var write = await ExecutePlanAsync(device.Id, endpoint, "PUT", payload, expertOverride, cancellationToken);
+        var resultValue = await ReadEndpointValueDirectAsync(device.Id, endpoint, sourcePath, cancellationToken);
+        _ = await ExecutePlanAsync(device.Id, endpoint, "PUT", (JsonObject)root.DeepClone(), expertOverride: true, cancellationToken);
+
+        var writable = ValuesEquivalent(resultValue, candidate);
+        var notesText = writable
+            ? $"owner={endpoint}; writeMessage={write?.Message ?? string.Empty}"
+            : $"writeAccepted={write?.Success == true}; writeMessage={write?.Message ?? string.Empty}";
+
+        return
+        (
+            new PipelineOwnershipFieldResult
+            {
+                FieldKey = fieldKey,
+                DisplayName = displayName,
+                Pipeline = pipeline,
+                RequestedEndpoint = endpoint,
+                EffectiveEndpoint = endpoint,
+                SourcePath = sourcePath,
+                Classification = writable ? OwnershipWriteClassification.Writable : OwnershipWriteClassification.ReadableOnly,
+                BaselineValue = baseline?.DeepClone(),
+                AttemptedValue = candidate.DeepClone(),
+                ResultValue = resultValue?.DeepClone(),
+                Notes = notesText
+            },
+            new GroupedUnsupportedRetestResult
+            {
+                DeviceId = device.Id,
+                FirmwareFingerprint = firmware,
+                IpAddress = device.IpAddress ?? string.Empty,
+                GroupKind = GroupedConfigKind.ImageConfig,
+                ContractKey = $"pipeline.{fieldKey}",
+                FieldKey = fieldKey,
+                SourceEndpoint = endpoint,
+                SourcePath = sourcePath,
+                BaselineValue = baseline?.DeepClone(),
+                AttemptedValue = candidate.DeepClone(),
+                ImmediateValue = resultValue?.DeepClone(),
+                FirstWriteSucceeded = write?.Success == true,
+                Behavior = writable ? GroupedApplyBehavior.ImmediateApplied : GroupedApplyBehavior.Unapplied,
+                Classification = writable ? ForcedFieldClassification.Writable : ForcedFieldClassification.ReadableOnly,
+                BaselineFieldPresent = baseline is not null,
+                DefinitionSource = "pipeline-ownership",
+                Notes = notesText
+            }
+        );
+    }
+
+    private async Task<(EncodeFullObjectProbeResult Report, GroupedUnsupportedRetestResult? GroupedResult)> ProbeEncodeFullObjectAsync(
+        DeviceIdentity device,
+        string firmware,
+        bool expertOverride,
+        CancellationToken cancellationToken)
+    {
+        const string endpoint = "/NetSDK/Video/encode/channel/101/properties";
+        var root = await ReadEndpointObjectDirectAsync(device.Id, endpoint, cancellationToken);
+        if (root is null)
+        {
+            return
+            (
+                new EncodeFullObjectProbeResult
+                {
+                    Endpoint = endpoint,
+                    Classification = OwnershipWriteClassification.ReadableOnly,
+                    Notes = "Encode endpoint was not readable."
+                },
+                null
+            );
+        }
+
+        var baseline = TryGetPathValue(root, "$.frameRate");
+        var candidate = JsonValue.Create((int)Clamp((TryToDecimal(baseline) ?? 13) >= 25 ? 24 : (TryToDecimal(baseline) ?? 13) + 1, 5, 25));
+        var payload = (JsonObject)root.DeepClone();
+        SetPathValue(payload, "$.frameRate", candidate);
+        var write = await ExecutePlanAsync(device.Id, endpoint, "PUT", payload, expertOverride, cancellationToken);
+        var resultValue = await ReadEndpointValueDirectAsync(device.Id, endpoint, "$.frameRate", cancellationToken);
+        if (ValuesEquivalent(resultValue, candidate))
+        {
+            _ = await ExecutePlanAsync(device.Id, endpoint, "PUT", (JsonObject)root.DeepClone(), expertOverride: true, cancellationToken);
+        }
+
+        var writable = ValuesEquivalent(resultValue, candidate);
+        var notes = write?.Message ?? string.Empty;
+        return
+        (
+            new EncodeFullObjectProbeResult
+            {
+                Endpoint = endpoint,
+                BaselinePayload = (JsonObject)root.DeepClone(),
+                AttemptedPayload = payload,
+                ResultValue = resultValue?.DeepClone(),
+                WriteAccepted = write?.Success == true,
+                Classification = writable ? OwnershipWriteClassification.Writable : OwnershipWriteClassification.ReadableOnly,
+                Notes = notes
+            },
+            new GroupedUnsupportedRetestResult
+            {
+                DeviceId = device.Id,
+                FirmwareFingerprint = firmware,
+                IpAddress = device.IpAddress ?? string.Empty,
+                GroupKind = GroupedConfigKind.VideoEncodeConfig,
+                ContractKey = "pipeline.frameRate",
+                FieldKey = "frameRate",
+                SourceEndpoint = endpoint,
+                SourcePath = "$.frameRate",
+                BaselineValue = baseline?.DeepClone(),
+                AttemptedValue = candidate.DeepClone(),
+                ImmediateValue = resultValue?.DeepClone(),
+                FirstWriteSucceeded = write?.Success == true,
+                Behavior = writable ? GroupedApplyBehavior.ImmediateApplied : GroupedApplyBehavior.Unapplied,
+                Classification = writable ? ForcedFieldClassification.Writable : ForcedFieldClassification.ReadableOnly,
+                BaselineFieldPresent = baseline is not null,
+                DefinitionSource = "pipeline-ownership",
+                Notes = $"full-object-put:{notes}"
+            }
+        );
+    }
 
     public async Task<IReadOnlyCollection<GroupedUnsupportedRetestResult>> ForceEnumerateSdkFieldsAsync(Guid deviceId, ForcedEnumerationRequest request, CancellationToken cancellationToken)
     {
@@ -666,6 +1190,15 @@ public sealed class GroupedConfigService(
         return endpointValue?.Value as JsonObject;
     }
 
+    private async Task<JsonObject?> ReadEndpointObjectDirectAsync(Guid deviceId, string endpoint, CancellationToken cancellationToken)
+        => await ReadEndpointNodeDirectAsync(deviceId, endpoint, cancellationToken) as JsonObject;
+
+    private async Task<JsonNode?> ReadEndpointNodeDirectAsync(Guid deviceId, string endpoint, CancellationToken cancellationToken)
+    {
+        var read = await ExecutePlanAsync(deviceId, endpoint, "GET", null, expertOverride: true, cancellationToken);
+        return read?.Response?.DeepClone();
+    }
+
     private async Task<(string SourceEndpoint, JsonObject Value)?> FindEndpointPayloadAsync(Guid deviceId, string endpointPattern, CancellationToken cancellationToken)
     {
         var snapshot = await settingsService.ReadAsync(deviceId, cancellationToken);
@@ -693,7 +1226,8 @@ public sealed class GroupedConfigService(
                 Method = method,
                 Payload = payload,
                 SnapshotBeforeWrite = true,
-                RequireWriteVerification = !expertOverride
+                RequireWriteVerification = !expertOverride,
+                AllowRollback = false
             },
             cancellationToken);
 
@@ -728,7 +1262,8 @@ public sealed class GroupedConfigService(
                     AdapterName = null,
                     Payload = payload,
                     SnapshotBeforeWrite = true,
-                    RequireWriteVerification = !expertOverride
+                    RequireWriteVerification = !expertOverride,
+                    AllowRollback = false
                 };
                 var result = await settingsService.WriteAsync(deviceId, plan, cancellationToken);
                 if (result is null)
@@ -754,6 +1289,12 @@ public sealed class GroupedConfigService(
             .SelectMany(static group => group.Values.Values)
             .FirstOrDefault(item => NormalizeEndpoint(item.SourceEndpoint ?? item.Key).Equals(NormalizeEndpoint(endpoint), StringComparison.OrdinalIgnoreCase));
         return TryGetPathValue(endpointValue?.Value, sourcePath);
+    }
+
+    private async Task<JsonNode?> ReadEndpointValueDirectAsync(Guid deviceId, string endpoint, string sourcePath, CancellationToken cancellationToken)
+    {
+        var node = await ReadEndpointNodeDirectAsync(deviceId, endpoint, cancellationToken);
+        return TryGetPathValue(node, sourcePath);
     }
 
     private async Task SaveGroupedProfilesAsync(
@@ -1271,7 +1812,13 @@ public sealed class GroupedConfigService(
     private static JsonNode? NextEnumCandidate(JsonObject root, string optionPath, JsonNode? baseline)
     {
         var options = TryGetPathValue(root, optionPath) as JsonArray;
-        return NextEnumValue(baseline, options?.Select(static item => item?.ToJsonString().Trim('"')).Where(static item => !string.IsNullOrWhiteSpace(item)).ToArray() ?? []);
+        var values = options?
+            .Select(static item => item?.ToJsonString().Trim('"'))
+            .Where(static item => !string.IsNullOrWhiteSpace(item))
+            .Select(static item => item!)
+            .ToArray()
+            ?? [];
+        return NextEnumValue(baseline, values);
     }
 
     private static JsonNode? NextEnumValue(JsonNode? baseline, IReadOnlyCollection<string> options)
@@ -1434,6 +1981,27 @@ public sealed class GroupedConfigService(
            ?? $"{device.HardwareModel}|{device.FirmwareVersion}|{device.DeviceType}";
 
     private static decimal Clamp(decimal value, decimal min, decimal max) => Math.Min(max, Math.Max(min, value));
+
+    private static bool ValuesEquivalent(JsonNode? left, JsonNode? right)
+    {
+        if (JsonNode.DeepEquals(left, right))
+        {
+            return true;
+        }
+
+        var leftDecimal = TryToDecimal(left);
+        var rightDecimal = TryToDecimal(right);
+        if (leftDecimal is not null && rightDecimal is not null)
+        {
+            return leftDecimal.Value == rightDecimal.Value;
+        }
+
+        var leftText = left?.ToJsonString().Trim('"');
+        var rightText = right?.ToJsonString().Trim('"');
+        return !string.IsNullOrWhiteSpace(leftText)
+            && !string.IsNullOrWhiteSpace(rightText)
+            && string.Equals(leftText, rightText, StringComparison.OrdinalIgnoreCase);
+    }
 
     private static bool ParseBool(JsonNode? node)
     {
