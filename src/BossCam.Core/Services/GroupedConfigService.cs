@@ -173,7 +173,7 @@ public sealed class GroupedConfigService(
                 continue;
             }
 
-            var first = await ApplyGroupedFieldAsync(deviceId, endpointMatch.Value.SourceEndpoint, def.SourcePath, candidate, request.ExpertOverride, cancellationToken);
+            var first = await ApplyGroupedFieldAsync(deviceId, def.GroupKind, endpointMatch.Value.SourceEndpoint, def.SourcePath, candidate, request.ExpertOverride, cancellationToken);
             var immediate = await ReadFieldValueAsync(deviceId, endpointMatch.Value.SourceEndpoint, def.SourcePath, cancellationToken);
             await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
             var delayed1 = await ReadFieldValueAsync(deviceId, endpointMatch.Value.SourceEndpoint, def.SourcePath, cancellationToken);
@@ -187,7 +187,7 @@ public sealed class GroupedConfigService(
             var behavior = ClassifyBehavior(candidate, immediate, delayed1, delayed3, delayed5, first?.Success == true);
             if (behavior is GroupedApplyBehavior.RequiresCommitTrigger or GroupedApplyBehavior.Unapplied)
             {
-                var secondWrite = await ApplyGroupedFieldAsync(deviceId, endpointMatch.Value.SourceEndpoint, def.SourcePath, candidate, request.ExpertOverride, cancellationToken);
+                var secondWrite = await ApplyGroupedFieldAsync(deviceId, def.GroupKind, endpointMatch.Value.SourceEndpoint, def.SourcePath, candidate, request.ExpertOverride, cancellationToken);
                 secondary = secondWrite?.Success == true;
                 var secondImmediate = await ReadFieldValueAsync(deviceId, endpointMatch.Value.SourceEndpoint, def.SourcePath, cancellationToken);
                 if (JsonNode.DeepEquals(secondImmediate, candidate))
@@ -196,7 +196,7 @@ public sealed class GroupedConfigService(
                 }
                 else
                 {
-                    var thirdWrite = await ApplyGroupedFieldAsync(deviceId, endpointMatch.Value.SourceEndpoint, def.SourcePath, candidate, request.ExpertOverride, cancellationToken);
+                    var thirdWrite = await ApplyGroupedFieldAsync(deviceId, def.GroupKind, endpointMatch.Value.SourceEndpoint, def.SourcePath, candidate, request.ExpertOverride, cancellationToken);
                     resend = thirdWrite?.Success == true;
                     await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
                     var afterResend = await ReadFieldValueAsync(deviceId, endpointMatch.Value.SourceEndpoint, def.SourcePath, cancellationToken);
@@ -237,7 +237,7 @@ public sealed class GroupedConfigService(
 
             if (baselinePresent)
             {
-                _ = await ApplyGroupedFieldAsync(deviceId, endpointMatch.Value.SourceEndpoint, def.SourcePath, baseline!.DeepClone(), expertOverride: true, cancellationToken);
+                _ = await ApplyGroupedFieldAsync(deviceId, def.GroupKind, endpointMatch.Value.SourceEndpoint, def.SourcePath, baseline!.DeepClone(), expertOverride: true, cancellationToken);
             }
         }
 
@@ -294,7 +294,8 @@ public sealed class GroupedConfigService(
             }
 
             var baseline = await ReadFieldValueAsync(deviceId, field.SourceEndpoint, contractField.SourcePath, cancellationToken);
-            var first = await ApplyGroupedFieldAsync(deviceId, field.SourceEndpoint, contractField.SourcePath, candidate, request.ExpertOverride, cancellationToken);
+            var groupKind = ResolveGroupKind(field.FieldKey);
+            var first = await ApplyGroupedFieldAsync(deviceId, groupKind, field.SourceEndpoint, contractField.SourcePath, candidate, request.ExpertOverride, cancellationToken);
             var immediate = await ReadFieldValueAsync(deviceId, field.SourceEndpoint, contractField.SourcePath, cancellationToken);
             await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
             var delayed1 = await ReadFieldValueAsync(deviceId, field.SourceEndpoint, contractField.SourcePath, cancellationToken);
@@ -308,7 +309,7 @@ public sealed class GroupedConfigService(
             var behavior = ClassifyBehavior(candidate, immediate, delayed1, delayed3, delayed5, first?.Success == true);
             if (behavior is GroupedApplyBehavior.RequiresCommitTrigger or GroupedApplyBehavior.Unapplied)
             {
-                var secondWrite = await ApplyGroupedFieldAsync(deviceId, field.SourceEndpoint, contractField.SourcePath, candidate, request.ExpertOverride, cancellationToken);
+                var secondWrite = await ApplyGroupedFieldAsync(deviceId, groupKind, field.SourceEndpoint, contractField.SourcePath, candidate, request.ExpertOverride, cancellationToken);
                 secondary = secondWrite?.Success == true;
                 immediate = await ReadFieldValueAsync(deviceId, field.SourceEndpoint, contractField.SourcePath, cancellationToken);
                 behavior = JsonNode.DeepEquals(immediate, candidate)
@@ -317,7 +318,7 @@ public sealed class GroupedConfigService(
 
                 if (behavior is GroupedApplyBehavior.RequiresCommitTrigger or GroupedApplyBehavior.Unapplied)
                 {
-                    var thirdWrite = await ApplyGroupedFieldAsync(deviceId, field.SourceEndpoint, contractField.SourcePath, candidate, request.ExpertOverride, cancellationToken);
+                    var thirdWrite = await ApplyGroupedFieldAsync(deviceId, groupKind, field.SourceEndpoint, contractField.SourcePath, candidate, request.ExpertOverride, cancellationToken);
                     resend = thirdWrite?.Success == true;
                     await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
                     var afterResend = await ReadFieldValueAsync(deviceId, field.SourceEndpoint, contractField.SourcePath, cancellationToken);
@@ -337,7 +338,7 @@ public sealed class GroupedConfigService(
                 DeviceId = deviceId,
                 FirmwareFingerprint = BuildFirmwareFingerprint(device, fields),
                 IpAddress = device.IpAddress ?? string.Empty,
-                GroupKind = ResolveGroupKind(field.FieldKey),
+                GroupKind = groupKind,
                 ContractKey = contract.ContractKey,
                 FieldKey = field.FieldKey,
                 SourceEndpoint = field.SourceEndpoint,
@@ -393,6 +394,7 @@ public sealed class GroupedConfigService(
 
     private async Task<WriteResult?> ApplyGroupedFieldAsync(
         Guid deviceId,
+        GroupedConfigKind groupKind,
         string endpoint,
         string sourcePath,
         JsonNode value,
@@ -408,19 +410,36 @@ public sealed class GroupedConfigService(
             return null;
         }
 
-        var payload = (JsonObject)root.DeepClone();
-        SetPathValue(payload, sourcePath, value.DeepClone());
-        var plan = new WritePlan
+        WriteResult? last = null;
+        foreach (var endpointCandidate in BuildEndpointCandidates(groupKind, endpoint))
         {
-            GroupName = "SDK Forced Enumeration",
-            Endpoint = endpoint,
-            Method = "PUT",
-            AdapterName = "sdk-enumerator",
-            Payload = payload,
-            SnapshotBeforeWrite = true,
-            RequireWriteVerification = !expertOverride
-        };
-        return await settingsService.WriteAsync(deviceId, plan, cancellationToken);
+            foreach (var payload in BuildPayloadCandidates(groupKind, root, sourcePath, value))
+            {
+                var plan = new WritePlan
+                {
+                    GroupName = "SDK Forced Enumeration",
+                    Endpoint = endpointCandidate,
+                    Method = "PUT",
+                    AdapterName = null,
+                    Payload = payload,
+                    SnapshotBeforeWrite = true,
+                    RequireWriteVerification = !expertOverride
+                };
+                var result = await settingsService.WriteAsync(deviceId, plan, cancellationToken);
+                if (result is null)
+                {
+                    continue;
+                }
+
+                last = result;
+                if (result.Success)
+                {
+                    return result;
+                }
+            }
+        }
+
+        return last;
     }
 
     private async Task<JsonNode?> ReadFieldValueAsync(Guid deviceId, string endpoint, string sourcePath, CancellationToken cancellationToken)
@@ -811,6 +830,82 @@ public sealed class GroupedConfigService(
         }
 
         return field.Kind == ContractFieldKind.Integer ? JsonValue.Create((int)attempted) : JsonValue.Create(attempted);
+    }
+
+    private static IReadOnlyCollection<string> BuildEndpointCandidates(GroupedConfigKind groupKind, string endpoint)
+    {
+        var normalized = NormalizeEndpoint(endpoint);
+        var candidates = new List<string> { normalized };
+        static void Add(List<string> list, string value)
+        {
+            if (!list.Contains(value, StringComparer.OrdinalIgnoreCase))
+            {
+                list.Add(value);
+            }
+        }
+
+        switch (groupKind)
+        {
+            case GroupedConfigKind.ImageConfig:
+                Add(candidates, "/NetSDK/Image");
+                Add(candidates, "/NetSDK/Image/0");
+                Add(candidates, "/NetSDK/Video/input/channel/0");
+                Add(candidates, "/NetSDK/Video/input/channel/1");
+                break;
+            case GroupedConfigKind.VideoEncodeConfig:
+                Add(candidates, "/NetSDK/Video/encode/channel/0");
+                Add(candidates, "/NetSDK/Video/encode/channel/101");
+                Add(candidates, "/NetSDK/Video/encode/channel/101/properties");
+                Add(candidates, "/NetSDK/Video/encode/channel/102");
+                Add(candidates, "/NetSDK/Video/encode/channel/102/properties");
+                break;
+            case GroupedConfigKind.NetworkConfig:
+            case GroupedConfigKind.WifiConfig:
+                Add(candidates, "/NetSDK/Network/interfaces");
+                Add(candidates, "/NetSDK/Network/interfaces/0");
+                Add(candidates, "/NetSDK/Network/Ports");
+                Add(candidates, "/NetSDK/Network/Dns");
+                Add(candidates, "/NetSDK/Network/Esee");
+                break;
+        }
+
+        return candidates;
+    }
+
+    private static IReadOnlyCollection<JsonObject> BuildPayloadCandidates(GroupedConfigKind groupKind, JsonObject root, string sourcePath, JsonNode value)
+    {
+        var payload = (JsonObject)root.DeepClone();
+        SetPathValue(payload, sourcePath, value.DeepClone());
+        var candidates = new List<JsonObject> { payload };
+
+        JsonObject Wrap(string key) => new() { [key] = payload.DeepClone() };
+        switch (groupKind)
+        {
+            case GroupedConfigKind.ImageConfig:
+                candidates.Add(Wrap("Image"));
+                break;
+            case GroupedConfigKind.VideoEncodeConfig:
+                candidates.Add(Wrap("VideoEncodeChannel"));
+                break;
+            case GroupedConfigKind.NetworkConfig:
+                candidates.Add(Wrap("NetworkInterfaceList"));
+                break;
+            case GroupedConfigKind.WifiConfig:
+                candidates.Add(Wrap("NetworkInterfaceWireless"));
+                break;
+            case GroupedConfigKind.UserConfig:
+                candidates.Add(Wrap("DeviceInfo"));
+                break;
+            case GroupedConfigKind.AlarmConfig:
+                candidates.Add(Wrap("AlarmOutputChannel"));
+                candidates.Add(Wrap("VideoMotionDetectionChannel"));
+                break;
+            case GroupedConfigKind.StorageConfig:
+                candidates.Add(Wrap("SDCardDbMedia"));
+                break;
+        }
+
+        return candidates;
     }
 
     private static GroupedConfigKind ResolveGroupKind(string fieldKey)

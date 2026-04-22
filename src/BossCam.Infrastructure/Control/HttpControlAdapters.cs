@@ -29,29 +29,23 @@ public abstract class HttpControlAdapterBase(IOptions<BossCamRuntimeOptions> opt
             return null;
         }
 
-        using var handler = new HttpClientHandler();
-        using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(Options.HttpTimeoutSeconds) };
-        using var request = new HttpRequestMessage(new HttpMethod(method), BuildDeviceUri(device, endpoint));
-        ApplyBasicAuth(request, device);
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/plain"));
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/xml"));
-        if (payload is not null)
+        var uri = BuildDeviceUri(device, endpoint);
+        var payloadRaw = payload?.ToJsonString();
+        var basic = await SendOnceAsync(device, uri, endpoint, method, payloadRaw, mediaType, useBasicHeader: true, useCredentialCache: false, cancellationToken);
+        if (basic is not null && basic.StatusCode != HttpStatusCode.Unauthorized)
         {
-            request.Content = new StringContent(payload.ToJsonString(), Encoding.UTF8, mediaType ?? "application/json");
+            return basic;
         }
 
-        try
-        {
-            using var response = await client.SendAsync(request, cancellationToken);
-            var raw = await response.Content.ReadAsStringAsync(cancellationToken);
-            return new HttpAdapterResponse(response.StatusCode, TryParseNode(raw), raw);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogDebug(ex, "HTTP call {Method} {Endpoint} failed for {Device}", method, endpoint, device.DisplayName);
-            return null;
-        }
+        Logger.LogInformation(
+            "HTTP auth retry with digest/credential-cache. adapter={Adapter} device={Device} ip={Ip} endpoint={Endpoint} method={Method} firstStatus={Status}",
+            GetType().Name,
+            device.DisplayName,
+            device.IpAddress,
+            endpoint,
+            method,
+            basic?.StatusCode);
+        return await SendOnceAsync(device, uri, endpoint, method, payloadRaw, mediaType, useBasicHeader: false, useCredentialCache: true, cancellationToken);
     }
 
     protected async Task<HttpAdapterResponse?> SendMultipartAsync(DeviceIdentity device, string endpoint, MultipartFormDataContent content, CancellationToken cancellationToken)
@@ -176,6 +170,77 @@ public abstract class HttpControlAdapterBase(IOptions<BossCamRuntimeOptions> opt
         var password = device.Password ?? string.Empty;
         var credential = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{login}:{password}"));
         request.Headers.Authorization = new AuthenticationHeaderValue("Basic", credential);
+    }
+
+    private async Task<HttpAdapterResponse?> SendOnceAsync(
+        DeviceIdentity device,
+        Uri uri,
+        string endpoint,
+        string method,
+        string? payloadRaw,
+        string? mediaType,
+        bool useBasicHeader,
+        bool useCredentialCache,
+        CancellationToken cancellationToken)
+    {
+        using var handler = new HttpClientHandler();
+        if (useCredentialCache)
+        {
+            handler.Credentials = new NetworkCredential(
+                string.IsNullOrWhiteSpace(device.LoginName) ? "admin" : device.LoginName,
+                device.Password ?? string.Empty);
+            handler.PreAuthenticate = false;
+        }
+
+        using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(Options.HttpTimeoutSeconds) };
+        using var request = new HttpRequestMessage(new HttpMethod(method), uri);
+        if (useBasicHeader)
+        {
+            ApplyBasicAuth(request, device);
+        }
+
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/plain"));
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/xml"));
+        if (payloadRaw is not null)
+        {
+            request.Content = new StringContent(payloadRaw, Encoding.UTF8, mediaType ?? "application/json");
+        }
+
+        var headerSummary = string.Join("; ", request.Headers.Select(static header => $"{header.Key}={string.Join(",", header.Value)}"));
+        Logger.LogInformation(
+            "HTTP request trace. adapter={Adapter} device={Device} ip={Ip} url={Url} endpoint={Endpoint} method={Method} auth={Auth} headers={Headers} payload={Payload}",
+            GetType().Name,
+            device.DisplayName,
+            device.IpAddress,
+            uri,
+            endpoint,
+            method,
+            useBasicHeader ? "Basic" : (useCredentialCache ? "CredentialCache" : "None"),
+            headerSummary,
+            payloadRaw ?? string.Empty);
+
+        try
+        {
+            using var response = await client.SendAsync(request, cancellationToken);
+            var raw = await response.Content.ReadAsStringAsync(cancellationToken);
+            Logger.LogInformation(
+                "HTTP response trace. adapter={Adapter} device={Device} ip={Ip} url={Url} endpoint={Endpoint} method={Method} status={Status} response={Response}",
+                GetType().Name,
+                device.DisplayName,
+                device.IpAddress,
+                uri,
+                endpoint,
+                method,
+                (int)response.StatusCode,
+                raw);
+            return new HttpAdapterResponse(response.StatusCode, TryParseNode(raw), raw);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "HTTP call failed. adapter={Adapter} device={Device} ip={Ip} url={Url} endpoint={Endpoint} method={Method}", GetType().Name, device.DisplayName, device.IpAddress, uri, endpoint, method);
+            return null;
+        }
     }
 }
 

@@ -117,6 +117,14 @@ public sealed class SettingsService(
         var adapter = await ResolveAdapterAsync(device, plan.AdapterName, cancellationToken);
         if (adapter is null)
         {
+            logger.LogWarning(
+                "Write routing failed: no adapter matched. device={Device} ip={Ip} requestedAdapter={RequestedAdapter} endpoint={Endpoint} method={Method} payload={Payload}",
+                device.DisplayName,
+                device.IpAddress,
+                plan.AdapterName ?? "(none)",
+                plan.Endpoint,
+                plan.Method,
+                plan.Payload?.ToJsonString() ?? string.Empty);
             return new WriteResult { Success = false, AdapterName = plan.AdapterName ?? string.Empty, Message = "No control adapter matched the device." };
         }
 
@@ -252,11 +260,35 @@ public sealed class SettingsService(
 
     private async Task<IControlAdapter?> ResolveAdapterAsync(DeviceIdentity device, string? requestedAdapterName, CancellationToken cancellationToken)
     {
-        foreach (var adapter in controlAdapters.Where(adapter => string.IsNullOrWhiteSpace(requestedAdapterName) || adapter.Name.Equals(requestedAdapterName, StringComparison.OrdinalIgnoreCase)).OrderBy(static adapter => adapter.Priority))
+        var ordered = controlAdapters.OrderBy(static adapter => adapter.Priority).ToList();
+        var candidates = ordered
+            .Where(adapter => string.IsNullOrWhiteSpace(requestedAdapterName) || adapter.Name.Equals(requestedAdapterName, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (candidates.Count == 0)
+        {
+            logger.LogWarning(
+                "No adapter candidates after name filter. device={Device} ip={Ip} requested={RequestedAdapter} known={Known}",
+                device.DisplayName,
+                device.IpAddress,
+                requestedAdapterName,
+                string.Join(",", ordered.Select(static adapter => adapter.Name)));
+            return null;
+        }
+
+        foreach (var adapter in candidates)
         {
             try
             {
-                if (await adapter.CanHandleAsync(device, cancellationToken))
+                var canHandle = await adapter.CanHandleAsync(device, cancellationToken);
+                logger.LogInformation(
+                    "Adapter capability probe. device={Device} ip={Ip} requested={RequestedAdapter} adapter={Adapter} priority={Priority} canHandle={CanHandle}",
+                    device.DisplayName,
+                    device.IpAddress,
+                    requestedAdapterName ?? "(none)",
+                    adapter.Name,
+                    adapter.Priority,
+                    canHandle);
+                if (canHandle)
                 {
                     return adapter;
                 }
@@ -267,6 +299,11 @@ public sealed class SettingsService(
             }
         }
 
+        logger.LogWarning(
+            "No adapter matched device after capability probes. device={Device} ip={Ip} requested={RequestedAdapter}",
+            device.DisplayName,
+            device.IpAddress,
+            requestedAdapterName ?? "(none)");
         return null;
     }
 
