@@ -122,6 +122,8 @@ Regression fixtures in repo:
 - `GET /api/devices/{id}/grouped-config/profiles`
 - `GET /api/devices/{id}/grouped-config/retest-results`
 - `POST /api/devices/{id}/grouped-config/retest-unsupported`
+- `GET /api/grouped-config/sdk-field-catalog`
+- `POST /api/devices/{id}/grouped-config/force-enumerate-sdk-fields`
 
 Optional ffmpeg override:
 - environment variable `BOSSCAM_FFMPEG_PATH`

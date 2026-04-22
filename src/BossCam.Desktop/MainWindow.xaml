@@ -637,6 +637,7 @@
                                     <Button Margin="0,0,8,8" Padding="10,5" Click="DiscoverConstraints_Click">Discover Constraints</Button>
                                     <Button Margin="0,0,8,8" Padding="10,5" Click="RunImageTruthSweep_Click">Image Truth Sweep</Button>
                                     <Button Margin="0,0,8,8" Padding="10,5" Click="RetestUnsupportedGrouped_Click">Retest Unsupported (Grouped)</Button>
+                                    <Button Margin="0,0,8,8" Padding="10,5" Click="ForceEnumerateSdkFields_Click">Force Enumerate SDK Fields</Button>
                                     <Button Margin="0,0,8,8" Padding="10,5" Click="PromoteFixtures_Click">Promote Fixtures</Button>
                                     <Button Margin="0,0,8,8" Padding="10,5" Click="NativeAssessment_Click">Native Gap</Button>
                                     <Button Margin="0,0,8,8" Padding="10,5" Click="RefreshTyped_Click">Refresh Typed</Button>

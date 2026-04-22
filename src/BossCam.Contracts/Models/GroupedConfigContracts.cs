@@ -10,7 +10,9 @@ public enum GroupedConfigKind
     VideoEncodeConfig,
     NetworkConfig,
     WifiConfig,
-    UserConfig
+    UserConfig,
+    AlarmConfig,
+    StorageConfig
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
@@ -22,6 +24,18 @@ public enum GroupedApplyBehavior
     RequiresCommitTrigger,
     Unapplied,
     Unknown
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum ForcedFieldClassification
+{
+    Writable,
+    ReadableOnly,
+    Ignored,
+    RequiresGroupedWrite,
+    RequiresCommitTrigger,
+    DelayedApply,
+    Unsupported
 }
 
 public sealed record GroupedConfigSnapshot
@@ -42,6 +56,31 @@ public sealed record GroupedRetestRequest
     public bool IncludeDangerous { get; init; }
     public bool ExpertOverride { get; init; } = true;
     public IReadOnlyCollection<string> FieldKeys { get; init; } = [];
+}
+
+public sealed record ForcedEnumerationRequest
+{
+    public bool RefreshFromDevice { get; init; } = true;
+    public bool IncludeDangerous { get; init; }
+    public bool ExpertOverride { get; init; } = true;
+    public IReadOnlyCollection<GroupedConfigKind> Groups { get; init; } = [];
+    public IReadOnlyCollection<string> FieldKeys { get; init; } = [];
+}
+
+public sealed record SdkFieldDefinition
+{
+    public GroupedConfigKind GroupKind { get; init; } = GroupedConfigKind.ImageConfig;
+    public string FieldKey { get; init; } = string.Empty;
+    public string DisplayName { get; init; } = string.Empty;
+    public string EndpointPattern { get; init; } = string.Empty;
+    public string SourcePath { get; init; } = string.Empty;
+    public ContractFieldKind Kind { get; init; } = ContractFieldKind.Opaque;
+    public bool Writable { get; init; } = true;
+    public decimal? Min { get; init; }
+    public decimal? Max { get; init; }
+    public IReadOnlyCollection<string> EnumValues { get; init; } = [];
+    public string SourceEvidence { get; init; } = "ipc-sdk-v1.4";
+    public string Notes { get; init; } = string.Empty;
 }
 
 public sealed record GroupedUnsupportedRetestResult
@@ -65,6 +104,10 @@ public sealed record GroupedUnsupportedRetestResult
     public bool SecondaryWriteSucceeded { get; init; }
     public bool ResendWriteSucceeded { get; init; }
     public GroupedApplyBehavior Behavior { get; init; } = GroupedApplyBehavior.Unknown;
+    public ForcedFieldClassification Classification { get; init; } = ForcedFieldClassification.Unsupported;
+    public bool InjectedMissingField { get; init; }
+    public bool BaselineFieldPresent { get; init; }
+    public string DefinitionSource { get; init; } = string.Empty;
     public string Notes { get; init; } = string.Empty;
     public DateTimeOffset CapturedAt { get; init; } = DateTimeOffset.UtcNow;
 }

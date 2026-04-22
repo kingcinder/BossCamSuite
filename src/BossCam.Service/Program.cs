@@ -210,6 +210,10 @@ app.MapGet("/api/devices/{id:guid}/grouped-config/retest-results", async (Guid i
     Results.Ok(await groupedConfigService.GetRetestResultsAsync(id, limit ?? 400, ct)));
 app.MapPost("/api/devices/{id:guid}/grouped-config/retest-unsupported", async (Guid id, GroupedRetestRequest? request, GroupedConfigService groupedConfigService, CancellationToken ct) =>
     Results.Ok(await groupedConfigService.RetestUnsupportedFieldsAsync(id, request ?? new GroupedRetestRequest(), ct)));
+app.MapGet("/api/grouped-config/sdk-field-catalog", (GroupedConfigService groupedConfigService) =>
+    Results.Ok(groupedConfigService.GetSdkFieldCatalog()));
+app.MapPost("/api/devices/{id:guid}/grouped-config/force-enumerate-sdk-fields", async (Guid id, ForcedEnumerationRequest? request, GroupedConfigService groupedConfigService, CancellationToken ct) =>
+    Results.Ok(await groupedConfigService.ForceEnumerateSdkFieldsAsync(id, request ?? new ForcedEnumerationRequest(), ct)));
 app.MapPost("/api/devices/{id:guid}/network/recovery", async (Guid id, NetworkRecoveryContext context, SemanticTrustService semanticTrustService, CancellationToken ct) =>
     Results.Ok(await semanticTrustService.RecoverNetworkAsync(context with { DeviceId = id }, ct)));
 app.MapGet("/api/recordings", async (Guid? deviceId, IApplicationStore store, CancellationToken ct) => Results.Ok(await store.GetRecordingProfilesAsync(deviceId, ct)));

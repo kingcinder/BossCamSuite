@@ -1002,6 +1002,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private async void DiscoverConstraints_Click(object sender, RoutedEventArgs e) => await RunAsync(DiscoverConstraintsAsync);
     private async void RunImageTruthSweep_Click(object sender, RoutedEventArgs e) => await RunAsync(RunImageTruthSweepAsync);
     private async void RetestUnsupportedGrouped_Click(object sender, RoutedEventArgs e) => await RunAsync(RetestUnsupportedGroupedAsync);
+    private async void ForceEnumerateSdkFields_Click(object sender, RoutedEventArgs e) => await RunAsync(ForceEnumerateSdkFieldsAsync);
     private async void PromoteFixtures_Click(object sender, RoutedEventArgs e) => await RunAsync(PromoteFixturesAsync);
     private async void NativeAssessment_Click(object sender, RoutedEventArgs e) => await RunAsync(LoadNativeAssessmentAsync);
     private async void ApplyValidated_Click(object sender, RoutedEventArgs e) => await RunAsync(() => ApplyPendingEditsAsync(expertOverride: false));
@@ -1228,6 +1229,32 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         await LoadTypedAsync();
         await LoadImageTruthAsync();
         ShowToast($"Grouped retest completed for {result.Count} field(s).", success: true);
+    }
+
+    private async Task ForceEnumerateSdkFieldsAsync()
+    {
+        if (SelectedDevice is null)
+        {
+            DiagnosticsText = "Select a device first.";
+            return;
+        }
+
+        var request = new ForcedEnumerationRequest
+        {
+            RefreshFromDevice = true,
+            IncludeDangerous = false,
+            ExpertOverride = true
+        };
+        var result = await PostAsync<List<GroupedUnsupportedRetestResult>>($"/api/devices/{SelectedDevice.Id}/grouped-config/force-enumerate-sdk-fields", request) ?? [];
+        DiagnosticsText = JsonSerializer.Serialize(result, SerializerOptions);
+        await LoadTypedAsync();
+        await LoadImageTruthAsync();
+
+        var summary = string.Join(", ", result
+            .GroupBy(static item => item.Classification)
+            .OrderBy(static group => group.Key.ToString())
+            .Select(group => $"{group.Key}={group.Count()}"));
+        ShowToast($"SDK enumeration: {summary}", success: true);
     }
 
     private async Task LoadNativeAssessmentAsync()
