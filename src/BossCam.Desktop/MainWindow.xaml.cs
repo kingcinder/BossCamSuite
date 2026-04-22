@@ -386,6 +386,13 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     }
     public string VideoFrameRate { get => GetValue("frameRate"); set => SetValue("frameRate", value); }
     public string VideoKeyframeInterval { get => GetValue("keyframeInterval"); set => SetValue("keyframeInterval", value); }
+    public bool StreamAudioEnabled
+    {
+        get => ParseBool(GetValue("audioEnabled"));
+        set => SetValue("audioEnabled", value ? "true" : "false");
+    }
+    public string StreamAudioBitrate { get => GetValue("audioBitRate"); set => SetValue("audioBitRate", value); }
+    public string StreamAudioSampleRate { get => GetValue("audioSampleRate"); set => SetValue("audioSampleRate", value); }
     public string ImageBrightness { get => GetValue("brightness"); set => SetValue("brightness", value); }
     public double ImageBrightnessSlider
     {
@@ -507,6 +514,17 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
     }
     public string ImageOsd { get => GetValue("osd"); set => SetValue("osd", value); }
+    public bool ImageOsdChannelNameEnabled
+    {
+        get => ParseBool(GetValue("osdChannelNameEnabled"));
+        set => SetValue("osdChannelNameEnabled", value ? "true" : "false");
+    }
+    public string ImageOsdChannelNameText { get => GetValue("osdChannelNameText"); set => SetValue("osdChannelNameText", value); }
+    public bool ImageOsdDateTimeEnabled
+    {
+        get => ParseBool(GetValue("osdDateTimeEnabled"));
+        set => SetValue("osdDateTimeEnabled", value ? "true" : "false");
+    }
 
     // Network/wireless typed bindings
     public string NetworkIp { get => GetValue("ip"); set => SetValue("ip", value); }
@@ -656,6 +674,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public bool CanEditImageWhiteLight => CanEdit("whiteLight");
     public bool CanEditImageInfrared => CanEdit("infrared");
     public bool CanEditImageOsd => CanEdit("osd");
+    public bool CanEditImageOsdChannelNameEnabled => CanEdit("osdChannelNameEnabled");
+    public bool CanEditImageOsdChannelNameText => CanEdit("osdChannelNameText");
+    public bool CanEditImageOsdDateTimeEnabled => CanEdit("osdDateTimeEnabled");
     public bool CanEditImageDayNight => CanEdit("dayNight");
     public bool CanEditImageIrMode => CanEdit("irMode");
     public bool CanEditImageIrCut => CanEdit("irCut");
@@ -667,6 +688,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public bool CanEditStreamBitrate => CanEdit("bitrate");
     public bool CanEditStreamFrameRate => CanEdit("frameRate");
     public bool CanEditStreamKeyframe => CanEdit("keyframeInterval");
+    public bool CanEditStreamAudioEnabled => CanEdit("audioEnabled");
+    public bool CanEditStreamAudioBitrate => CanEdit("audioBitRate");
+    public bool CanEditStreamAudioSampleRate => CanEdit("audioSampleRate");
     public bool CanEditNetworkIp => CanEdit("ip");
     public bool CanEditNetworkNetmask => CanEdit("netmask");
     public bool CanEditNetworkGateway => CanEdit("gateway");
@@ -721,6 +745,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public Visibility StreamBitrateVisibility => FieldVisibility("bitrate");
     public Visibility StreamFpsVisibility => FieldVisibility("frameRate");
     public Visibility StreamKeyframeVisibility => FieldVisibility("keyframeInterval");
+    public Visibility StreamAudioEnabledVisibility => FieldVisibility("audioEnabled");
+    public Visibility StreamAudioBitrateVisibility => FieldVisibility("audioBitRate");
+    public Visibility StreamAudioSampleRateVisibility => FieldVisibility("audioSampleRate");
     public Visibility ImageBrightnessVisibility => OperatorFieldVisibility("brightness");
     public Visibility ImageContrastVisibility => OperatorFieldVisibility("contrast");
     public Visibility ImageSaturationVisibility => OperatorFieldVisibility("saturation");
@@ -733,6 +760,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public Visibility ImageWhiteLightVisibility => OperatorFieldVisibility("whiteLight");
     public Visibility ImageInfraredVisibility => OperatorFieldVisibility("infrared");
     public Visibility ImageOsdVisibility => OperatorFieldVisibility("osd");
+    public Visibility ImageOsdChannelNameEnabledVisibility => OperatorFieldVisibility("osdChannelNameEnabled");
+    public Visibility ImageOsdChannelNameTextVisibility => OperatorFieldVisibility("osdChannelNameText");
+    public Visibility ImageOsdDateTimeEnabledVisibility => OperatorFieldVisibility("osdDateTimeEnabled");
     public Visibility ImageMirrorVisibility => OperatorFieldVisibility("mirror");
     public Visibility ImageFlipVisibility => OperatorFieldVisibility("flip");
     public Visibility ImageDayNightVisibility => OperatorFieldVisibility("dayNight");
@@ -1933,9 +1963,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             nameof(VideoResolution), nameof(VideoResolutionOptions),
             nameof(VideoBitrate), nameof(VideoBitrateSlider), nameof(VideoBitrateMin), nameof(VideoBitrateMax),
             nameof(VideoFpsHint),
-            nameof(VideoFrameRate), nameof(VideoKeyframeInterval), nameof(ImageBrightness), nameof(ImageBrightnessSlider), nameof(ImageBrightnessMin), nameof(ImageBrightnessMax),
+            nameof(VideoFrameRate), nameof(VideoKeyframeInterval), nameof(StreamAudioEnabled), nameof(StreamAudioBitrate), nameof(StreamAudioSampleRate), nameof(ImageBrightness), nameof(ImageBrightnessSlider), nameof(ImageBrightnessMin), nameof(ImageBrightnessMax),
             nameof(ImageContrast), nameof(ImageContrastSlider), nameof(ImageSaturation), nameof(ImageSaturationSlider), nameof(ImageHue), nameof(ImageHueSlider), nameof(ImageGamma), nameof(ImageGammaSlider), nameof(ImageSharpness), nameof(ImageSharpnessSlider), nameof(ImageManualSharpness), nameof(ImageManualSharpnessSlider), nameof(ImageDenoise), nameof(ImageDenoiseSlider), nameof(ImageWdrStrength), nameof(ImageWdrStrengthSlider),
-            nameof(ImageWhiteLight), nameof(ImageWhiteLightSlider), nameof(ImageInfrared), nameof(ImageInfraredSlider), nameof(ImageOsd), nameof(ImageMirror), nameof(ImageFlip),
+            nameof(ImageWhiteLight), nameof(ImageWhiteLightSlider), nameof(ImageInfrared), nameof(ImageInfraredSlider), nameof(ImageOsd), nameof(ImageOsdChannelNameEnabled), nameof(ImageOsdChannelNameText), nameof(ImageOsdDateTimeEnabled), nameof(ImageMirror), nameof(ImageFlip),
             nameof(ImageBrightnessBehaviorBadge), nameof(ImageContrastBehaviorBadge), nameof(ImageSaturationBehaviorBadge), nameof(ImageTruthSummary),
             nameof(NetworkIp), nameof(NetworkNetmask), nameof(NetworkGateway), nameof(NetworkDns), nameof(NetworkPort), nameof(NetworkDhcpMode), nameof(NetworkEseeEnabled), nameof(NetworkNtpEnabled), nameof(NetworkNtpServer), nameof(NetworkEseeId), nameof(WirelessMode), nameof(WirelessApMode), nameof(MotionEnabled), nameof(MotionType), nameof(MotionSensitivity), nameof(MotionSensitivitySlider), nameof(MotionAlarmDuration), nameof(MotionAlarm), nameof(MotionBuzzer), nameof(VideoLossAlarmDuration), nameof(VideoLossAlarm), nameof(VideoLossBuzzer),
             nameof(PrivacyMaskEnabled), nameof(PrivacyMaskX), nameof(PrivacyMaskY), nameof(PrivacyMaskWidth), nameof(PrivacyMaskHeight), nameof(AlarmInputState), nameof(AlarmOutputState), nameof(AlarmPulseDuration), nameof(SdStatus), nameof(SdMediaType), nameof(CameraSerial), nameof(CameraMac),
@@ -1945,15 +1975,15 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             nameof(VideoCodecState), nameof(VideoProfileState), nameof(NetworkIpState), nameof(WirelessApPskState),
             nameof(CanEditVideoCodec), nameof(CanEditVideoProfile), nameof(CanEditVideoResolution), nameof(CanEditVideoDayNight), nameof(CanEditVideoIrMode), nameof(CanEditVideoWdr), nameof(CanEditVideoIrCut), nameof(CanEditVideoIrCutMethod), nameof(CanEditVideoSceneMode), nameof(CanEditVideoExposure), nameof(CanEditVideoAwb), nameof(CanEditVideoLowlight), nameof(CanEditVideoBitrateMode), nameof(CanEditVideoDefinition),
             nameof(CanEditImageBrightness), nameof(CanEditImageContrast), nameof(CanEditImageSaturation), nameof(CanEditImageSharpness), nameof(CanEditImageManualSharpness), nameof(CanEditImageDenoise), nameof(CanEditImageWdrStrength), nameof(CanEditImageHue), nameof(CanEditImageGamma), nameof(CanEditImageMirror), nameof(CanEditImageFlip),
-            nameof(CanEditImageWhiteLight), nameof(CanEditImageInfrared), nameof(CanEditImageOsd), nameof(CanEditImageDayNight), nameof(CanEditImageIrMode), nameof(CanEditImageIrCut), nameof(CanEditImageIrCutMethod), nameof(CanEditImageSceneMode), nameof(CanEditImageExposure), nameof(CanEditImageAwb), nameof(CanEditImageLowlight), nameof(CanEditMotionEnabled), nameof(CanEditMotionType), nameof(CanEditMotionSensitivity), nameof(CanEditMotionAlarmDuration), nameof(CanEditMotionAlarm), nameof(CanEditMotionBuzzer), nameof(CanEditVideoLossAlarmDuration), nameof(CanEditVideoLossAlarm), nameof(CanEditVideoLossBuzzer),
+            nameof(CanEditImageWhiteLight), nameof(CanEditImageInfrared), nameof(CanEditImageOsd), nameof(CanEditImageOsdChannelNameEnabled), nameof(CanEditImageOsdChannelNameText), nameof(CanEditImageOsdDateTimeEnabled), nameof(CanEditImageDayNight), nameof(CanEditImageIrMode), nameof(CanEditImageIrCut), nameof(CanEditImageIrCutMethod), nameof(CanEditImageSceneMode), nameof(CanEditImageExposure), nameof(CanEditImageAwb), nameof(CanEditImageLowlight), nameof(CanEditMotionEnabled), nameof(CanEditMotionType), nameof(CanEditMotionSensitivity), nameof(CanEditMotionAlarmDuration), nameof(CanEditMotionAlarm), nameof(CanEditMotionBuzzer), nameof(CanEditVideoLossAlarmDuration), nameof(CanEditVideoLossAlarm), nameof(CanEditVideoLossBuzzer),
             nameof(CanEditPrivacyMaskEnabled), nameof(CanEditPrivacyMaskX), nameof(CanEditPrivacyMaskY), nameof(CanEditPrivacyMaskWidth), nameof(CanEditPrivacyMaskHeight), nameof(CanEditAlarmInputState), nameof(CanEditAlarmOutputState), nameof(CanEditAlarmPulseDuration), nameof(CanEditAlarmDuration), nameof(CanEditAlarmEnabled), nameof(CanEditAlarmBuzzer),
-            nameof(CanEditStreamBitrate), nameof(CanEditStreamFrameRate), nameof(CanEditStreamKeyframe),
+            nameof(CanEditStreamBitrate), nameof(CanEditStreamFrameRate), nameof(CanEditStreamKeyframe), nameof(CanEditStreamAudioEnabled), nameof(CanEditStreamAudioBitrate), nameof(CanEditStreamAudioSampleRate),
             nameof(CanEditNetworkIp), nameof(CanEditNetworkNetmask), nameof(CanEditNetworkGateway), nameof(CanEditNetworkDns), nameof(CanEditNetworkPort), nameof(CanEditNetworkDhcpMode), nameof(CanEditNetworkEseeEnabled), nameof(CanEditNetworkNtpEnabled), nameof(CanEditNetworkNtpServer), nameof(CanEditWirelessMode), nameof(CanEditWirelessApMode),
             nameof(CanEditWirelessApSsid), nameof(CanEditWirelessApChannel),
             nameof(VideoCodecVisibility), nameof(VideoProfileVisibility), nameof(VideoDayNightVisibility), nameof(VideoWdrVisibility), nameof(VideoIrCutVisibility), nameof(VideoIrCutMethodVisibility), nameof(VideoSceneModeVisibility), nameof(VideoExposureVisibility), nameof(VideoAwbVisibility), nameof(VideoLowlightVisibility), nameof(VideoResolutionVisibility),
-            nameof(VideoBitrateVisibility), nameof(VideoFrameRateVisibility), nameof(StreamResolutionVisibility), nameof(StreamCodecVisibility), nameof(StreamProfileVisibility), nameof(StreamBitrateModeVisibility), nameof(StreamDefinitionVisibility), nameof(StreamBitrateVisibility), nameof(StreamFpsVisibility), nameof(StreamKeyframeVisibility),
+            nameof(VideoBitrateVisibility), nameof(VideoFrameRateVisibility), nameof(StreamResolutionVisibility), nameof(StreamCodecVisibility), nameof(StreamProfileVisibility), nameof(StreamBitrateModeVisibility), nameof(StreamDefinitionVisibility), nameof(StreamBitrateVisibility), nameof(StreamFpsVisibility), nameof(StreamKeyframeVisibility), nameof(StreamAudioEnabledVisibility), nameof(StreamAudioBitrateVisibility), nameof(StreamAudioSampleRateVisibility),
             nameof(ImageBrightnessVisibility), nameof(ImageContrastVisibility), nameof(ImageSaturationVisibility), nameof(ImageManualSharpnessVisibility), nameof(ImageDenoiseVisibility), nameof(ImageWdrStrengthVisibility), nameof(ImageMirrorVisibility), nameof(ImageFlipVisibility), nameof(ImageDayNightVisibility), nameof(ImageIrModeVisibility), nameof(ImageIrCutVisibility), nameof(ImageIrCutMethodVisibility), nameof(ImageSceneModeVisibility), nameof(ImageExposureVisibility), nameof(ImageAwbVisibility), nameof(ImageLowlightVisibility),
-            nameof(ImageHueVisibility), nameof(ImageGammaVisibility), nameof(ImageSharpnessVisibility), nameof(ImageWhiteLightVisibility), nameof(ImageInfraredVisibility), nameof(ImageOsdVisibility), nameof(NetworkIpVisibility), nameof(NetworkNetmaskVisibility), nameof(NetworkGatewayVisibility),
+            nameof(ImageHueVisibility), nameof(ImageGammaVisibility), nameof(ImageSharpnessVisibility), nameof(ImageWhiteLightVisibility), nameof(ImageInfraredVisibility), nameof(ImageOsdVisibility), nameof(ImageOsdChannelNameEnabledVisibility), nameof(ImageOsdChannelNameTextVisibility), nameof(ImageOsdDateTimeEnabledVisibility), nameof(NetworkIpVisibility), nameof(NetworkNetmaskVisibility), nameof(NetworkGatewayVisibility),
             nameof(NetworkDnsVisibility), nameof(NetworkPortVisibility), nameof(NetworkDhcpModeVisibility), nameof(NetworkEseeVisibility), nameof(NetworkNtpEnabledVisibility), nameof(NetworkNtpServerVisibility), nameof(NetworkEseeIdVisibility), nameof(WirelessModeVisibility), nameof(WirelessApModeVisibility), nameof(WirelessApSsidVisibility), nameof(WirelessApPskVisibility), nameof(WirelessApChannelVisibility), nameof(MotionEnabledVisibility), nameof(MotionTypeVisibility), nameof(MotionSensitivityVisibility), nameof(MotionAlarmDurationVisibility), nameof(MotionAlarmVisibility), nameof(MotionBuzzerVisibility), nameof(VideoLossAlarmDurationVisibility), nameof(VideoLossAlarmVisibility), nameof(VideoLossBuzzerVisibility), nameof(PrivacyMaskEnabledVisibility), nameof(PrivacyMaskXVisibility), nameof(PrivacyMaskYVisibility), nameof(PrivacyMaskWidthVisibility), nameof(PrivacyMaskHeightVisibility), nameof(AlarmInputStateVisibility), nameof(AlarmOutputStateVisibility), nameof(AlarmPulseDurationVisibility), nameof(AlarmDurationVisibility), nameof(AlarmEnabledVisibility), nameof(AlarmBuzzerVisibility), nameof(SdStatusVisibility), nameof(SdMediaTypeVisibility), nameof(CameraSerialVisibility), nameof(CameraMacVisibility),
             nameof(ImageBrightnessReadOnlyTooltip), nameof(ImageContrastReadOnlyTooltip), nameof(ImageSaturationReadOnlyTooltip), nameof(ImageSharpnessReadOnlyTooltip), nameof(ImageManualSharpnessReadOnlyTooltip), nameof(ImageHueReadOnlyTooltip),
             nameof(ImageMirrorReadOnlyTooltip), nameof(ImageFlipReadOnlyTooltip), nameof(ImageDayNightReadOnlyTooltip), nameof(ImageIrModeReadOnlyTooltip), nameof(ImageIrCutReadOnlyTooltip),

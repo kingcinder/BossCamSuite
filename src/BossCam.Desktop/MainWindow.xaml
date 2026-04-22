@@ -237,6 +237,18 @@
                                         <TextBlock Width="140" Text="OSD Label" VerticalAlignment="Center"/>
                                         <TextBox Width="220" Text="{Binding ImageOsd}" IsEnabled="{Binding CanEditImageOsd}"/>
                                     </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding ImageOsdChannelNameEnabledVisibility}">
+                                        <TextBlock Width="140" Text="Name Overlay" VerticalAlignment="Center"/>
+                                        <CheckBox IsChecked="{Binding ImageOsdChannelNameEnabled}" IsEnabled="{Binding CanEditImageOsdChannelNameEnabled}" VerticalAlignment="Center"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding ImageOsdChannelNameTextVisibility}">
+                                        <TextBlock Width="140" Text="Name Text" VerticalAlignment="Center"/>
+                                        <TextBox Width="220" Text="{Binding ImageOsdChannelNameText}" IsEnabled="{Binding CanEditImageOsdChannelNameText}"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding ImageOsdDateTimeEnabledVisibility}">
+                                        <TextBlock Width="140" Text="Date/Time Overlay" VerticalAlignment="Center"/>
+                                        <CheckBox IsChecked="{Binding ImageOsdDateTimeEnabled}" IsEnabled="{Binding CanEditImageOsdDateTimeEnabled}" VerticalAlignment="Center"/>
+                                    </WrapPanel>
 
                                     <CheckBox Content="Mirror" Margin="0,0,0,8" IsChecked="{Binding ImageMirror}" IsEnabled="{Binding CanEditImageMirror}" Visibility="{Binding ImageMirrorVisibility}" ToolTip="{Binding ImageMirrorReadOnlyTooltip}" ToolTipService.ShowOnDisabled="True"/>
                                     <CheckBox Content="Flip" Margin="0,0,0,8" IsChecked="{Binding ImageFlip}" IsEnabled="{Binding CanEditImageFlip}" Visibility="{Binding ImageFlipVisibility}" ToolTip="{Binding ImageFlipReadOnlyTooltip}" ToolTipService.ShowOnDisabled="True"/>
@@ -311,6 +323,19 @@
                                     <WrapPanel Margin="0,0,0,8" Visibility="{Binding StreamKeyframeVisibility}">
                                         <TextBlock Width="140" Text="Keyframe" VerticalAlignment="Center"/>
                                         <TextBox Width="220" Text="{Binding VideoKeyframeInterval}" IsEnabled="{Binding CanEditStreamKeyframe}"/>
+                                    </WrapPanel>
+                                    <Separator Margin="0,8,0,8"/>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding StreamAudioEnabledVisibility}">
+                                        <TextBlock Width="140" Text="Audio Enabled" VerticalAlignment="Center"/>
+                                        <CheckBox IsChecked="{Binding StreamAudioEnabled}" IsEnabled="{Binding CanEditStreamAudioEnabled}" VerticalAlignment="Center"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding StreamAudioBitrateVisibility}">
+                                        <TextBlock Width="140" Text="Audio Bitrate" VerticalAlignment="Center"/>
+                                        <TextBox Width="220" Text="{Binding StreamAudioBitrate}" IsEnabled="{Binding CanEditStreamAudioBitrate}"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding StreamAudioSampleRateVisibility}">
+                                        <TextBlock Width="140" Text="Audio Sample Rate" VerticalAlignment="Center"/>
+                                        <TextBox Width="220" Text="{Binding StreamAudioSampleRate}" IsEnabled="{Binding CanEditStreamAudioSampleRate}"/>
                                     </WrapPanel>
                                 </StackPanel>
                             </ScrollViewer>

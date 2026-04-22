@@ -300,6 +300,61 @@ public sealed class EndpointContractCatalogService(
             },
             new EndpointContract
             {
+                ContractKey = "audio.input.channel",
+                Endpoint = "/NetSDK/Audio/input/channel/*[/properties]",
+                Method = "PUT",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.VideoImage,
+                GroupName = "Video / Image",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.Safe,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
+                Fields =
+                [
+                    new ContractField
+                    {
+                        Key = "audioEnabled",
+                        DisplayName = "Audio Enabled",
+                        SourcePath = "$.enabled",
+                        Kind = ContractFieldKind.Boolean,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.Safe,
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "ipc-sdk-v1.4" }
+                    },
+                    NumericField("audioInputVolume", "Audio Input Volume", "$.volume", 0, 100)
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "audio.encode.channel",
+                Endpoint = "/NetSDK/Audio/encode/channel/*[/properties]",
+                Method = "PUT",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.VideoImage,
+                GroupName = "Video / Image",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.Safe,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
+                Fields =
+                [
+                    new ContractField
+                    {
+                        Key = "audioEnabled",
+                        DisplayName = "Audio Enabled",
+                        SourcePath = "$.enabled",
+                        Kind = ContractFieldKind.Boolean,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.Safe,
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "ipc-sdk-v1.4" }
+                    },
+                    NumericField("audioBitRate", "Audio Bitrate", "$.bitRate", 8, 320),
+                    NumericField("audioSampleRate", "Audio Sample Rate", "$.sampleRate", 8000, 96000)
+                ]
+            },
+            new EndpointContract
+            {
                 ContractKey = "image.profile",
                 Endpoint = "/NetSDK/Image/*",
                 Method = "PUT",
@@ -336,6 +391,77 @@ public sealed class EndpointContractCatalogService(
                     NumericField("whiteLight", "White Light", "$.whiteLightLevel", 0, 100),
                     NumericField("infrared", "Infrared", "$.infraRedLevel", 0, 100),
                     StringField("osd", "OSD", "$.osd.title")
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "video.overlay.channelName",
+                Endpoint = "/NetSDK/Video/encode/channel/*/channelNameOverlay[/properties]",
+                Method = "PUT",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.VideoImage,
+                GroupName = "Video / Image",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.Safe,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
+                Fields =
+                [
+                    new ContractField
+                    {
+                        Key = "osdChannelNameEnabled",
+                        DisplayName = "Channel Name Overlay",
+                        SourcePath = "$.enabled",
+                        Kind = ContractFieldKind.Boolean,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.Safe,
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "ipc-sdk-v1.4" }
+                    },
+                    StringField("osdChannelNameText", "Channel Name Text", "$.name")
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "video.overlay.datetime",
+                Endpoint = "/NetSDK/Video/encode/channel/*/datetimeOverlay[/properties]",
+                Method = "PUT",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.VideoImage,
+                GroupName = "Video / Image",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.Safe,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
+                Fields =
+                [
+                    new ContractField
+                    {
+                        Key = "osdDateTimeEnabled",
+                        DisplayName = "Date/Time Overlay",
+                        SourcePath = "$.enabled",
+                        Kind = ContractFieldKind.Boolean,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.Safe,
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "ipc-sdk-v1.4" }
+                    }
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "video.snapshot.channel",
+                Endpoint = "/NetSDK/Video/encode/channel/*/snapShot[/properties]",
+                Method = "PUT",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.VideoImage,
+                GroupName = "Video / Image",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.Safe,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
+                Fields =
+                [
+                    EnumField("snapShotImageType", "Snapshot Type", "$.snapShotImageType", ["JPEG", "BMP"]),
+                    NumericField("captureWidth", "Capture Width", "$.captureWidth", 320, 4096)
                 ]
             },
             new EndpointContract
