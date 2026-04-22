@@ -53,3 +53,14 @@
 ## Build/Test
 - `dotnet build BossCamSuite.sln` passed
 - `dotnet test BossCamSuite.sln` passed (30/30)
+
+## Generated Artifacts
+- `artifacts/sdk-mining/sdk_forced_field_catalog.json`
+- `artifacts/sdk-mining/sdk_forced_enumeration_results_10.0.0.29.json`
+
+## Current Classification Evidence (10.0.0.29 sample run)
+- total SDK fields tested in run: 11
+- classification summary:
+  - `ReadableOnly`: 8
+  - `Unsupported`: 3
+- dominant write note in responses: `No control adapter matched the device.`
