@@ -103,6 +103,19 @@ Regression fixtures in repo:
 - `POST /api/recordings/export`
 - `POST /api/recordings/housekeeping`
 
+## NVR Playback/Search APIs
+
+- `POST /api/devices/{id}/playback/find-file`
+- `POST /api/devices/{id}/playback/find-next-file`
+- `POST /api/devices/{id}/playback/get-file-by-time`
+- `POST /api/devices/{id}/playback/playback-by-time`
+- `POST /api/devices/{id}/playback/find-close`
+- `POST /api/devices/{id}/playback/playback-by-name`
+- `POST /api/devices/{id}/playback/get-file-by-name`
+- `POST /api/devices/{id}/playback/stop-get-file`
+- `POST /api/devices/{id}/playback/playback-save-data`
+- `POST /api/devices/{id}/playback/stop-playback-save`
+
 Optional ffmpeg override:
 - environment variable `BOSSCAM_FFMPEG_PATH`
 

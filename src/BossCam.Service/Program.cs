@@ -252,6 +252,36 @@ app.MapPost("/api/devices/{id:guid}/playback/playback-by-time", async (Guid id, 
     var result = await playbackService.PlayBackByTimeExAsync(id, request, ct);
     return result is null ? Results.NotFound() : Results.Ok(result);
 });
+app.MapPost("/api/devices/{id:guid}/playback/find-close", async (Guid id, NvrPlaybackRequest request, NvrPlaybackService playbackService, CancellationToken ct) =>
+{
+    var result = await playbackService.FindCloseAsync(id, request, ct);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
+app.MapPost("/api/devices/{id:guid}/playback/playback-by-name", async (Guid id, NvrPlaybackRequest request, NvrPlaybackService playbackService, CancellationToken ct) =>
+{
+    var result = await playbackService.PlayBackByNameAsync(id, request, ct);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
+app.MapPost("/api/devices/{id:guid}/playback/get-file-by-name", async (Guid id, NvrPlaybackRequest request, NvrPlaybackService playbackService, CancellationToken ct) =>
+{
+    var result = await playbackService.GetFileByNameAsync(id, request, ct);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
+app.MapPost("/api/devices/{id:guid}/playback/stop-get-file", async (Guid id, NvrPlaybackRequest request, NvrPlaybackService playbackService, CancellationToken ct) =>
+{
+    var result = await playbackService.StopGetFileAsync(id, request, ct);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
+app.MapPost("/api/devices/{id:guid}/playback/playback-save-data", async (Guid id, NvrPlaybackRequest request, NvrPlaybackService playbackService, CancellationToken ct) =>
+{
+    var result = await playbackService.PlayBackSaveDataAsync(id, request, ct);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
+app.MapPost("/api/devices/{id:guid}/playback/stop-playback-save", async (Guid id, NvrPlaybackRequest request, NvrPlaybackService playbackService, CancellationToken ct) =>
+{
+    var result = await playbackService.StopPlayBackSaveAsync(id, request, ct);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
 app.MapGet("/api/devices/{id:guid}/native-fallback-assessment", async (Guid id, IApplicationStore store, IEndpointContractCatalog contractCatalog, IOptions<BossCamRuntimeOptions> runtime, CancellationToken ct) =>
 {
     var device = await store.GetDeviceAsync(id, ct);

@@ -23,6 +23,24 @@ public sealed class NvrPlaybackService(
     public Task<NvrPlaybackCallResult?> PlayBackByTimeExAsync(Guid deviceId, NvrPlaybackRequest request, CancellationToken cancellationToken)
         => ExecuteAsync(deviceId, "PlayBackByTimeEx", "/NetSDK/SDCard/media/playbackFLV", request, cancellationToken);
 
+    public Task<NvrPlaybackCallResult?> FindCloseAsync(Guid deviceId, NvrPlaybackRequest request, CancellationToken cancellationToken)
+        => ExecuteAsync(deviceId, "FindClose", "/NetSDK/SDCard/media/search", request, cancellationToken);
+
+    public Task<NvrPlaybackCallResult?> PlayBackByNameAsync(Guid deviceId, NvrPlaybackRequest request, CancellationToken cancellationToken)
+        => ExecuteAsync(deviceId, "PlayBackByName", "/NetSDK/SDCard/media/playbackFLV", request, cancellationToken);
+
+    public Task<NvrPlaybackCallResult?> GetFileByNameAsync(Guid deviceId, NvrPlaybackRequest request, CancellationToken cancellationToken)
+        => ExecuteAsync(deviceId, "GetFileByName", "/NetSDK/SDCard/media/search", request, cancellationToken);
+
+    public Task<NvrPlaybackCallResult?> StopGetFileAsync(Guid deviceId, NvrPlaybackRequest request, CancellationToken cancellationToken)
+        => ExecuteAsync(deviceId, "StopGetFile", "/NetSDK/SDCard/media/search", request, cancellationToken);
+
+    public Task<NvrPlaybackCallResult?> PlayBackSaveDataAsync(Guid deviceId, NvrPlaybackRequest request, CancellationToken cancellationToken)
+        => ExecuteAsync(deviceId, "PlayBackSaveData", "/NetSDK/SDCard/media/playbackFLV", request, cancellationToken);
+
+    public Task<NvrPlaybackCallResult?> StopPlayBackSaveAsync(Guid deviceId, NvrPlaybackRequest request, CancellationToken cancellationToken)
+        => ExecuteAsync(deviceId, "StopPlayBackSave", "/NetSDK/SDCard/media/playbackFLV", request, cancellationToken);
+
     private async Task<NvrPlaybackCallResult?> ExecuteAsync(
         Guid deviceId,
         string operation,
@@ -129,6 +147,64 @@ public sealed class NvrPlaybackService(
         {
             query["cursor"] = request.Cursor.Trim();
             query["next"] = request.Cursor.Trim();
+        }
+
+        if (operation.Equals("FindClose", StringComparison.OrdinalIgnoreCase))
+        {
+            query["action"] = "close";
+            query["findHandle"] = (request.HandleId ?? request.SessionId).ToString(CultureInfo.InvariantCulture);
+        }
+
+        if (operation.Equals("PlayBackByName", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!string.IsNullOrWhiteSpace(request.FileName))
+            {
+                query["fileName"] = request.FileName.Trim();
+                query["playFile"] = request.FileName.Trim();
+            }
+        }
+
+        if (operation.Equals("GetFileByName", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!string.IsNullOrWhiteSpace(request.FileName))
+            {
+                query["fileName"] = request.FileName.Trim();
+                query["dvrFileName"] = request.FileName.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.SavePath))
+            {
+                query["savePath"] = request.SavePath.Trim();
+                query["savedFileName"] = request.SavePath.Trim();
+            }
+        }
+
+        if (operation.Equals("StopGetFile", StringComparison.OrdinalIgnoreCase))
+        {
+            query["action"] = "stopDownload";
+            if (request.HandleId is int handle)
+            {
+                query["fileHandle"] = handle.ToString(CultureInfo.InvariantCulture);
+            }
+        }
+
+        if (operation.Equals("PlayBackSaveData", StringComparison.OrdinalIgnoreCase))
+        {
+            query["action"] = "save";
+            if (!string.IsNullOrWhiteSpace(request.SavePath))
+            {
+                query["savePath"] = request.SavePath.Trim();
+                query["fileName"] = request.SavePath.Trim();
+            }
+        }
+
+        if (operation.Equals("StopPlayBackSave", StringComparison.OrdinalIgnoreCase))
+        {
+            query["action"] = "stopSave";
+            if (request.HandleId is int handle)
+            {
+                query["playHandle"] = handle.ToString(CultureInfo.InvariantCulture);
+            }
         }
 
         return query;

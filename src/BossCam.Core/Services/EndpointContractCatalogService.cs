@@ -443,6 +443,18 @@ public sealed class EndpointContractCatalogService(
                         Writable = true,
                         DisruptionClass = DisruptionClass.Safe,
                         Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "ipc-sdk-v1.4" }
+                    },
+                    EnumField("osdDateFormat", "Date Format", "$.dateFormat", ["YYYY/MM/DD", "MM/DD/YYYY", "DD/MM/YYYY", "YYYY-MM-DD", "MM-DD-YYYY", "DD-MM-YYYY"]),
+                    EnumField("osdTimeFormat", "Time Format", "$.timeFormat", ["12", "24"]),
+                    new ContractField
+                    {
+                        Key = "osdDisplayWeek",
+                        DisplayName = "Display Weekday",
+                        SourcePath = "$.displayWeek",
+                        Kind = ContractFieldKind.Boolean,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.Safe,
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "ipc-sdk-v1.4" }
                     }
                 ]
             },

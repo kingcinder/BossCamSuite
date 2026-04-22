@@ -249,6 +249,18 @@
                                         <TextBlock Width="140" Text="Date/Time Overlay" VerticalAlignment="Center"/>
                                         <CheckBox IsChecked="{Binding ImageOsdDateTimeEnabled}" IsEnabled="{Binding CanEditImageOsdDateTimeEnabled}" VerticalAlignment="Center"/>
                                     </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding ImageOsdDateFormatVisibility}">
+                                        <TextBlock Width="140" Text="Date Format" VerticalAlignment="Center"/>
+                                        <TextBox Width="220" Text="{Binding ImageOsdDateFormat}" IsEnabled="{Binding CanEditImageOsdDateFormat}"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding ImageOsdTimeFormatVisibility}">
+                                        <TextBlock Width="140" Text="Time Format" VerticalAlignment="Center"/>
+                                        <TextBox Width="220" Text="{Binding ImageOsdTimeFormat}" IsEnabled="{Binding CanEditImageOsdTimeFormat}"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding ImageOsdDisplayWeekVisibility}">
+                                        <TextBlock Width="140" Text="Display Weekday" VerticalAlignment="Center"/>
+                                        <CheckBox IsChecked="{Binding ImageOsdDisplayWeek}" IsEnabled="{Binding CanEditImageOsdDisplayWeek}" VerticalAlignment="Center"/>
+                                    </WrapPanel>
 
                                     <CheckBox Content="Mirror" Margin="0,0,0,8" IsChecked="{Binding ImageMirror}" IsEnabled="{Binding CanEditImageMirror}" Visibility="{Binding ImageMirrorVisibility}" ToolTip="{Binding ImageMirrorReadOnlyTooltip}" ToolTipService.ShowOnDisabled="True"/>
                                     <CheckBox Content="Flip" Margin="0,0,0,8" IsChecked="{Binding ImageFlip}" IsEnabled="{Binding CanEditImageFlip}" Visibility="{Binding ImageFlipVisibility}" ToolTip="{Binding ImageFlipReadOnlyTooltip}" ToolTipService.ShowOnDisabled="True"/>
@@ -547,10 +559,30 @@
                                         <TextBox Width="564" Margin="0,0,14,0" Text="{Binding StorageCursor}" ToolTip="Used by Find Next File."/>
                                     </WrapPanel>
                                     <WrapPanel Margin="0,0,0,8">
+                                        <TextBlock Width="100" Text="File Name" VerticalAlignment="Center"/>
+                                        <TextBox Width="280" Margin="0,0,14,0" Text="{Binding StorageFileName}" ToolTip="Used by PlayBackByName / GetFileByName."/>
+                                        <TextBlock Width="90" Text="Handle ID" VerticalAlignment="Center"/>
+                                        <TextBox Width="280" Text="{Binding StorageHandleId}" ToolTip="Used by FindClose / StopGetFile / StopPlayBackSave."/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8">
+                                        <TextBlock Width="100" Text="Save Path" VerticalAlignment="Center"/>
+                                        <TextBox Width="654" Text="{Binding StorageSavePath}" ToolTip="Local export path hint for save/download flows."/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8">
                                         <Button Width="170" Margin="0,0,8,8" Click="FindFile_Click">Find File</Button>
                                         <Button Width="170" Margin="0,0,8,8" Click="FindNextFile_Click">Find Next File</Button>
                                         <Button Width="170" Margin="0,0,8,8" Click="GetFileByTime_Click">Get File By Time</Button>
                                         <Button Width="170" Margin="0,0,8,8" Click="PlaybackByTime_Click">Playback By Time</Button>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8">
+                                        <Button Width="170" Margin="0,0,8,8" Click="FindClose_Click">Find Close</Button>
+                                        <Button Width="170" Margin="0,0,8,8" Click="PlaybackByName_Click">Playback By Name</Button>
+                                        <Button Width="170" Margin="0,0,8,8" Click="GetFileByName_Click">Get File By Name</Button>
+                                        <Button Width="170" Margin="0,0,8,8" Click="StopGetFile_Click">Stop Get File</Button>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8">
+                                        <Button Width="170" Margin="0,0,8,8" Click="PlaybackSaveData_Click">Playback Save Data</Button>
+                                        <Button Width="170" Margin="0,0,8,8" Click="StopPlaybackSave_Click">Stop Playback Save</Button>
                                     </WrapPanel>
 
                                     <WrapPanel Margin="0,0,0,8" Visibility="{Binding SdStatusVisibility}">

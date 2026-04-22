@@ -168,6 +168,9 @@ public sealed record NvrPlaybackRequest
     public DateTimeOffset EndTime { get; init; }
     public string Type { get; init; } = "all";
     public string? Cursor { get; init; }
+    public string? FileName { get; init; }
+    public string? SavePath { get; init; }
+    public int? HandleId { get; init; }
 }
 
 public sealed record NvrPlaybackCallResult
