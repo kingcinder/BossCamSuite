@@ -53,6 +53,7 @@
                         <WrapPanel Margin="0,8,0,0">
                             <TextBlock Text="{Binding DirtyStateText}" FontWeight="SemiBold" Margin="0,0,18,0"/>
                             <TextBlock Text="{Binding LastSyncText}" Foreground="#D5DEE7"/>
+                            <TextBlock Text="{Binding GroupedApplyIndicator}" Foreground="#D5DEE7" Margin="18,0,0,0"/>
                         </WrapPanel>
                     </StackPanel>
                     <WrapPanel Grid.Column="1" VerticalAlignment="Top">
@@ -133,6 +134,7 @@
                                         <Slider Grid.Column="1" Minimum="{Binding ImageBrightnessMin}" Maximum="{Binding ImageBrightnessMax}" Value="{Binding ImageBrightnessSlider}" IsEnabled="{Binding CanEditImageBrightness}" ToolTip="{Binding ImageBrightnessReadOnlyTooltip}" ToolTipService.ShowOnDisabled="True"/>
                                         <TextBlock Grid.Column="2" Text="{Binding ImageBrightness}" VerticalAlignment="Center" HorizontalAlignment="Right"/>
                                     </Grid>
+                                    <TextBlock Margin="0,0,0,8" Foreground="#C4D4E5" Text="{Binding ImageBrightnessBehaviorBadge}" Visibility="{Binding ImageBrightnessVisibility}"/>
                                     <Grid Margin="0,0,0,10" Visibility="{Binding ImageContrastVisibility}">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="140"/>
@@ -143,6 +145,7 @@
                                         <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding ImageContrastSlider}" IsEnabled="{Binding CanEditImageContrast}" ToolTip="{Binding ImageContrastReadOnlyTooltip}" ToolTipService.ShowOnDisabled="True"/>
                                         <TextBlock Grid.Column="2" Text="{Binding ImageContrast}" VerticalAlignment="Center" HorizontalAlignment="Right"/>
                                     </Grid>
+                                    <TextBlock Margin="0,0,0,8" Foreground="#C4D4E5" Text="{Binding ImageContrastBehaviorBadge}" Visibility="{Binding ImageContrastVisibility}"/>
                                     <Grid Margin="0,0,0,10" Visibility="{Binding ImageSaturationVisibility}">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="140"/>
@@ -153,6 +156,7 @@
                                         <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding ImageSaturationSlider}" IsEnabled="{Binding CanEditImageSaturation}" ToolTip="{Binding ImageSaturationReadOnlyTooltip}" ToolTipService.ShowOnDisabled="True"/>
                                         <TextBlock Grid.Column="2" Text="{Binding ImageSaturation}" VerticalAlignment="Center" HorizontalAlignment="Right"/>
                                     </Grid>
+                                    <TextBlock Margin="0,0,0,8" Foreground="#C4D4E5" Text="{Binding ImageSaturationBehaviorBadge}" Visibility="{Binding ImageSaturationVisibility}"/>
                                     <Grid Margin="0,0,0,10" Visibility="{Binding ImageSharpnessVisibility}">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="140"/>
@@ -163,6 +167,7 @@
                                         <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding ImageSharpnessSlider}" IsEnabled="{Binding CanEditImageSharpness}" ToolTip="{Binding ImageSharpnessReadOnlyTooltip}" ToolTipService.ShowOnDisabled="True"/>
                                         <TextBlock Grid.Column="2" Text="{Binding ImageSharpness}" VerticalAlignment="Center" HorizontalAlignment="Right"/>
                                     </Grid>
+                                    <TextBlock Margin="0,0,0,8" Foreground="#C4D4E5" Text="{Binding ImageSharpnessBehaviorBadge}" Visibility="{Binding ImageSharpnessVisibility}"/>
                                     <Grid Margin="0,0,0,10" Visibility="{Binding ImageManualSharpnessVisibility}">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="140"/>
@@ -213,6 +218,7 @@
                                         <Slider Grid.Column="1" Minimum="1" Maximum="5" Value="{Binding ImageWdrStrengthSlider}" IsEnabled="{Binding CanEditImageWdrStrength}"/>
                                         <TextBlock Grid.Column="2" Text="{Binding ImageWdrStrength}" VerticalAlignment="Center" HorizontalAlignment="Right"/>
                                     </Grid>
+                                    <TextBlock Margin="0,0,0,8" Foreground="#C4D4E5" Text="{Binding ImageWdrBehaviorBadge}" Visibility="{Binding ImageWdrStrengthVisibility}"/>
                                     <Grid Margin="0,0,0,10" Visibility="{Binding ImageWhiteLightVisibility}">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="140"/>
@@ -630,6 +636,7 @@
                                     <Button Margin="0,0,8,8" Padding="10,5" Click="LoadTranscripts_Click">Transcripts</Button>
                                     <Button Margin="0,0,8,8" Padding="10,5" Click="DiscoverConstraints_Click">Discover Constraints</Button>
                                     <Button Margin="0,0,8,8" Padding="10,5" Click="RunImageTruthSweep_Click">Image Truth Sweep</Button>
+                                    <Button Margin="0,0,8,8" Padding="10,5" Click="RetestUnsupportedGrouped_Click">Retest Unsupported (Grouped)</Button>
                                     <Button Margin="0,0,8,8" Padding="10,5" Click="PromoteFixtures_Click">Promote Fixtures</Button>
                                     <Button Margin="0,0,8,8" Padding="10,5" Click="NativeAssessment_Click">Native Gap</Button>
                                     <Button Margin="0,0,8,8" Padding="10,5" Click="RefreshTyped_Click">Refresh Typed</Button>

@@ -231,7 +231,7 @@ public sealed class ImageTruthService(
                 SourceEndpoint = field.SourceEndpoint,
                 SourcePath = contractField.SourcePath,
                 BaselineValue = field.TypedValue?.DeepClone(),
-                CandidateValues = BuildCandidates(field.TypedValue, contractField),
+                CandidateValues = BuildCandidates(item.FieldKey, field.TypedValue, contractField),
                 Notes = "Auto-generated safe reversible candidates."
             });
         }
@@ -519,7 +519,7 @@ public sealed class ImageTruthService(
             var repeatedAcrossCandidates = rejectionCount >= 3;
             if (repeatedAcrossCandidates && !hasAdjacentPayloadEvidence && hasAuthEvidence)
             {
-                return new ClassificationDecision(HiddenCandidateClassification.UnsupportedOnFirmware, reasons.ToList());
+                return new ClassificationDecision(HiddenCandidateClassification.LikelyUnsupported, reasons.ToList());
             }
 
             if (rejectionCount >= 2 && (!hasAuthEvidence || hasPrivateCandidate || !hasAdjacentPayloadEvidence))
@@ -595,7 +595,7 @@ public sealed class ImageTruthService(
 
     private sealed record ClassificationDecision(HiddenCandidateClassification Classification, IReadOnlyCollection<string> ReasonCodes);
 
-    private static IReadOnlyCollection<JsonNode?> BuildCandidates(JsonNode? baseline, ContractField field)
+    private static IReadOnlyCollection<JsonNode?> BuildCandidates(string fieldKey, JsonNode? baseline, ContractField field)
     {
         if (field.Kind == ContractFieldKind.Enum)
         {
@@ -612,14 +612,17 @@ public sealed class ImageTruthService(
         {
             var min = field.Validation.Min ?? Math.Max(0, currentNumber - 5);
             var max = field.Validation.Max ?? currentNumber + 5;
-            var step = field.Kind == ContractFieldKind.Integer ? 1m : 2m;
-            var candidates = new List<decimal>
+            var stepSet = fieldKey is "brightness" or "contrast" or "saturation" or "sharpness" or "wdr"
+                ? new[] { 1m, 2m, 4m }
+                : new[] { field.Kind == ContractFieldKind.Integer ? 1m : 2m, field.Kind == ContractFieldKind.Integer ? 2m : 4m };
+            var candidates = new List<decimal>();
+            foreach (var step in stepSet)
             {
-                Clamp(currentNumber - step, min, max),
-                Clamp(currentNumber + step, min, max),
-                Clamp(currentNumber - step * 2, min, max),
-                Clamp(currentNumber + step * 2, min, max)
-            }.Distinct().ToList();
+                candidates.Add(Clamp(currentNumber - step, min, max));
+                candidates.Add(Clamp(currentNumber + step, min, max));
+            }
+
+            candidates = candidates.Distinct().Where(value => value != currentNumber).ToList();
             return candidates.Select(value => (JsonNode?)JsonValue.Create(field.Kind == ContractFieldKind.Integer ? (int)value : value)).ToList();
         }
 
@@ -1277,11 +1280,14 @@ public sealed class ImageTruthService(
             HiddenCandidateClassification.RejectedByFirmware,
             HiddenCandidateClassification.PrivatePathCandidate,
             HiddenCandidateClassification.LikelyUnsupported,
-            HiddenCandidateClassification.UnsupportedOnFirmware,
             HiddenCandidateClassification.ReadableOnly,
             HiddenCandidateClassification.NoSemanticProof,
             HiddenCandidateClassification.HiddenAdjacentCandidate,
             HiddenCandidateClassification.Uncertain) ?? HiddenCandidateClassification.Uncertain;
+        if (classifications.Any(value => value.Equals(nameof(HiddenCandidateClassification.UnsupportedOnFirmware), StringComparison.OrdinalIgnoreCase)))
+        {
+            chosen = HiddenCandidateClassification.LikelyUnsupported;
+        }
         var reasons = evidenceRows
             .Select(static row => row.ReasonCode)
             .Where(static value => !string.IsNullOrWhiteSpace(value))
@@ -1410,20 +1416,6 @@ public sealed class ImageTruthService(
                 CandidateClassification = chosen,
                 PromotedToUi = false,
                 ReasonCodes = reasons.Length == 0 ? ["repeated_live_failure_incomplete_evidence"] : reasons,
-                Notes = notes
-            },
-            HiddenCandidateClassification.UnsupportedOnFirmware => current with
-            {
-                Readable = false,
-                Writable = false,
-                WriteVerified = false,
-                SourceEndpoint = endpoint,
-                SupportState = ContractSupportState.Unsupported,
-                TruthState = ContractTruthState.Inferred,
-                Status = ImageInventoryStatus.Blocked,
-                CandidateClassification = chosen,
-                PromotedToUi = false,
-                ReasonCodes = reasons.Length == 0 ? ["repeated_live_failure_no_adjacent_evidence"] : reasons,
                 Notes = notes
             },
             HiddenCandidateClassification.NoSemanticProof => current with

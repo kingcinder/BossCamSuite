@@ -202,6 +202,14 @@ app.MapGet("/api/devices/{id:guid}/image/writable-test-set", async (Guid id, Ima
 });
 app.MapGet("/api/devices/{id:guid}/image/behavior-maps", async (Guid id, ImageTruthService imageTruthService, CancellationToken ct) =>
     Results.Ok(await imageTruthService.GetBehaviorMapsAsync(id, ct)));
+app.MapGet("/api/devices/{id:guid}/grouped-config/snapshots", async (Guid id, bool? refreshFromDevice, GroupedConfigService groupedConfigService, CancellationToken ct) =>
+    Results.Ok(await groupedConfigService.GetGroupedConfigSnapshotsAsync(id, refreshFromDevice ?? false, ct)));
+app.MapGet("/api/devices/{id:guid}/grouped-config/profiles", async (Guid id, string? firmwareFingerprint, GroupedConfigService groupedConfigService, CancellationToken ct) =>
+    Results.Ok(await groupedConfigService.GetProfilesAsync(id, firmwareFingerprint, ct)));
+app.MapGet("/api/devices/{id:guid}/grouped-config/retest-results", async (Guid id, int? limit, GroupedConfigService groupedConfigService, CancellationToken ct) =>
+    Results.Ok(await groupedConfigService.GetRetestResultsAsync(id, limit ?? 400, ct)));
+app.MapPost("/api/devices/{id:guid}/grouped-config/retest-unsupported", async (Guid id, GroupedRetestRequest? request, GroupedConfigService groupedConfigService, CancellationToken ct) =>
+    Results.Ok(await groupedConfigService.RetestUnsupportedFieldsAsync(id, request ?? new GroupedRetestRequest(), ct)));
 app.MapPost("/api/devices/{id:guid}/network/recovery", async (Guid id, NetworkRecoveryContext context, SemanticTrustService semanticTrustService, CancellationToken ct) =>
     Results.Ok(await semanticTrustService.RecoverNetworkAsync(context with { DeviceId = id }, ct)));
 app.MapGet("/api/recordings", async (Guid? deviceId, IApplicationStore store, CancellationToken ct) => Results.Ok(await store.GetRecordingProfilesAsync(deviceId, ct)));

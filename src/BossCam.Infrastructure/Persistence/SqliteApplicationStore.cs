@@ -46,7 +46,9 @@ public sealed class SqliteApplicationStore(IOptions<BossCamRuntimeOptions> optio
                 "CREATE TABLE IF NOT EXISTS dependency_matrix_profiles (matrix_key TEXT PRIMARY KEY, firmware_fingerprint TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL)",
                 "CREATE TABLE IF NOT EXISTS image_control_inventory (inventory_key TEXT PRIMARY KEY, device_id TEXT NOT NULL, firmware_fingerprint TEXT NOT NULL, payload TEXT NOT NULL, captured_at TEXT NOT NULL)",
                 "CREATE TABLE IF NOT EXISTS image_behavior_maps (behavior_key TEXT PRIMARY KEY, device_id TEXT NOT NULL, firmware_fingerprint TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL)",
-                "CREATE TABLE IF NOT EXISTS image_writable_test_sets (device_id TEXT PRIMARY KEY, firmware_fingerprint TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL)"
+                "CREATE TABLE IF NOT EXISTS image_writable_test_sets (device_id TEXT PRIMARY KEY, firmware_fingerprint TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL)",
+                "CREATE TABLE IF NOT EXISTS grouped_apply_profiles (profile_key TEXT PRIMARY KEY, device_id TEXT NOT NULL, firmware_fingerprint TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL)",
+                "CREATE TABLE IF NOT EXISTS grouped_retest_results (result_key TEXT PRIMARY KEY, device_id TEXT NOT NULL, firmware_fingerprint TEXT NOT NULL, payload TEXT NOT NULL, captured_at TEXT NOT NULL)"
             };
 
             foreach (var text in commands)
@@ -591,6 +593,95 @@ public sealed class SqliteApplicationStore(IOptions<BossCamRuntimeOptions> optio
     public async Task<ImageWritableTestSetProfile?> GetImageWritableTestSetAsync(Guid deviceId, CancellationToken cancellationToken)
         => await QuerySinglePayloadAsync<ImageWritableTestSetProfile>("SELECT payload FROM image_writable_test_sets WHERE device_id = $id", parameters => parameters.AddWithValue("$id", deviceId.ToString()), cancellationToken);
 
+    public async Task SaveGroupedApplyProfilesAsync(IEnumerable<GroupedApplyProfile> profiles, CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            await using var connection = OpenConnection();
+            await connection.OpenAsync(cancellationToken);
+            foreach (var profile in profiles)
+            {
+                await using var command = connection.CreateCommand();
+                command.CommandText = "INSERT INTO grouped_apply_profiles (profile_key, device_id, firmware_fingerprint, payload, updated_at) VALUES ($key, $device_id, $firmware, $payload, $updated_at) ON CONFLICT(profile_key) DO UPDATE SET firmware_fingerprint = excluded.firmware_fingerprint, payload = excluded.payload, updated_at = excluded.updated_at";
+                command.Parameters.AddWithValue("$key", BuildGroupedApplyProfileKey(profile));
+                command.Parameters.AddWithValue("$device_id", profile.DeviceId.ToString());
+                command.Parameters.AddWithValue("$firmware", profile.FirmwareFingerprint);
+                command.Parameters.AddWithValue("$payload", JsonSerializer.Serialize(profile, _serializerOptions));
+                command.Parameters.AddWithValue("$updated_at", profile.UpdatedAt.ToString("O"));
+                await command.ExecuteNonQueryAsync(cancellationToken);
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task<IReadOnlyCollection<GroupedApplyProfile>> GetGroupedApplyProfilesAsync(Guid? deviceId, string? firmwareFingerprint, CancellationToken cancellationToken)
+    {
+        if (deviceId is null && string.IsNullOrWhiteSpace(firmwareFingerprint))
+        {
+            return await QueryPayloadListAsync<GroupedApplyProfile>("SELECT payload FROM grouped_apply_profiles ORDER BY updated_at DESC", null, cancellationToken);
+        }
+
+        if (deviceId is Guid id && !string.IsNullOrWhiteSpace(firmwareFingerprint))
+        {
+            return await QueryPayloadListAsync<GroupedApplyProfile>(
+                "SELECT payload FROM grouped_apply_profiles WHERE device_id = $id AND firmware_fingerprint = $firmware ORDER BY updated_at DESC",
+                parameters =>
+                {
+                    parameters.AddWithValue("$id", id.ToString());
+                    parameters.AddWithValue("$firmware", firmwareFingerprint);
+                },
+                cancellationToken);
+        }
+
+        if (deviceId is Guid onlyDevice)
+        {
+            return await QueryPayloadListAsync<GroupedApplyProfile>(
+                "SELECT payload FROM grouped_apply_profiles WHERE device_id = $id ORDER BY updated_at DESC",
+                parameters => parameters.AddWithValue("$id", onlyDevice.ToString()),
+                cancellationToken);
+        }
+
+        return await QueryPayloadListAsync<GroupedApplyProfile>(
+            "SELECT payload FROM grouped_apply_profiles WHERE firmware_fingerprint = $firmware ORDER BY updated_at DESC",
+            parameters => parameters.AddWithValue("$firmware", firmwareFingerprint),
+            cancellationToken);
+    }
+
+    public async Task SaveGroupedRetestResultsAsync(IEnumerable<GroupedUnsupportedRetestResult> results, CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            await using var connection = OpenConnection();
+            await connection.OpenAsync(cancellationToken);
+            foreach (var result in results)
+            {
+                await using var command = connection.CreateCommand();
+                command.CommandText = "INSERT INTO grouped_retest_results (result_key, device_id, firmware_fingerprint, payload, captured_at) VALUES ($key, $device_id, $firmware, $payload, $captured_at) ON CONFLICT(result_key) DO UPDATE SET firmware_fingerprint = excluded.firmware_fingerprint, payload = excluded.payload, captured_at = excluded.captured_at";
+                command.Parameters.AddWithValue("$key", BuildGroupedRetestResultKey(result));
+                command.Parameters.AddWithValue("$device_id", result.DeviceId.ToString());
+                command.Parameters.AddWithValue("$firmware", result.FirmwareFingerprint);
+                command.Parameters.AddWithValue("$payload", JsonSerializer.Serialize(result, _serializerOptions));
+                command.Parameters.AddWithValue("$captured_at", result.CapturedAt.ToString("O"));
+                await command.ExecuteNonQueryAsync(cancellationToken);
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task<IReadOnlyCollection<GroupedUnsupportedRetestResult>> GetGroupedRetestResultsAsync(Guid deviceId, int limit, CancellationToken cancellationToken)
+        => await QueryPayloadListAsync<GroupedUnsupportedRetestResult>(
+            $"SELECT payload FROM grouped_retest_results WHERE device_id = $id ORDER BY captured_at DESC LIMIT {Math.Max(1, limit)}",
+            parameters => parameters.AddWithValue("$id", deviceId.ToString()),
+            cancellationToken);
+
     private async Task UpsertPayloadAsync<T>(string tableName, string keyColumn, string key, T payload, DateTimeOffset timestamp, CancellationToken cancellationToken, string? deviceId = null)
     {
         await _gate.WaitAsync(cancellationToken);
@@ -731,6 +822,12 @@ public sealed class SqliteApplicationStore(IOptions<BossCamRuntimeOptions> optio
 
     private static string BuildImageBehaviorKey(ImageFieldBehaviorMap map)
         => $"{map.DeviceId:N}:{map.FirmwareFingerprint}:{map.FieldKey}:{map.ContractKey}";
+
+    private static string BuildGroupedApplyProfileKey(GroupedApplyProfile profile)
+        => $"{profile.DeviceId:N}:{profile.FirmwareFingerprint}:{profile.IpAddress}:{profile.GroupKind}";
+
+    private static string BuildGroupedRetestResultKey(GroupedUnsupportedRetestResult result)
+        => $"{result.DeviceId:N}:{result.FirmwareFingerprint}:{result.FieldKey}:{result.SourceEndpoint}";
 
     private static JsonSerializerOptions CreateSerializerOptions()
     {

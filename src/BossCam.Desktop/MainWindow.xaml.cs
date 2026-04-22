@@ -51,6 +51,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private string? _selectedPersistenceField;
     private string _lastReachableUrl = string.Empty;
     private string _lastSyncText = "Last sync: never";
+    private string _groupedApplyIndicator = "Grouped apply: unknown";
     private string _toastMessage = string.Empty;
     private string _toastBackground = "#2B3C4B";
     private Visibility _toastVisibility = Visibility.Collapsed;
@@ -409,6 +410,19 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             if (_lastSyncText != value)
             {
                 _lastSyncText = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public string GroupedApplyIndicator
+    {
+        get => _groupedApplyIndicator;
+        set
+        {
+            if (_groupedApplyIndicator != value)
+            {
+                _groupedApplyIndicator = value;
                 OnPropertyChanged();
             }
         }
@@ -777,6 +791,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public string ImageBrightnessBehaviorBadge => BehaviorBadge("brightness");
     public string ImageContrastBehaviorBadge => BehaviorBadge("contrast");
     public string ImageSaturationBehaviorBadge => BehaviorBadge("saturation");
+    public string ImageSharpnessBehaviorBadge => BehaviorBadge("sharpness");
+    public string ImageWdrBehaviorBadge => BehaviorBadge("wdr");
 
     // enable flags capability-driven
     public bool CanEditVideoCodec => CanEdit("codec");
@@ -985,6 +1001,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private async void LoadTranscripts_Click(object sender, RoutedEventArgs e) => await RunAsync(LoadTranscriptsAsync);
     private async void DiscoverConstraints_Click(object sender, RoutedEventArgs e) => await RunAsync(DiscoverConstraintsAsync);
     private async void RunImageTruthSweep_Click(object sender, RoutedEventArgs e) => await RunAsync(RunImageTruthSweepAsync);
+    private async void RetestUnsupportedGrouped_Click(object sender, RoutedEventArgs e) => await RunAsync(RetestUnsupportedGroupedAsync);
     private async void PromoteFixtures_Click(object sender, RoutedEventArgs e) => await RunAsync(PromoteFixturesAsync);
     private async void NativeAssessment_Click(object sender, RoutedEventArgs e) => await RunAsync(LoadNativeAssessmentAsync);
     private async void ApplyValidated_Click(object sender, RoutedEventArgs e) => await RunAsync(() => ApplyPendingEditsAsync(expertOverride: false));
@@ -1192,6 +1209,27 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         await LoadTypedAsync();
     }
 
+    private async Task RetestUnsupportedGroupedAsync()
+    {
+        if (SelectedDevice is null)
+        {
+            DiagnosticsText = "Select a device first.";
+            return;
+        }
+
+        var request = new GroupedRetestRequest
+        {
+            RefreshFromDevice = true,
+            IncludeDangerous = false,
+            ExpertOverride = true
+        };
+        var result = await PostAsync<List<GroupedUnsupportedRetestResult>>($"/api/devices/{SelectedDevice.Id}/grouped-config/retest-unsupported", request) ?? [];
+        DiagnosticsText = JsonSerializer.Serialize(result, SerializerOptions);
+        await LoadTypedAsync();
+        await LoadImageTruthAsync();
+        ShowToast($"Grouped retest completed for {result.Count} field(s).", success: true);
+    }
+
     private async Task LoadNativeAssessmentAsync()
     {
         if (SelectedDevice is null)
@@ -1395,6 +1433,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         var inventory = await GetAsync<List<ImageControlInventoryItem>>($"/api/devices/{SelectedDevice.Id}/image/inventory") ?? [];
         var maps = await GetAsync<List<ImageFieldBehaviorMap>>($"/api/devices/{SelectedDevice.Id}/image/behavior-maps") ?? [];
+        var groupedProfiles = await GetAsync<List<GroupedApplyProfile>>($"/api/devices/{SelectedDevice.Id}/grouped-config/profiles") ?? [];
         ReplaceCollection(ImageInventoryRows, inventory.OrderBy(item => item.FieldKey, StringComparer.OrdinalIgnoreCase).ToList());
         ReplaceCollection(PromotedImageRows, inventory
             .Where(static item => item.PromotedToUi)
@@ -1437,6 +1476,16 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         var likely = inventory.Count(item => item.CandidateClassification == HiddenCandidateClassification.LikelyUnsupported);
         var unsupported = inventory.Count(item => item.CandidateClassification == HiddenCandidateClassification.UnsupportedOnFirmware);
         ImageTruthSummary = $"Inventory: {inventory.Count} fields | proven={writable} | read-only={readOnly} | alt-write-shape={altShape} | hidden={hidden} | needs-auth/no-proof={needsAuth} | likely-unsupported={likely} | unsupported={unsupported}. Behavior maps={maps.Count}.";
+        if (groupedProfiles.Count > 0)
+        {
+            GroupedApplyIndicator = "Grouped apply: " + string.Join(" | ", groupedProfiles
+                .OrderBy(static profile => profile.GroupKind)
+                .Select(profile => $"{profile.GroupKind}:{profile.DominantBehavior}"));
+        }
+        else
+        {
+            GroupedApplyIndicator = "Grouped apply: no profiles";
+        }
         NotifyAllEditorProperties();
     }
 
@@ -2231,7 +2280,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             nameof(VideoFrameRate), nameof(VideoKeyframeInterval), nameof(StreamAudioEnabled), nameof(StreamAudioBitrate), nameof(StreamAudioSampleRate), nameof(ImageBrightness), nameof(ImageBrightnessSlider), nameof(ImageBrightnessMin), nameof(ImageBrightnessMax),
             nameof(ImageContrast), nameof(ImageContrastSlider), nameof(ImageSaturation), nameof(ImageSaturationSlider), nameof(ImageHue), nameof(ImageHueSlider), nameof(ImageGamma), nameof(ImageGammaSlider), nameof(ImageSharpness), nameof(ImageSharpnessSlider), nameof(ImageManualSharpness), nameof(ImageManualSharpnessSlider), nameof(ImageDenoise), nameof(ImageDenoiseSlider), nameof(ImageWdrStrength), nameof(ImageWdrStrengthSlider),
             nameof(ImageWhiteLight), nameof(ImageWhiteLightSlider), nameof(ImageInfrared), nameof(ImageInfraredSlider), nameof(ImageOsd), nameof(ImageOsdChannelNameEnabled), nameof(ImageOsdChannelNameText), nameof(ImageOsdDateTimeEnabled), nameof(ImageOsdDateFormat), nameof(ImageOsdTimeFormat), nameof(ImageOsdDisplayWeek), nameof(ImageMirror), nameof(ImageFlip),
-            nameof(ImageBrightnessBehaviorBadge), nameof(ImageContrastBehaviorBadge), nameof(ImageSaturationBehaviorBadge), nameof(ImageTruthSummary),
+            nameof(ImageBrightnessBehaviorBadge), nameof(ImageContrastBehaviorBadge), nameof(ImageSaturationBehaviorBadge), nameof(ImageSharpnessBehaviorBadge), nameof(ImageWdrBehaviorBadge), nameof(ImageTruthSummary),
             nameof(NetworkIp), nameof(NetworkNetmask), nameof(NetworkGateway), nameof(NetworkDns), nameof(NetworkPort), nameof(NetworkDhcpMode), nameof(NetworkEseeEnabled), nameof(NetworkNtpEnabled), nameof(NetworkNtpServer), nameof(NetworkEseeId), nameof(WirelessMode), nameof(WirelessApMode), nameof(MotionEnabled), nameof(MotionType), nameof(MotionSensitivity), nameof(MotionSensitivitySlider), nameof(MotionAlarmDuration), nameof(MotionAlarm), nameof(MotionBuzzer), nameof(VideoLossAlarmDuration), nameof(VideoLossAlarm), nameof(VideoLossBuzzer),
             nameof(PrivacyMaskEnabled), nameof(PrivacyMaskX), nameof(PrivacyMaskY), nameof(PrivacyMaskWidth), nameof(PrivacyMaskHeight), nameof(AlarmInputState), nameof(AlarmOutputState), nameof(AlarmPulseDuration), nameof(SdStatus), nameof(SdMediaType), nameof(CameraSerial), nameof(CameraMac),
             nameof(AlarmDuration), nameof(AlarmEnabled), nameof(AlarmBuzzer),
@@ -2252,7 +2301,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             nameof(NetworkDnsVisibility), nameof(NetworkPortVisibility), nameof(NetworkDhcpModeVisibility), nameof(NetworkEseeVisibility), nameof(NetworkNtpEnabledVisibility), nameof(NetworkNtpServerVisibility), nameof(NetworkEseeIdVisibility), nameof(WirelessModeVisibility), nameof(WirelessApModeVisibility), nameof(WirelessApSsidVisibility), nameof(WirelessApPskVisibility), nameof(WirelessApChannelVisibility), nameof(MotionEnabledVisibility), nameof(MotionTypeVisibility), nameof(MotionSensitivityVisibility), nameof(MotionAlarmDurationVisibility), nameof(MotionAlarmVisibility), nameof(MotionBuzzerVisibility), nameof(VideoLossAlarmDurationVisibility), nameof(VideoLossAlarmVisibility), nameof(VideoLossBuzzerVisibility), nameof(PrivacyMaskEnabledVisibility), nameof(PrivacyMaskXVisibility), nameof(PrivacyMaskYVisibility), nameof(PrivacyMaskWidthVisibility), nameof(PrivacyMaskHeightVisibility), nameof(AlarmInputStateVisibility), nameof(AlarmOutputStateVisibility), nameof(AlarmPulseDurationVisibility), nameof(AlarmDurationVisibility), nameof(AlarmEnabledVisibility), nameof(AlarmBuzzerVisibility), nameof(SdStatusVisibility), nameof(SdMediaTypeVisibility), nameof(CameraSerialVisibility), nameof(CameraMacVisibility),
             nameof(ImageBrightnessReadOnlyTooltip), nameof(ImageContrastReadOnlyTooltip), nameof(ImageSaturationReadOnlyTooltip), nameof(ImageSharpnessReadOnlyTooltip), nameof(ImageManualSharpnessReadOnlyTooltip), nameof(ImageHueReadOnlyTooltip),
             nameof(ImageMirrorReadOnlyTooltip), nameof(ImageFlipReadOnlyTooltip), nameof(ImageDayNightReadOnlyTooltip), nameof(ImageIrModeReadOnlyTooltip), nameof(ImageIrCutReadOnlyTooltip),
-            nameof(HasPendingChanges), nameof(DirtyStateText), nameof(LastSyncText), nameof(SelectedPersistenceField), nameof(LastReachableUrl)
+            nameof(HasPendingChanges), nameof(DirtyStateText), nameof(LastSyncText), nameof(GroupedApplyIndicator), nameof(SelectedPersistenceField), nameof(LastReachableUrl)
         })
         {
             OnPropertyChanged(name);
