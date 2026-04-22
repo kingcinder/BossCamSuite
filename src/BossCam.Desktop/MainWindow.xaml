@@ -661,6 +661,48 @@
                                             </DataGrid.Columns>
                                         </DataGrid>
                                     </TabItem>
+                                    <TabItem Header="Endpoint Surface">
+                                        <Grid Margin="4">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="2*"/>
+                                                <RowDefinition Height="8"/>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="8"/>
+                                                <RowDefinition Height="*"/>
+                                            </Grid.RowDefinitions>
+                                            <DataGrid Grid.Row="0" ItemsSource="{Binding EndpointSurfaceRows}" SelectedItem="{Binding SelectedEndpointSurface}" AutoGenerateColumns="False" Background="#0E171E" BorderThickness="0">
+                                                <DataGrid.Columns>
+                                                    <DataGridTextColumn Header="Family" Binding="{Binding Family}" Width="1.1*"/>
+                                                    <DataGridTextColumn Header="Contract" Binding="{Binding ContractKey}" Width="1.3*"/>
+                                                    <DataGridTextColumn Header="Method" Binding="{Binding Method}" Width="0.8*"/>
+                                                    <DataGridTextColumn Header="Endpoint" Binding="{Binding Endpoint}" Width="2.2*"/>
+                                                    <DataGridCheckBoxColumn Header="Write" Binding="{Binding Writable}" Width="0.8*"/>
+                                                    <DataGridCheckBoxColumn Header="Expert" Binding="{Binding ExpertOnly}" Width="0.8*"/>
+                                                    <DataGridTextColumn Header="Risk" Binding="{Binding DisruptionClass}" Width="1.1*"/>
+                                                    <DataGridTextColumn Header="Truth" Binding="{Binding TruthState}" Width="0.9*"/>
+                                                </DataGrid.Columns>
+                                            </DataGrid>
+                                            <WrapPanel Grid.Row="2" Margin="0,0,0,4">
+                                                <Button Margin="0,0,8,0" Padding="10,5" Click="RefreshEndpointSurface_Click">Refresh Endpoint Surface</Button>
+                                                <Button Margin="0,0,8,0" Padding="10,5" Click="ResetEndpointPayload_Click">Reset Payload</Button>
+                                                <Button Padding="10,5" Click="ExecuteEndpointSurface_Click" IsEnabled="{Binding CanExecuteSelectedEndpoint}" Content="{Binding SelectedEndpointExecutionLabel}"/>
+                                                <TextBlock Margin="12,5,0,0" Text="{Binding SelectedEndpointHint}" Foreground="#C4D4E5" TextWrapping="Wrap"/>
+                                            </WrapPanel>
+                                            <Grid Grid.Row="4">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="8"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <GroupBox Header="Current Payload" Foreground="#F2F4F7">
+                                                    <TextBox Text="{Binding EndpointCurrentPayloadText}" IsReadOnly="True" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextWrapping="NoWrap" Background="#0E171E" BorderThickness="0" Foreground="#F2EAD3" FontFamily="Consolas"/>
+                                                </GroupBox>
+                                                <GroupBox Grid.Column="2" Header="Editable Payload" Foreground="#F2F4F7">
+                                                    <TextBox Text="{Binding EndpointEditablePayloadText, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextWrapping="NoWrap" Background="#0E171E" BorderThickness="0" Foreground="#F2EAD3" FontFamily="Consolas"/>
+                                                </GroupBox>
+                                            </Grid>
+                                        </Grid>
+                                    </TabItem>
                                     <TabItem Header="Inventory">
                                         <DataGrid ItemsSource="{Binding ControlPointInventoryRows}" AutoGenerateColumns="False" Background="#0E171E" BorderThickness="0">
                                             <DataGrid.Columns>

@@ -126,6 +126,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private string _toastBackground = "#2B3C4B";
     private Visibility _toastVisibility = Visibility.Collapsed;
     private string _firmwareUploadPath = string.Empty;
+    private EndpointSurfaceRow? _selectedEndpointSurface;
     private readonly DispatcherTimer _toastTimer = new() { Interval = TimeSpan.FromSeconds(3.5) };
     private readonly List<FieldDependencyRule> _dependencyRules = [];
     private readonly Dictionary<string, ImageFieldBehaviorMap> _imageBehaviorByField = new(StringComparer.OrdinalIgnoreCase);
@@ -139,6 +140,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public ObservableCollection<FieldDependencyRuleRow> DependencyRows { get; } = [];
     public ObservableCollection<ImageControlInventoryItem> ImageInventoryRows { get; } = [];
     public ObservableCollection<ControlPointInventoryItem> ControlPointInventoryRows { get; } = [];
+    public ObservableCollection<EndpointSurfaceRow> EndpointSurfaceRows { get; } = [];
     public ObservableCollection<ImageBehaviorRow> ImageBehaviorRows { get; } = [];
     public ObservableCollection<PromotedImageRow> PromotedImageRows { get; } = [];
     public ObservableCollection<ProbeStageMode> ProbeModes { get; } = new(Enum.GetValues<ProbeStageMode>());
@@ -316,6 +318,24 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             {
                 _recordingDiagnostics = value;
                 OnPropertyChanged();
+            }
+        }
+    }
+
+    public EndpointSurfaceRow? SelectedEndpointSurface
+    {
+        get => _selectedEndpointSurface;
+        set
+        {
+            if (!Equals(_selectedEndpointSurface, value))
+            {
+                _selectedEndpointSurface = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(EndpointCurrentPayloadText));
+                OnPropertyChanged(nameof(EndpointEditablePayloadText));
+                OnPropertyChanged(nameof(CanExecuteSelectedEndpoint));
+                OnPropertyChanged(nameof(SelectedEndpointExecutionLabel));
+                OnPropertyChanged(nameof(SelectedEndpointHint));
             }
         }
     }
@@ -553,6 +573,26 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             }
         }
     }
+
+    public string EndpointCurrentPayloadText => SelectedEndpointSurface?.CurrentPayload ?? "{}";
+    public string EndpointEditablePayloadText
+    {
+        get => SelectedEndpointSurface?.EditablePayload ?? "{}";
+        set
+        {
+            if (SelectedEndpointSurface is not null && SelectedEndpointSurface.EditablePayload != value)
+            {
+                SelectedEndpointSurface.EditablePayload = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public bool CanExecuteSelectedEndpoint => SelectedEndpointSurface?.SupportsExecution == true && SelectedDevice is not null;
+    public string SelectedEndpointExecutionLabel => SelectedEndpointSurface?.Method.Equals("GET", StringComparison.OrdinalIgnoreCase) == true ? "Refresh Endpoint" : "Execute Endpoint";
+    public string SelectedEndpointHint => SelectedEndpointSurface is null
+        ? "Select an endpoint family to inspect or execute."
+        : $"{SelectedEndpointSurface.Method} {SelectedEndpointSurface.Endpoint} | {SelectedEndpointSurface.DisruptionClass} | {(SelectedEndpointSurface.RequiresConfirmation ? "confirmation required" : "safe path")}";
 
     public bool HasPendingChanges => _fieldByKey.Values.Any(field => !string.Equals(field.EditableValue, field.OriginalValue, StringComparison.Ordinal));
     public string DirtyStateText => HasPendingChanges ? "Unsaved changes" : "All changes saved";
@@ -1103,6 +1143,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private async void StopPlaybackSave_Click(object sender, RoutedEventArgs e) => await RunAsync(StopPlaybackSaveAsync);
     private async void RunNetworkRecovery_Click(object sender, RoutedEventArgs e) => await RunAsync(RunNetworkRecoveryAsync);
     private async void RefreshSelected_Click(object sender, RoutedEventArgs e) => await RunAsync(RefreshSelectedAsync);
+    private async void RefreshEndpointSurface_Click(object sender, RoutedEventArgs e) => await RunAsync(LoadEndpointSurfaceAsync);
+    private void ResetEndpointPayload_Click(object sender, RoutedEventArgs e) => ResetSelectedEndpointPayload();
+    private async void ExecuteEndpointSurface_Click(object sender, RoutedEventArgs e) => await RunAsync(ExecuteSelectedEndpointAsync);
     private void BrowseFirmware_Click(object sender, RoutedEventArgs e) => SelectFirmwareFile();
     private async void UploadFirmware_Click(object sender, RoutedEventArgs e) => await RunAsync(UploadFirmwareAsync);
 
@@ -1431,6 +1474,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         await LoadSemanticTrustAsync();
         await LoadImageTruthAsync();
         await LoadControlPointInventoryAsync();
+        await LoadEndpointSurfaceAsync();
         await LoadTruthBadgeAsync();
         LastSyncText = $"Last sync: {DateTime.Now:yyyy-MM-dd HH:mm:ss}";
         NotifyAllEditorProperties();
@@ -1450,6 +1494,24 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             .OrderBy(static item => item.Family, StringComparer.OrdinalIgnoreCase)
             .ThenBy(static item => item.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ToList() ?? []);
+    }
+
+    private async Task LoadEndpointSurfaceAsync()
+    {
+        if (SelectedDevice is null)
+        {
+            EndpointSurfaceRows.Clear();
+            SelectedEndpointSurface = null;
+            return;
+        }
+
+        var report = await GetAsync<EndpointSurfaceReport>($"/api/devices/{SelectedDevice.Id}/endpoint-surface");
+        ReplaceCollection(EndpointSurfaceRows, report?.Endpoints
+            .Select(EndpointSurfaceRow.FromItem)
+            .OrderBy(static item => item.Family, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static item => item.ContractKey, StringComparer.OrdinalIgnoreCase)
+            .ToList() ?? []);
+        SelectedEndpointSurface = EndpointSurfaceRows.FirstOrDefault();
     }
 
     private async Task LoadTruthBadgeAsync()
@@ -1769,6 +1831,64 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         await LoadTypedAsync();
         await LoadValidationAsync();
         await LoadSemanticTrustAsync();
+    }
+
+    private void ResetSelectedEndpointPayload()
+    {
+        if (SelectedEndpointSurface is null)
+        {
+            return;
+        }
+
+        SelectedEndpointSurface.EditablePayload = SelectedEndpointSurface.CurrentPayloadAvailable
+            ? SelectedEndpointSurface.CurrentPayload
+            : SelectedEndpointSurface.SuggestedPayload;
+        OnPropertyChanged(nameof(EndpointEditablePayloadText));
+    }
+
+    private async Task ExecuteSelectedEndpointAsync()
+    {
+        if (SelectedDevice is null || SelectedEndpointSurface is null)
+        {
+            DiagnosticsText = "Select a device endpoint first.";
+            return;
+        }
+
+        if (SelectedEndpointSurface.Method.Equals("GET", StringComparison.OrdinalIgnoreCase))
+        {
+            await LoadTypedAsync();
+            ShowToast("Endpoint surface refreshed.", success: true);
+            return;
+        }
+
+        if (SelectedEndpointSurface.RequiresConfirmation)
+        {
+            var prompt = $"{SelectedEndpointSurface.Method} {SelectedEndpointSurface.Endpoint} may impact the device. Continue?";
+            if (MessageBox.Show(prompt, "Confirm Endpoint Execute", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+            {
+                return;
+            }
+        }
+
+        var payload = ParseObjectNode(SelectedEndpointSurface.EditablePayload) ?? new JsonObject();
+        var plan = new WritePlan
+        {
+            GroupName = SelectedEndpointSurface.GroupName,
+            Endpoint = SelectedEndpointSurface.Endpoint,
+            Method = SelectedEndpointSurface.Method,
+            Payload = payload,
+            SnapshotBeforeWrite = true,
+            RequireWriteVerification = !SelectedEndpointSurface.RequiresConfirmation,
+            AllowRollback = !SelectedEndpointSurface.RequiresConfirmation,
+            ContractKey = SelectedEndpointSurface.ContractKey
+        };
+        var result = await PostAsync<WriteResult>($"/api/devices/{SelectedDevice.Id}/settings/write", plan);
+        DiagnosticsText = JsonSerializer.Serialize(result, SerializerOptions);
+        ShowToast(result?.Success == true ? $"{SelectedEndpointSurface.ContractKey} executed." : $"{SelectedEndpointSurface.ContractKey} failed.", success: result?.Success == true);
+
+        await LoadTypedAsync();
+        await LoadValidationAsync();
+        await LoadTranscriptsAsync();
     }
 
     private List<string> ValidateCompatibilityEdits()
@@ -2625,6 +2745,29 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         return JsonValue.Create(raw);
     }
 
+    private static JsonObject? ParseObjectNode(string? raw)
+    {
+        var trimmed = (raw ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            return new JsonObject();
+        }
+
+        if (trimmed.StartsWith("{", StringComparison.Ordinal))
+        {
+            try
+            {
+                return JsonNode.Parse(trimmed) as JsonObject;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        return null;
+    }
+
     private void Devices_SelectionChanged(object sender, RoutedEventArgs e)
     {
         _ = RunAsync(async () =>
@@ -2826,6 +2969,55 @@ public sealed class PromotedImageRow
     public string Status { get; init; } = string.Empty;
     public string SourceEndpoint { get; init; } = string.Empty;
     public string Notes { get; init; } = string.Empty;
+}
+
+public sealed class EndpointSurfaceRow
+{
+    public string Family { get; init; } = string.Empty;
+    public string GroupName { get; init; } = string.Empty;
+    public string ContractKey { get; init; } = string.Empty;
+    public string Endpoint { get; init; } = string.Empty;
+    public string Method { get; init; } = string.Empty;
+    public string Surface { get; init; } = string.Empty;
+    public string WrapperObjectName { get; init; } = string.Empty;
+    public string DisruptionClass { get; init; } = string.Empty;
+    public string TruthState { get; init; } = string.Empty;
+    public bool Writable { get; init; }
+    public bool ExpertOnly { get; init; }
+    public bool RequiresConfirmation { get; init; }
+    public bool CurrentPayloadAvailable { get; init; }
+    public bool SupportsExecution { get; init; }
+    public string Notes { get; init; } = string.Empty;
+    public string CurrentPayload { get; init; } = "{}";
+    public string SuggestedPayload { get; init; } = "{}";
+    public string EditablePayload { get; set; } = "{}";
+
+    public static EndpointSurfaceRow FromItem(EndpointSurfaceItem item)
+    {
+        var suggested = item.SuggestedPayload?.ToJsonString(new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true }) ?? "{}";
+        var current = item.CurrentPayload?.ToJsonString(new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true }) ?? "{}";
+        return new EndpointSurfaceRow
+        {
+            Family = item.Family,
+            GroupName = item.GroupName,
+            ContractKey = item.ContractKey,
+            Endpoint = item.Endpoint,
+            Method = item.Method,
+            Surface = item.Surface,
+            WrapperObjectName = item.WrapperObjectName,
+            DisruptionClass = item.DisruptionClass,
+            TruthState = item.TruthState,
+            Writable = item.Writable,
+            ExpertOnly = item.ExpertOnly,
+            RequiresConfirmation = item.RequiresConfirmation,
+            CurrentPayloadAvailable = item.CurrentPayloadAvailable,
+            SupportsExecution = item.SupportsExecution,
+            Notes = item.Notes,
+            CurrentPayload = current,
+            SuggestedPayload = suggested,
+            EditablePayload = item.CurrentPayloadAvailable ? current : suggested
+        };
+    }
 }
 
 public sealed record TypedSettingApplyRequest(string FieldKey, JsonNode? Value, bool ExpertOverride);

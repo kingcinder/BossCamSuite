@@ -172,6 +172,77 @@ public sealed class ControlPointInventoryServiceTests : IDisposable
         Assert.True(hints["osdDateFormat"].NormalUiEligible);
     }
 
+    [Fact]
+    public async Task Endpoint_Surface_Covers_All_Discovered_Contracts_With_Executable_Payloads()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync(CancellationToken.None);
+
+        var device = new DeviceIdentity
+        {
+            IpAddress = "10.0.0.29",
+            Name = "5523-W",
+            DeviceType = "IPC",
+            HardwareModel = "5523-w",
+            FirmwareVersion = "1.0.0"
+        };
+        await store.UpsertDevicesAsync([device], CancellationToken.None);
+
+        var snapshot = new SettingsSnapshot
+        {
+            DeviceId = device.Id,
+            AdapterName = "Fake",
+            Groups =
+            [
+                new SettingGroup
+                {
+                    Name = "Video",
+                    DisplayName = "Video",
+                    Values = new Dictionary<string, SettingValue>
+                    {
+                        ["/NetSDK/Video/input/channel/1"] = new()
+                        {
+                            Key = "/NetSDK/Video/input/channel/1",
+                            SourceEndpoint = "/NetSDK/Video/input/channel/1",
+                            Value = JsonNode.Parse("{\"id\":1,\"enabled\":true,\"brightnessLevel\":50}")
+                        },
+                        ["/NetSDK/System/deviceInfo"] = new()
+                        {
+                            Key = "/NetSDK/System/deviceInfo",
+                            SourceEndpoint = "/NetSDK/System/deviceInfo",
+                            Value = JsonNode.Parse("{\"serial\":\"abc\",\"model\":\"5523-w\"}")
+                        }
+                    }
+                }
+            ]
+        };
+        await store.SaveSettingsSnapshotAsync(snapshot, CancellationToken.None);
+
+        var endpointSurface = new EndpointSurfaceService(store, BuildContractCatalog(store));
+        var report = await endpointSurface.GetReportAsync(device.Id, CancellationToken.None);
+
+        Assert.NotNull(report);
+        var contractCount = (await BuildContractCatalog(store).GetContractsForDeviceAsync(device, CancellationToken.None)).Count;
+        Assert.Equal(contractCount, report!.Endpoints.Count);
+
+        var videoInput = report.Endpoints.First(item => item.ContractKey == "video.input.channel.0");
+        Assert.True(videoInput.CurrentPayloadAvailable);
+        Assert.NotNull(videoInput.SuggestedPayload);
+
+        var keyframe = report.Endpoints.First(item => item.ContractKey == "video.encode.channel.keyframe");
+        Assert.True(keyframe.SupportsExecution);
+        Assert.NotNull(keyframe.SuggestedPayload);
+        Assert.Equal(true, keyframe.SuggestedPayload!["requestKeyframe"]?.GetValue<bool>());
+
+        var reboot = report.Endpoints.First(item => item.ContractKey == "maintenance.reboot");
+        Assert.True(reboot.RequiresConfirmation);
+        Assert.True(reboot.SupportsExecution);
+        Assert.Equal(true, reboot.SuggestedPayload!["reboot"]?.GetValue<bool>());
+
+        var deviceInfo = report.Endpoints.First(item => item.ContractKey == "system.device.info");
+        Assert.True(deviceInfo.CurrentPayloadAvailable);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_tempDirectory))

@@ -104,6 +104,11 @@ app.MapGet("/api/devices/{id:guid}/control-points", async (Guid id, ControlPoint
     var result = await controlPointInventoryService.GetReportAsync(id, ct);
     return result is null ? Results.NotFound() : Results.Ok(result);
 });
+app.MapGet("/api/devices/{id:guid}/endpoint-surface", async (Guid id, EndpointSurfaceService endpointSurfaceService, CancellationToken ct) =>
+{
+    var result = await endpointSurfaceService.GetReportAsync(id, ct);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
 app.MapPost("/api/devices/{id:guid}/settings/typed/refresh", async (Guid id, TypedSettingsService typedSettingsService, CancellationToken ct) =>
     Results.Ok(await typedSettingsService.NormalizeDeviceAsync(id, refreshFromDevice: true, ct)));
 app.MapPost("/api/devices/{id:guid}/settings/typed/apply", async (Guid id, TypedSettingApplyRequest request, TypedSettingsService typedSettingsService, CancellationToken ct) =>
