@@ -21,8 +21,11 @@ public enum GroupedApplyBehavior
     ImmediateApplied,
     DelayedApplied,
     RequiresSecondWrite,
+    RequiresRelatedFieldWrite,
     RequiresCommitTrigger,
+    StoredButNotOperational,
     Unapplied,
+    Uncertain,
     Unknown
 }
 
@@ -30,11 +33,13 @@ public enum GroupedApplyBehavior
 public enum ForcedFieldClassification
 {
     Writable,
+    WritableNeedsCommitTrigger,
     ReadableOnly,
     Ignored,
     RequiresGroupedWrite,
     RequiresCommitTrigger,
     DelayedApply,
+    Uncertain,
     Unsupported
 }
 
@@ -64,6 +69,15 @@ public sealed record ForcedEnumerationRequest
     public bool IncludeDangerous { get; init; }
     public bool ExpertOverride { get; init; } = true;
     public IReadOnlyCollection<GroupedConfigKind> Groups { get; init; } = [];
+    public IReadOnlyCollection<string> FieldKeys { get; init; } = [];
+}
+
+public sealed record GroupedFamilyProbeRequest
+{
+    public bool RefreshFromDevice { get; init; } = true;
+    public bool IncludePrivacyMasks { get; init; } = true;
+    public bool ExpertOverride { get; init; } = true;
+    public IReadOnlyCollection<string> Families { get; init; } = [];
     public IReadOnlyCollection<string> FieldKeys { get; init; } = [];
 }
 

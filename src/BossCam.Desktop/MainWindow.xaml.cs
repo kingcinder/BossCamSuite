@@ -59,6 +59,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private readonly DispatcherTimer _toastTimer = new() { Interval = TimeSpan.FromSeconds(3.5) };
     private readonly List<FieldDependencyRule> _dependencyRules = [];
     private readonly Dictionary<string, ImageFieldBehaviorMap> _imageBehaviorByField = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, GroupedUnsupportedRetestResult> _groupedRetestByField = new(StringComparer.OrdinalIgnoreCase);
 
     public ObservableCollection<DeviceIdentity> Devices { get; } = [];
     public ObservableCollection<EndpointValidationResult> ValidationMatrix { get; } = [];
@@ -1001,6 +1002,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private async void LoadTranscripts_Click(object sender, RoutedEventArgs e) => await RunAsync(LoadTranscriptsAsync);
     private async void DiscoverConstraints_Click(object sender, RoutedEventArgs e) => await RunAsync(DiscoverConstraintsAsync);
     private async void RunImageTruthSweep_Click(object sender, RoutedEventArgs e) => await RunAsync(RunImageTruthSweepAsync);
+    private async void ProbeGroupedFamilies_Click(object sender, RoutedEventArgs e) => await RunAsync(ProbeGroupedFamiliesAsync);
     private async void RetestUnsupportedGrouped_Click(object sender, RoutedEventArgs e) => await RunAsync(RetestUnsupportedGroupedAsync);
     private async void ForceEnumerateSdkFields_Click(object sender, RoutedEventArgs e) => await RunAsync(ForceEnumerateSdkFieldsAsync);
     private async void PromoteFixtures_Click(object sender, RoutedEventArgs e) => await RunAsync(PromoteFixturesAsync);
@@ -1257,6 +1259,32 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         ShowToast($"SDK enumeration: {summary}", success: true);
     }
 
+    private async Task ProbeGroupedFamiliesAsync()
+    {
+        if (SelectedDevice is null)
+        {
+            DiagnosticsText = "Select a device first.";
+            return;
+        }
+
+        var request = new GroupedFamilyProbeRequest
+        {
+            RefreshFromDevice = true,
+            IncludePrivacyMasks = true,
+            ExpertOverride = true
+        };
+        var result = await PostAsync<List<GroupedUnsupportedRetestResult>>($"/api/devices/{SelectedDevice.Id}/grouped-config/probe-families", request) ?? [];
+        DiagnosticsText = JsonSerializer.Serialize(result, SerializerOptions);
+        await LoadTypedAsync();
+        await LoadImageTruthAsync();
+
+        var summary = string.Join(", ", result
+            .GroupBy(static item => item.Behavior)
+            .OrderBy(static group => group.Key.ToString())
+            .Select(group => $"{group.Key}={group.Count()}"));
+        ShowToast($"Grouped family probe: {summary}", success: true);
+    }
+
     private async Task LoadNativeAssessmentAsync()
     {
         if (SelectedDevice is null)
@@ -1461,6 +1489,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         var inventory = await GetAsync<List<ImageControlInventoryItem>>($"/api/devices/{SelectedDevice.Id}/image/inventory") ?? [];
         var maps = await GetAsync<List<ImageFieldBehaviorMap>>($"/api/devices/{SelectedDevice.Id}/image/behavior-maps") ?? [];
         var groupedProfiles = await GetAsync<List<GroupedApplyProfile>>($"/api/devices/{SelectedDevice.Id}/grouped-config/profiles") ?? [];
+        var groupedResults = await GetAsync<List<GroupedUnsupportedRetestResult>>($"/api/devices/{SelectedDevice.Id}/grouped-config/retest-results?limit=400") ?? [];
         ReplaceCollection(ImageInventoryRows, inventory.OrderBy(item => item.FieldKey, StringComparer.OrdinalIgnoreCase).ToList());
         ReplaceCollection(PromotedImageRows, inventory
             .Where(static item => item.PromotedToUi)
@@ -1480,6 +1509,13 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         foreach (var map in maps)
         {
             _imageBehaviorByField[map.FieldKey] = map;
+        }
+        _groupedRetestByField.Clear();
+        foreach (var result in groupedResults
+            .GroupBy(static item => item.FieldKey, StringComparer.OrdinalIgnoreCase)
+            .Select(static group => group.OrderByDescending(static item => item.CapturedAt).First()))
+        {
+            _groupedRetestByField[result.FieldKey] = result;
         }
 
         ReplaceCollection(ImageBehaviorRows, maps
@@ -2011,10 +2047,19 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         if (!_fieldByKey.TryGetValue(key, out var field))
         {
-            return false;
+            return _groupedRetestByField.TryGetValue(key, out var grouped)
+                && grouped.Classification is ForcedFieldClassification.Writable
+                    or ForcedFieldClassification.WritableNeedsCommitTrigger
+                    or ForcedFieldClassification.DelayedApply;
         }
 
-        // Contract-driven gating: normal editor only enabled for proven writable + supported + non-expert fields.
+        if (_groupedRetestByField.TryGetValue(key, out var groupedResult))
+        {
+            return groupedResult.Classification is ForcedFieldClassification.Writable
+                or ForcedFieldClassification.WritableNeedsCommitTrigger
+                or ForcedFieldClassification.DelayedApply;
+        }
+
         return field.WriteVerified && field.SupportState.Equals(nameof(ContractSupportState.Supported), StringComparison.OrdinalIgnoreCase) && !field.ExpertOnly;
     }
 
@@ -2025,7 +2070,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             return Visibility.Collapsed;
         }
 
-        if (field.ExpertOnly || field.SupportState.Equals(nameof(ContractSupportState.Unsupported), StringComparison.OrdinalIgnoreCase))
+        if (field.ExpertOnly)
+        {
+            return Visibility.Collapsed;
+        }
+
+        if (IsExplicitlyUnsupported(key))
         {
             return Visibility.Collapsed;
         }
@@ -2049,26 +2099,38 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             return Visibility.Collapsed;
         }
 
-        if (field.ExpertOnly
-            || field.SupportState.Equals(nameof(ContractSupportState.Unsupported), StringComparison.OrdinalIgnoreCase)
-            || field.SupportState.Equals(nameof(ContractSupportState.Uncertain), StringComparison.OrdinalIgnoreCase))
+        if (field.ExpertOnly)
         {
             return Visibility.Collapsed;
         }
 
-        if (field.WriteVerified || field.ReadVerified)
+        if (IsExplicitlyUnsupported(key))
         {
-            return Visibility.Visible;
+            return Visibility.Collapsed;
         }
 
-        return Visibility.Collapsed;
+        return Visibility.Visible;
     }
 
     private string ReadOnlyTooltip(string key)
     {
         if (!_fieldByKey.TryGetValue(key, out var field))
         {
-            return string.Empty;
+            return _groupedRetestByField.TryGetValue(key, out var groupedFallback)
+                && groupedFallback.Classification == ForcedFieldClassification.ReadableOnly
+                ? "Read-only: this control is proven readable but not writable on this camera."
+                : string.Empty;
+        }
+
+        if (_groupedRetestByField.TryGetValue(key, out var groupedResult))
+        {
+            return groupedResult.Classification switch
+            {
+                ForcedFieldClassification.ReadableOnly => "Read-only: this control is proven readable but not writable on this camera.",
+                ForcedFieldClassification.WritableNeedsCommitTrigger => "This control is writable, but the camera needs an additional commit/apply trigger.",
+                ForcedFieldClassification.Uncertain => "This control has been tested on the correct grouped family, but commit/apply semantics are still uncertain.",
+                _ => string.Empty
+            };
         }
 
         return !CanEdit(key) && field.ReadVerified
@@ -2080,10 +2142,18 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         if (!_fieldByKey.TryGetValue(key, out var field))
         {
-            return "unsupported";
+            return _groupedRetestByField.TryGetValue(key, out var groupedFallback)
+                ? GroupedState(groupedFallback)
+                : "unverified";
         }
 
-        if (field.SupportState.Equals(nameof(ContractSupportState.Uncertain), StringComparison.OrdinalIgnoreCase))
+        if (_groupedRetestByField.TryGetValue(key, out var groupedResult))
+        {
+            return GroupedState(groupedResult);
+        }
+
+        if (field.SupportState.Equals(nameof(ContractSupportState.Unsupported), StringComparison.OrdinalIgnoreCase)
+            || field.SupportState.Equals(nameof(ContractSupportState.Uncertain), StringComparison.OrdinalIgnoreCase))
         {
             return "uncertain";
         }
@@ -2105,6 +2175,21 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         return field.ReadVerified ? "read-only" : "unverified";
     }
+
+    private static string GroupedState(GroupedUnsupportedRetestResult result)
+        => result.Classification switch
+        {
+            ForcedFieldClassification.Writable => result.Behavior == GroupedApplyBehavior.DelayedApplied ? "delayed-apply" : "proven-working",
+            ForcedFieldClassification.WritableNeedsCommitTrigger => result.Behavior == GroupedApplyBehavior.DelayedApplied ? "delayed-apply" : "needs-commit-trigger",
+            ForcedFieldClassification.ReadableOnly => "read-only",
+            ForcedFieldClassification.Uncertain => "uncertain",
+            ForcedFieldClassification.Ignored => "ignored",
+            _ => "unsupported"
+        };
+
+    private bool IsExplicitlyUnsupported(string key)
+        => _groupedRetestByField.TryGetValue(key, out var groupedResult)
+            && groupedResult.Classification == ForcedFieldClassification.Unsupported;
 
     private double HintMin(string key, double fallback)
     {
@@ -2168,6 +2253,31 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private string BehaviorBadge(string fieldKey)
     {
+        if (_groupedRetestByField.TryGetValue(fieldKey, out var grouped))
+        {
+            var mechanism = grouped.Behavior switch
+            {
+                GroupedApplyBehavior.ImmediateApplied => "Proven Working",
+                GroupedApplyBehavior.DelayedApplied => "Delayed Apply",
+                GroupedApplyBehavior.RequiresSecondWrite => "Needs Commit Trigger",
+                GroupedApplyBehavior.RequiresRelatedFieldWrite => "Needs Commit Trigger",
+                GroupedApplyBehavior.RequiresCommitTrigger => "Needs Commit Trigger",
+                GroupedApplyBehavior.StoredButNotOperational => "Uncertain",
+                GroupedApplyBehavior.Uncertain => "Uncertain",
+                _ => grouped.Classification == ForcedFieldClassification.ReadableOnly ? "Readable Only" : "Unmapped"
+            };
+
+            var suffix = grouped.Behavior switch
+            {
+                GroupedApplyBehavior.RequiresSecondWrite => " second-write",
+                GroupedApplyBehavior.RequiresRelatedFieldWrite => " related-write",
+                GroupedApplyBehavior.RequiresCommitTrigger => " commit-trigger",
+                GroupedApplyBehavior.DelayedApplied => " delayed",
+                _ => string.Empty
+            };
+            return mechanism + suffix;
+        }
+
         if (!_imageBehaviorByField.TryGetValue(fieldKey, out var behavior))
         {
             return "unmapped";

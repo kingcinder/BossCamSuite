@@ -61,6 +61,72 @@ public sealed class GroupedConfigService(
 
     public IReadOnlyCollection<SdkFieldDefinition> GetSdkFieldCatalog() => SdkFieldCatalog;
 
+    public async Task<IReadOnlyCollection<GroupedUnsupportedRetestResult>> ProbeGroupedFamiliesAsync(Guid deviceId, GroupedFamilyProbeRequest request, CancellationToken cancellationToken)
+    {
+        if (request.RefreshFromDevice)
+        {
+            _ = await typedSettingsService.NormalizeDeviceAsync(deviceId, refreshFromDevice: true, cancellationToken);
+            _ = await settingsService.ReadAsync(deviceId, cancellationToken);
+        }
+
+        var device = await store.GetDeviceAsync(deviceId, cancellationToken);
+        if (device is null)
+        {
+            return [];
+        }
+
+        var normalizedFields = await store.GetNormalizedSettingFieldsAsync(deviceId, cancellationToken);
+        var results = new List<GroupedUnsupportedRetestResult>();
+        var requestedFamilies = request.Families.Count == 0
+            ? null
+            : new HashSet<string>(request.Families, StringComparer.OrdinalIgnoreCase);
+        var requestedFields = request.FieldKeys.Count == 0
+            ? null
+            : new HashSet<string>(request.FieldKeys, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var family in BuildProbeFamilies(request.IncludePrivacyMasks))
+        {
+            if (requestedFamilies is not null && !requestedFamilies.Contains(family.Name))
+            {
+                continue;
+            }
+
+            var filteredFields = requestedFields is null
+                ? family.Fields
+                : family.Fields.Where(field => requestedFields.Contains(field.FieldKey)).ToList();
+            if (filteredFields.Count == 0)
+            {
+                continue;
+            }
+
+            results.AddRange(await ProbeFamilyAsync(device, family with { Fields = filteredFields }, request.ExpertOverride, cancellationToken));
+        }
+
+        await store.SaveGroupedRetestResultsAsync(results, cancellationToken);
+        await SaveGroupedProfilesAsync(device, normalizedFields, results, cancellationToken);
+        await PromoteRetestedFieldsAsync(device.Id, results, cancellationToken);
+        await PromoteImageInventoryAsync(device.Id, results, cancellationToken);
+        logger.LogInformation("Grouped family probe completed for {Device} fields={Count}", device.DisplayName, results.Count);
+        return results;
+    }
+
+    private sealed record FamilyProbeDefinition(
+        string Name,
+        string Endpoint,
+        GroupedConfigKind GroupKind,
+        IReadOnlyCollection<FamilyFieldProbe> Fields,
+        string? CommitTriggerEndpoint = null,
+        string? CommitTriggerMethod = null,
+        JsonObject? CommitTriggerPayload = null,
+        string? ReadTriggerEndpoint = null,
+        string? SecondaryApplyEndpoint = null);
+
+    private sealed record FamilyFieldProbe(
+        string FieldKey,
+        string SourcePath,
+        Func<JsonObject, JsonNode?, JsonNode?> CandidateFactory,
+        Func<JsonObject, JsonObject?>? RelatedFieldPayloadFactory = null);
+
     public async Task<IReadOnlyCollection<GroupedUnsupportedRetestResult>> ForceEnumerateSdkFieldsAsync(Guid deviceId, ForcedEnumerationRequest request, CancellationToken cancellationToken)
     {
         if (request.RefreshFromDevice)
@@ -249,6 +315,216 @@ public sealed class GroupedConfigService(
         return results;
     }
 
+    private async Task<IReadOnlyCollection<GroupedUnsupportedRetestResult>> ProbeFamilyAsync(
+        DeviceIdentity device,
+        FamilyProbeDefinition family,
+        bool expertOverride,
+        CancellationToken cancellationToken)
+    {
+        var results = new List<GroupedUnsupportedRetestResult>();
+        foreach (var field in family.Fields)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            results.Add(await ProbeFamilyFieldAsync(device, family, field, expertOverride, cancellationToken));
+        }
+
+        return results;
+    }
+
+    private async Task<GroupedUnsupportedRetestResult> ProbeFamilyFieldAsync(
+        DeviceIdentity device,
+        FamilyProbeDefinition family,
+        FamilyFieldProbe field,
+        bool expertOverride,
+        CancellationToken cancellationToken)
+    {
+        var root = await ReadEndpointObjectAsync(device.Id, family.Endpoint, cancellationToken);
+        var firmware = BuildFirmwareFingerprint(device, await store.GetNormalizedSettingFieldsAsync(device.Id, cancellationToken));
+        if (root is null)
+        {
+            return new GroupedUnsupportedRetestResult
+            {
+                DeviceId = device.Id,
+                FirmwareFingerprint = firmware,
+                IpAddress = device.IpAddress ?? string.Empty,
+                GroupKind = family.GroupKind,
+                ContractKey = $"family.{family.Name}.{field.FieldKey}",
+                FieldKey = field.FieldKey,
+                SourceEndpoint = family.Endpoint,
+                SourcePath = field.SourcePath,
+                Behavior = GroupedApplyBehavior.Uncertain,
+                Classification = ForcedFieldClassification.Uncertain,
+                Notes = "Family endpoint payload was not readable."
+            };
+        }
+
+        var baseline = TryGetPathValue(root, field.SourcePath);
+        var candidateValue = field.CandidateFactory(root, baseline);
+        if (candidateValue is null)
+        {
+            return new GroupedUnsupportedRetestResult
+            {
+                DeviceId = device.Id,
+                FirmwareFingerprint = firmware,
+                IpAddress = device.IpAddress ?? string.Empty,
+                GroupKind = family.GroupKind,
+                ContractKey = $"family.{family.Name}.{field.FieldKey}",
+                FieldKey = field.FieldKey,
+                SourceEndpoint = family.Endpoint,
+                SourcePath = field.SourcePath,
+                BaselineValue = baseline?.DeepClone(),
+                Behavior = GroupedApplyBehavior.Uncertain,
+                Classification = ForcedFieldClassification.Uncertain,
+                BaselineFieldPresent = baseline is not null,
+                Notes = "No candidate mutation could be built from the current grouped payload."
+            };
+        }
+
+        var payload = (JsonObject)root.DeepClone();
+        SetPathValue(payload, field.SourcePath, candidateValue.DeepClone());
+
+        var first = await ExecutePlanAsync(device.Id, family.Endpoint, "PUT", payload, expertOverride, cancellationToken);
+        var immediate = await ReadFieldValueAsync(device.Id, family.Endpoint, field.SourcePath, cancellationToken);
+        await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
+        var delayed1 = await ReadFieldValueAsync(device.Id, family.Endpoint, field.SourcePath, cancellationToken);
+        await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
+        var delayed3 = await ReadFieldValueAsync(device.Id, family.Endpoint, field.SourcePath, cancellationToken);
+        await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
+        var delayed5 = await ReadFieldValueAsync(device.Id, family.Endpoint, field.SourcePath, cancellationToken);
+
+        var behavior = DetermineBehavior(candidateValue, immediate, delayed1, delayed3, delayed5, first?.Success == true);
+        var classification = DetermineClassification(behavior, first?.Success == true, baseline is not null);
+        var notes = new List<string>();
+        if (!string.IsNullOrWhiteSpace(first?.Message))
+        {
+            notes.Add($"write:{first!.Message}");
+        }
+
+        var secondaryWriteSucceeded = false;
+        var resendWriteSucceeded = false;
+        if (behavior == GroupedApplyBehavior.Uncertain && first?.Success == true)
+        {
+            var second = await ExecutePlanAsync(device.Id, family.Endpoint, "PUT", payload, expertOverride, cancellationToken);
+            secondaryWriteSucceeded = second?.Success == true;
+            var secondRead = await ReadFieldValueAsync(device.Id, family.Endpoint, field.SourcePath, cancellationToken);
+            if (JsonNode.DeepEquals(secondRead, candidateValue))
+            {
+                behavior = GroupedApplyBehavior.RequiresSecondWrite;
+                classification = ForcedFieldClassification.WritableNeedsCommitTrigger;
+                notes.Add("mechanism:second-write");
+            }
+            else if (field.RelatedFieldPayloadFactory is not null)
+            {
+                var relatedPayload = field.RelatedFieldPayloadFactory(payload);
+                if (relatedPayload is not null)
+                {
+                    var related = await ExecutePlanAsync(device.Id, family.Endpoint, "PUT", relatedPayload, expertOverride, cancellationToken);
+                    resendWriteSucceeded = related?.Success == true;
+                    var relatedRead = await ReadFieldValueAsync(device.Id, family.Endpoint, field.SourcePath, cancellationToken);
+                    if (JsonNode.DeepEquals(relatedRead, candidateValue))
+                    {
+                        behavior = GroupedApplyBehavior.RequiresRelatedFieldWrite;
+                        classification = ForcedFieldClassification.WritableNeedsCommitTrigger;
+                        notes.Add("mechanism:related-field-write");
+                    }
+                }
+            }
+
+            if (behavior == GroupedApplyBehavior.Uncertain && !string.IsNullOrWhiteSpace(family.CommitTriggerEndpoint))
+            {
+                var trigger = await ExecutePlanAsync(
+                    device.Id,
+                    family.CommitTriggerEndpoint!,
+                    family.CommitTriggerMethod ?? "POST",
+                    family.CommitTriggerPayload,
+                    expertOverride: true,
+                    cancellationToken);
+                var afterTrigger = await ReadFieldValueAsync(device.Id, family.Endpoint, field.SourcePath, cancellationToken);
+                if (JsonNode.DeepEquals(afterTrigger, candidateValue))
+                {
+                    behavior = GroupedApplyBehavior.RequiresCommitTrigger;
+                    classification = ForcedFieldClassification.WritableNeedsCommitTrigger;
+                    notes.Add($"mechanism:commit-trigger:{family.CommitTriggerEndpoint}");
+                }
+                else if (!string.IsNullOrWhiteSpace(trigger?.Message))
+                {
+                    notes.Add($"commit-trigger:{trigger!.Message}");
+                }
+            }
+
+            if (behavior == GroupedApplyBehavior.Uncertain && !string.IsNullOrWhiteSpace(family.ReadTriggerEndpoint))
+            {
+                var readTrigger = await ExecutePlanAsync(device.Id, family.ReadTriggerEndpoint!, "GET", null, expertOverride: true, cancellationToken);
+                var afterReadTrigger = await ReadFieldValueAsync(device.Id, family.Endpoint, field.SourcePath, cancellationToken);
+                if (JsonNode.DeepEquals(afterReadTrigger, candidateValue))
+                {
+                    behavior = GroupedApplyBehavior.RequiresCommitTrigger;
+                    classification = ForcedFieldClassification.WritableNeedsCommitTrigger;
+                    notes.Add($"mechanism:read-trigger:{family.ReadTriggerEndpoint}");
+                }
+                else if (!string.IsNullOrWhiteSpace(readTrigger?.Message))
+                {
+                    notes.Add($"read-trigger:{readTrigger!.Message}");
+                }
+            }
+
+            if (behavior == GroupedApplyBehavior.Uncertain && !string.IsNullOrWhiteSpace(family.SecondaryApplyEndpoint))
+            {
+                var secondary = await ExecutePlanAsync(device.Id, family.SecondaryApplyEndpoint!, "PUT", payload, expertOverride: true, cancellationToken);
+                var afterSecondary = await ReadFieldValueAsync(device.Id, family.Endpoint, field.SourcePath, cancellationToken);
+                if (JsonNode.DeepEquals(afterSecondary, candidateValue))
+                {
+                    behavior = GroupedApplyBehavior.RequiresCommitTrigger;
+                    classification = ForcedFieldClassification.WritableNeedsCommitTrigger;
+                    notes.Add($"mechanism:secondary-apply:{family.SecondaryApplyEndpoint}");
+                }
+                else if (!string.IsNullOrWhiteSpace(secondary?.Message))
+                {
+                    notes.Add($"secondary-apply:{secondary!.Message}");
+                }
+            }
+
+            if (behavior == GroupedApplyBehavior.Uncertain)
+            {
+                behavior = first.Success ? GroupedApplyBehavior.StoredButNotOperational : GroupedApplyBehavior.Uncertain;
+                classification = first.Success ? ForcedFieldClassification.Uncertain : (baseline is null ? ForcedFieldClassification.Unsupported : ForcedFieldClassification.ReadableOnly);
+                notes.Add(first.Success ? "mechanism:none-of-tested-triggers" : "write-not-accepted");
+            }
+        }
+
+        if (baseline is not null)
+        {
+            var rollbackPayload = (JsonObject)root.DeepClone();
+            _ = await ExecutePlanAsync(device.Id, family.Endpoint, "PUT", rollbackPayload, expertOverride: true, cancellationToken);
+        }
+
+        return new GroupedUnsupportedRetestResult
+        {
+            DeviceId = device.Id,
+            FirmwareFingerprint = firmware,
+            IpAddress = device.IpAddress ?? string.Empty,
+            GroupKind = family.GroupKind,
+            ContractKey = $"family.{family.Name}.{field.FieldKey}",
+            FieldKey = field.FieldKey,
+            SourceEndpoint = family.Endpoint,
+            SourcePath = field.SourcePath,
+            BaselineValue = baseline?.DeepClone(),
+            AttemptedValue = candidateValue.DeepClone(),
+            ImmediateValue = immediate?.DeepClone(),
+            Delayed1sValue = delayed1?.DeepClone(),
+            Delayed3sValue = delayed3?.DeepClone(),
+            Delayed5sValue = delayed5?.DeepClone(),
+            FirstWriteSucceeded = first?.Success == true,
+            SecondaryWriteSucceeded = secondaryWriteSucceeded,
+            ResendWriteSucceeded = resendWriteSucceeded,
+            Behavior = behavior,
+            Classification = classification,
+            BaselineFieldPresent = baseline is not null,
+            DefinitionSource = family.Name,
+            Notes = string.Join(" | ", notes)
+        };
+    }
+
     public async Task<IReadOnlyCollection<GroupedUnsupportedRetestResult>> RetestUnsupportedFieldsAsync(Guid deviceId, GroupedRetestRequest request, CancellationToken cancellationToken)
     {
         _ = await typedSettingsService.NormalizeDeviceAsync(deviceId, request.RefreshFromDevice, cancellationToken);
@@ -381,6 +657,15 @@ public sealed class GroupedConfigService(
     public Task<IReadOnlyCollection<GroupedUnsupportedRetestResult>> GetRetestResultsAsync(Guid deviceId, int limit, CancellationToken cancellationToken)
         => store.GetGroupedRetestResultsAsync(deviceId, limit, cancellationToken);
 
+    private async Task<JsonObject?> ReadEndpointObjectAsync(Guid deviceId, string endpoint, CancellationToken cancellationToken)
+    {
+        var snapshot = await settingsService.ReadAsync(deviceId, cancellationToken);
+        var endpointValue = snapshot?.Groups
+            .SelectMany(static group => group.Values.Values)
+            .FirstOrDefault(item => NormalizeEndpoint(item.SourceEndpoint ?? item.Key).Equals(NormalizeEndpoint(endpoint), StringComparison.OrdinalIgnoreCase));
+        return endpointValue?.Value as JsonObject;
+    }
+
     private async Task<(string SourceEndpoint, JsonObject Value)?> FindEndpointPayloadAsync(Guid deviceId, string endpointPattern, CancellationToken cancellationToken)
     {
         var snapshot = await settingsService.ReadAsync(deviceId, cancellationToken);
@@ -391,6 +676,26 @@ public sealed class GroupedConfigService(
             ? (NormalizeEndpoint(endpointValue.SourceEndpoint ?? endpointValue.Key), (JsonObject)obj.DeepClone())
             : null;
     }
+
+    private async Task<WriteResult?> ExecutePlanAsync(
+        Guid deviceId,
+        string endpoint,
+        string method,
+        JsonObject? payload,
+        bool expertOverride,
+        CancellationToken cancellationToken)
+        => await settingsService.WriteAsync(
+            deviceId,
+            new WritePlan
+            {
+                GroupName = "Grouped Family Probe",
+                Endpoint = endpoint,
+                Method = method,
+                Payload = payload,
+                SnapshotBeforeWrite = true,
+                RequireWriteVerification = !expertOverride
+            },
+            cancellationToken);
 
     private async Task<WriteResult?> ApplyGroupedFieldAsync(
         Guid deviceId,
@@ -832,6 +1137,150 @@ public sealed class GroupedConfigService(
         return field.Kind == ContractFieldKind.Integer ? JsonValue.Create((int)attempted) : JsonValue.Create(attempted);
     }
 
+    private static GroupedApplyBehavior DetermineBehavior(
+        JsonNode intended,
+        JsonNode? immediate,
+        JsonNode? delayed1,
+        JsonNode? delayed3,
+        JsonNode? delayed5,
+        bool writeAccepted)
+    {
+        if (JsonNode.DeepEquals(immediate, intended))
+        {
+            return GroupedApplyBehavior.ImmediateApplied;
+        }
+
+        if (JsonNode.DeepEquals(delayed1, intended) || JsonNode.DeepEquals(delayed3, intended) || JsonNode.DeepEquals(delayed5, intended))
+        {
+            return GroupedApplyBehavior.DelayedApplied;
+        }
+
+        return writeAccepted ? GroupedApplyBehavior.Uncertain : GroupedApplyBehavior.Unapplied;
+    }
+
+    private static ForcedFieldClassification DetermineClassification(GroupedApplyBehavior behavior, bool writeAccepted, bool baselinePresent)
+        => behavior switch
+        {
+            GroupedApplyBehavior.ImmediateApplied => ForcedFieldClassification.Writable,
+            GroupedApplyBehavior.DelayedApplied => ForcedFieldClassification.Writable,
+            GroupedApplyBehavior.RequiresSecondWrite => ForcedFieldClassification.WritableNeedsCommitTrigger,
+            GroupedApplyBehavior.RequiresRelatedFieldWrite => ForcedFieldClassification.WritableNeedsCommitTrigger,
+            GroupedApplyBehavior.RequiresCommitTrigger => ForcedFieldClassification.WritableNeedsCommitTrigger,
+            GroupedApplyBehavior.StoredButNotOperational => ForcedFieldClassification.Uncertain,
+            GroupedApplyBehavior.Uncertain => writeAccepted ? ForcedFieldClassification.Uncertain : (baselinePresent ? ForcedFieldClassification.ReadableOnly : ForcedFieldClassification.Unsupported),
+            GroupedApplyBehavior.Unapplied => baselinePresent ? ForcedFieldClassification.ReadableOnly : ForcedFieldClassification.Unsupported,
+            _ => ForcedFieldClassification.Uncertain
+        };
+
+    private static FamilyProbeDefinition BuildVideoInputFamily(bool includePrivacyMasks)
+    {
+        var fields = new List<FamilyFieldProbe>
+        {
+            new("brightness", "$.brightnessLevel", static (_, baseline) => JsonValue.Create((int)Clamp((TryToDecimal(baseline) ?? 60) + 1, 0, 100)), static payload => BuildRelatedVideoInputPayload(payload, "contrastLevel")),
+            new("contrast", "$.contrastLevel", static (_, baseline) => JsonValue.Create((int)Clamp((TryToDecimal(baseline) ?? 50) + 1, 0, 100)), static payload => BuildRelatedVideoInputPayload(payload, "brightnessLevel")),
+            new("saturation", "$.saturationLevel", static (_, baseline) => JsonValue.Create((int)Clamp((TryToDecimal(baseline) ?? 50) + 1, 0, 100)), static payload => BuildRelatedVideoInputPayload(payload, "brightnessLevel")),
+            new("sharpness", "$.sharpnessLevel", static (_, baseline) => JsonValue.Create((int)Clamp((TryToDecimal(baseline) ?? 50) + 1, 0, 100)), static payload => BuildRelatedVideoInputPayload(payload, "contrastLevel")),
+            new("hue", "$.hueLevel", static (_, baseline) => JsonValue.Create((int)Clamp((TryToDecimal(baseline) ?? 50) + 1, 0, 100)), static payload => BuildRelatedVideoInputPayload(payload, "brightnessLevel")),
+            new("flip", "$.flipEnabled", static (_, baseline) => JsonValue.Create(!ParseBool(baseline)), static payload => BuildRelatedVideoInputPayload(payload, "mirrorEnabled")),
+            new("mirror", "$.mirrorEnabled", static (_, baseline) => JsonValue.Create(!ParseBool(baseline)), static payload => BuildRelatedVideoInputPayload(payload, "flipEnabled"))
+        };
+        if (includePrivacyMasks)
+        {
+            fields.Add(new FamilyFieldProbe("privacyMask1Enabled", "$.privacyMask[0].enabled", static (_, baseline) => JsonValue.Create(!ParseBool(baseline))));
+            fields.Add(new FamilyFieldProbe("privacyMask1Width", "$.privacyMask[0].regionWidth", static (_, baseline) => JsonValue.Create((int)Clamp((TryToDecimal(baseline) ?? 0) == 0 ? 8 : 0, 0, 100))));
+        }
+
+        return new FamilyProbeDefinition(
+            "video-input-channel-1",
+            "/NetSDK/Video/input/channel/1",
+            GroupedConfigKind.ImageConfig,
+            fields,
+            CommitTriggerEndpoint: "/NetSDK/Video/encode/channel/101/requestKeyFrame",
+            CommitTriggerMethod: "POST",
+            CommitTriggerPayload: new JsonObject { ["requestKeyFrame"] = true },
+            ReadTriggerEndpoint: "/NetSDK/Video/encode/channel/101/snapShot");
+    }
+
+    private static IReadOnlyCollection<FamilyProbeDefinition> BuildProbeFamilies(bool includePrivacyMasks)
+        =>
+        [
+            BuildVideoInputFamily(includePrivacyMasks),
+            BuildVideoEncodeFamily(),
+            BuildImageFamily(),
+            BuildIrCutFamily()
+        ];
+
+    private static FamilyProbeDefinition BuildVideoEncodeFamily()
+        => new(
+            "video-encode-channel-101",
+            "/NetSDK/Video/encode/channel/101/properties",
+            GroupedConfigKind.VideoEncodeConfig,
+            [
+                new("codec", "$.codecType", static (root, baseline) => NextEnumCandidate(root, "$.codecTypeProperty.opt", baseline)),
+                new("profile", "$.h264Profile", static (root, baseline) => NextEnumCandidate(root, "$.h264ProfileProperty.opt", baseline)),
+                new("resolution", "$.resolution", static (root, baseline) => NextEnumCandidate(root, "$.resolutionProperty.opt", baseline)),
+                new("bitrateMode", "$.bitRateControlType", static (root, baseline) => NextEnumCandidate(root, "$.bitRateControlTypeProperty.opt", baseline)),
+                new("bitrate", "$.constantBitRate", static (_, baseline) => JsonValue.Create((int)Clamp((TryToDecimal(baseline) ?? 512) - 128, 128, 5120))),
+                new("frameRate", "$.frameRate", static (_, baseline) => JsonValue.Create((int)Clamp((TryToDecimal(baseline) ?? 15) + 1, 5, 25))),
+                new("keyframeInterval", "$.keyFrameInterval", static (_, baseline) => JsonValue.Create((int)Clamp((TryToDecimal(baseline) ?? 30) + 30, 30, 300)))
+            ],
+            CommitTriggerEndpoint: "/NetSDK/Video/encode/channel/101/requestKeyFrame",
+            CommitTriggerMethod: "POST",
+            CommitTriggerPayload: new JsonObject { ["requestKeyFrame"] = true },
+            ReadTriggerEndpoint: "/NetSDK/Video/encode/channel/101/snapShot");
+
+    private static FamilyProbeDefinition BuildImageFamily()
+        => new(
+            "image-root",
+            "/NetSDK/Image",
+            GroupedConfigKind.ImageConfig,
+            [
+                new("sceneMode", "$.sceneMode", static (_, baseline) => NextEnumValue(baseline, ["auto", "indoor", "outdoor"])),
+                new("exposureMode", "$.exposureMode", static (_, baseline) => NextEnumValue(baseline, ["auto", "bright", "dark"])),
+                new("awbMode", "$.awbMode", static (_, baseline) => NextEnumValue(baseline, ["auto", "indoor", "outdoor"])),
+                new("lowlightMode", "$.lowlightMode", static (_, baseline) => NextEnumValue(baseline, ["close", "only night", "day-night", "auto"]))
+            ],
+            ReadTriggerEndpoint: "/NetSDK/Image");
+
+    private static FamilyProbeDefinition BuildIrCutFamily()
+        => new(
+            "image-ircut",
+            "/NetSDK/Image/irCutFilter",
+            GroupedConfigKind.ImageConfig,
+            [
+                new("irCutControlMode", "$.irCutControlMode", static (_, baseline) => NextEnumValue(baseline, ["hardware", "software"])),
+                new("irCutMode", "$.irCutMode", static (_, baseline) => NextEnumValue(baseline, ["auto", "daylight", "night"]))
+            ],
+            ReadTriggerEndpoint: "/NetSDK/Image/irCutFilter");
+
+    private static JsonObject? BuildRelatedVideoInputPayload(JsonObject payload, string relatedPath)
+    {
+        var clone = (JsonObject)payload.DeepClone();
+        var baseline = TryGetPathValue(clone, "$." + relatedPath);
+        if (relatedPath.EndsWith("Enabled", StringComparison.OrdinalIgnoreCase))
+        {
+            SetPathValue(clone, "$." + relatedPath, JsonValue.Create(!ParseBool(baseline)));
+            return clone;
+        }
+
+        var number = TryToDecimal(baseline) ?? 50;
+        SetPathValue(clone, "$." + relatedPath, JsonValue.Create((int)Clamp(number + 1, 0, 100)));
+        return clone;
+    }
+
+    private static JsonNode? NextEnumCandidate(JsonObject root, string optionPath, JsonNode? baseline)
+    {
+        var options = TryGetPathValue(root, optionPath) as JsonArray;
+        return NextEnumValue(baseline, options?.Select(static item => item?.ToJsonString().Trim('"')).Where(static item => !string.IsNullOrWhiteSpace(item)).ToArray() ?? []);
+    }
+
+    private static JsonNode? NextEnumValue(JsonNode? baseline, IReadOnlyCollection<string> options)
+    {
+        var current = baseline?.ToJsonString().Trim('"');
+        var next = options.FirstOrDefault(value => !string.Equals(value, current, StringComparison.OrdinalIgnoreCase));
+        return string.IsNullOrWhiteSpace(next) ? null : JsonValue.Create(next);
+    }
+
     private static IReadOnlyCollection<string> BuildEndpointCandidates(GroupedConfigKind groupKind, string endpoint)
     {
         var normalized = NormalizeEndpoint(endpoint);
@@ -1042,15 +1491,23 @@ public sealed class GroupedConfigService(
         }
 
         JsonNode? current = root;
-        foreach (var part in cleaned.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        foreach (var token in TokenizePath(cleaned))
         {
-            if (current is JsonObject obj && obj.TryGetPropertyValue(part, out var next))
+            if (current is not JsonObject obj || !obj.TryGetPropertyValue(token.Key, out var next))
             {
-                current = next;
-                continue;
+                return null;
             }
 
-            return null;
+            current = next;
+            if (token.Index is int index)
+            {
+                if (current is not JsonArray arr || index < 0 || index >= arr.Count)
+                {
+                    return null;
+                }
+
+                current = arr[index];
+            }
         }
 
         return current;
@@ -1064,28 +1521,104 @@ public sealed class GroupedConfigService(
             return;
         }
 
-        var parts = cleaned.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         JsonObject current = root;
-        for (var index = 0; index < parts.Length; index++)
+        var tokens = TokenizePath(cleaned);
+        for (var index = 0; index < tokens.Count; index++)
         {
-            var key = parts[index];
-            var leaf = index == parts.Length - 1;
+            var token = tokens[index];
+            var key = token.Key;
+            var leaf = index == tokens.Count - 1;
             if (leaf)
             {
-                current[key] = value?.DeepClone();
+                if (token.Index is int leafIndex)
+                {
+                    current[key] ??= new JsonArray();
+                    if (current[key] is not JsonArray leafArray)
+                    {
+                        return;
+                    }
+
+                    while (leafArray.Count <= leafIndex)
+                    {
+                        leafArray.Add(null);
+                    }
+
+                    leafArray[leafIndex] = value?.DeepClone();
+                }
+                else
+                {
+                    current[key] = value?.DeepClone();
+                }
+
                 return;
             }
 
-            current[key] ??= new JsonObject();
-            if (current[key] is JsonObject child)
+            if (token.Index is int itemIndex)
             {
-                current = child;
+                current[key] ??= new JsonArray();
+                if (current[key] is not JsonArray array)
+                {
+                    return;
+                }
+
+                while (array.Count <= itemIndex)
+                {
+                    array.Add(new JsonObject());
+                }
+
+                if (array[itemIndex] is JsonObject itemObject)
+                {
+                    current = itemObject;
+                }
+                else
+                {
+                    return;
+                }
             }
             else
             {
-                return;
+                current[key] ??= new JsonObject();
+                if (current[key] is JsonObject child)
+                {
+                    current = child;
+                }
+                else
+                {
+                    return;
+                }
             }
         }
+    }
+
+    private static List<(string Key, int? Index)> TokenizePath(string path)
+    {
+        var tokens = new List<(string Key, int? Index)>();
+        foreach (var part in path.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var cursor = part;
+            while (!string.IsNullOrWhiteSpace(cursor))
+            {
+                var bracket = cursor.IndexOf('[', StringComparison.Ordinal);
+                if (bracket < 0)
+                {
+                    tokens.Add((cursor, null));
+                    break;
+                }
+
+                var key = cursor[..bracket];
+                var close = cursor.IndexOf(']', bracket);
+                if (close < 0 || !int.TryParse(cursor[(bracket + 1)..close], out var index))
+                {
+                    tokens.Add((cursor, null));
+                    break;
+                }
+
+                tokens.Add((key, index));
+                cursor = close + 1 < cursor.Length ? cursor[(close + 1)..] : string.Empty;
+            }
+        }
+
+        return tokens;
     }
 
     private static IReadOnlyCollection<SdkFieldDefinition> BuildSdkFieldCatalog()
