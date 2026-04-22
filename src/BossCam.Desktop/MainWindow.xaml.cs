@@ -34,6 +34,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private string _maintenanceState = "No maintenance action executed.";
     private string _recordingState = "Recording idle.";
     private string _recordingDiagnostics = string.Empty;
+    private string _storageSessionId = "0";
+    private string _storageChannelId = "1";
+    private string _storageMediaType = "all";
+    private string _storageBeginTime = DateTimeOffset.Now.AddMinutes(-10).ToString("yyyy-MM-dd HH:mm:ss");
+    private string _storageEndTime = DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss");
+    private string _storageCursor = string.Empty;
     private string _firmwareTruthBadge = "Truth: unknown";
     private string _imageTruthSummary = "Image truth not loaded.";
     private string _passwordChangeUsername = string.Empty;
@@ -231,6 +237,84 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             if (_recordingDiagnostics != value)
             {
                 _recordingDiagnostics = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public string StorageSessionId
+    {
+        get => _storageSessionId;
+        set
+        {
+            if (_storageSessionId != value)
+            {
+                _storageSessionId = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public string StorageChannelId
+    {
+        get => _storageChannelId;
+        set
+        {
+            if (_storageChannelId != value)
+            {
+                _storageChannelId = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public string StorageMediaType
+    {
+        get => _storageMediaType;
+        set
+        {
+            if (_storageMediaType != value)
+            {
+                _storageMediaType = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public string StorageBeginTime
+    {
+        get => _storageBeginTime;
+        set
+        {
+            if (_storageBeginTime != value)
+            {
+                _storageBeginTime = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public string StorageEndTime
+    {
+        get => _storageEndTime;
+        set
+        {
+            if (_storageEndTime != value)
+            {
+                _storageEndTime = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public string StorageCursor
+    {
+        get => _storageCursor;
+        set
+        {
+            if (_storageCursor != value)
+            {
+                _storageCursor = value;
                 OnPropertyChanged();
             }
         }
@@ -858,6 +942,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private async void StopRecording_Click(object sender, RoutedEventArgs e) => await RunAsync(StopRecordingAsync);
     private async void RefreshRecordingIndex_Click(object sender, RoutedEventArgs e) => await RunAsync(RefreshRecordingIndexAsync);
     private async void ExportRecentClip_Click(object sender, RoutedEventArgs e) => await RunAsync(ExportRecentClipAsync);
+    private async void FindFile_Click(object sender, RoutedEventArgs e) => await RunAsync(FindFileAsync);
+    private async void FindNextFile_Click(object sender, RoutedEventArgs e) => await RunAsync(FindNextFileAsync);
+    private async void GetFileByTime_Click(object sender, RoutedEventArgs e) => await RunAsync(GetFileByTimeAsync);
+    private async void PlaybackByTime_Click(object sender, RoutedEventArgs e) => await RunAsync(PlaybackByTimeAsync);
     private async void RunNetworkRecovery_Click(object sender, RoutedEventArgs e) => await RunAsync(RunNetworkRecoveryAsync);
     private async void RefreshSelected_Click(object sender, RoutedEventArgs e) => await RunAsync(RefreshSelectedAsync);
     private void BrowseFirmware_Click(object sender, RoutedEventArgs e) => SelectFirmwareFile();
@@ -1615,6 +1703,84 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         var result = await PostAsync<ClipExportResult>("/api/recordings/export", request);
         RecordingState = result is null ? "Clip export failed." : (result.Success ? $"Clip exported: {result.OutputPath}" : $"Export failed: {result.Message}");
         RecordingDiagnostics = JsonSerializer.Serialize(result, SerializerOptions);
+    }
+
+    private async Task FindFileAsync()
+    {
+        await RunPlaybackOperationAsync("FindFile", $"/api/devices/{SelectedDevice?.Id}/playback/find-file");
+    }
+
+    private async Task FindNextFileAsync()
+    {
+        await RunPlaybackOperationAsync("FindNextFile", $"/api/devices/{SelectedDevice?.Id}/playback/find-next-file");
+    }
+
+    private async Task GetFileByTimeAsync()
+    {
+        await RunPlaybackOperationAsync("GetFileByTime", $"/api/devices/{SelectedDevice?.Id}/playback/get-file-by-time");
+    }
+
+    private async Task PlaybackByTimeAsync()
+    {
+        await RunPlaybackOperationAsync("PlayBackByTimeEx", $"/api/devices/{SelectedDevice?.Id}/playback/playback-by-time");
+    }
+
+    private async Task RunPlaybackOperationAsync(string operation, string endpoint)
+    {
+        if (SelectedDevice is null)
+        {
+            RecordingState = "Select a device first.";
+            return;
+        }
+
+        var request = BuildPlaybackRequest();
+        var result = await PostAsync<NvrPlaybackCallResult>(endpoint, request);
+        if (result is null)
+        {
+            RecordingState = $"{operation} failed.";
+            return;
+        }
+
+        RecordingState = $"{operation}: {(result.Success ? "ok" : "failed")} ({result.Endpoint})";
+        RecordingDiagnostics = JsonSerializer.Serialize(result, SerializerOptions);
+    }
+
+    private NvrPlaybackRequest BuildPlaybackRequest()
+    {
+        if (!DateTimeOffset.TryParse(StorageBeginTime, out var begin))
+        {
+            begin = DateTimeOffset.Now.AddMinutes(-10);
+        }
+
+        if (!DateTimeOffset.TryParse(StorageEndTime, out var end))
+        {
+            end = DateTimeOffset.Now;
+        }
+
+        if (end < begin)
+        {
+            (begin, end) = (end, begin);
+        }
+
+        if (!int.TryParse(StorageSessionId, out var sessionId))
+        {
+            sessionId = 0;
+        }
+
+        if (!int.TryParse(StorageChannelId, out var channelId))
+        {
+            channelId = 1;
+        }
+
+        return new NvrPlaybackRequest
+        {
+            SessionId = Math.Max(0, sessionId),
+            ChannelId = Math.Max(1, channelId),
+            BeginTime = begin,
+            EndTime = end,
+            Type = string.IsNullOrWhiteSpace(StorageMediaType) ? "all" : StorageMediaType.Trim(),
+            Cursor = string.IsNullOrWhiteSpace(StorageCursor) ? null : StorageCursor.Trim()
+        };
     }
 
     private void PopulateUserList()

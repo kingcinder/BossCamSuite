@@ -517,17 +517,54 @@
                             </ScrollViewer>
                         </TabItem>
                         <TabItem Header="Storage">
-                            <StackPanel Margin="8">
-                                <WrapPanel Margin="0,0,0,8" Visibility="{Binding SdStatusVisibility}">
-                                    <TextBlock Width="140" Text="SD Status" VerticalAlignment="Center"/>
-                                    <TextBox Width="220" Text="{Binding SdStatus}" IsReadOnly="True"/>
-                                </WrapPanel>
-                                <WrapPanel Margin="0,0,0,8" Visibility="{Binding SdMediaTypeVisibility}">
-                                    <TextBlock Width="140" Text="Media Type" VerticalAlignment="Center"/>
-                                    <TextBox Width="220" Text="{Binding SdMediaType}" IsReadOnly="True"/>
-                                </WrapPanel>
-                                <TextBlock Text="Storage state is read from camera media/search and status endpoints." Foreground="#CFD7DE" TextWrapping="Wrap"/>
-                            </StackPanel>
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <StackPanel Margin="8">
+                                    <TextBlock Text="Recording" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                    <WrapPanel Margin="0,0,0,8">
+                                        <Button Width="170" Margin="0,0,8,8" Click="StartRecording_Click">Start Recording</Button>
+                                        <Button Width="170" Margin="0,0,8,8" Click="StopRecording_Click">Stop Recording</Button>
+                                        <Button Width="170" Margin="0,0,8,8" Click="RefreshRecordingIndex_Click">Refresh Index</Button>
+                                        <Button Width="170" Margin="0,0,8,8" Click="ExportRecentClip_Click">Export Recent Clip</Button>
+                                    </WrapPanel>
+
+                                    <TextBlock Text="NVR Playback Search" FontWeight="SemiBold" Margin="0,8,0,8"/>
+                                    <WrapPanel Margin="0,0,0,8">
+                                        <TextBlock Width="100" Text="Session ID" VerticalAlignment="Center"/>
+                                        <TextBox Width="120" Margin="0,0,14,0" Text="{Binding StorageSessionId}"/>
+                                        <TextBlock Width="90" Text="Channel ID" VerticalAlignment="Center"/>
+                                        <TextBox Width="120" Margin="0,0,14,0" Text="{Binding StorageChannelId}"/>
+                                        <TextBlock Width="80" Text="Type" VerticalAlignment="Center"/>
+                                        <TextBox Width="160" Text="{Binding StorageMediaType}"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8">
+                                        <TextBlock Width="100" Text="Begin Time" VerticalAlignment="Center"/>
+                                        <TextBox Width="280" Margin="0,0,14,0" Text="{Binding StorageBeginTime}" ToolTip="Local time, e.g. 2026-04-21 13:30:00"/>
+                                        <TextBlock Width="90" Text="End Time" VerticalAlignment="Center"/>
+                                        <TextBox Width="280" Text="{Binding StorageEndTime}" ToolTip="Local time, e.g. 2026-04-21 13:40:00"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8">
+                                        <TextBlock Width="100" Text="Cursor" VerticalAlignment="Center"/>
+                                        <TextBox Width="564" Margin="0,0,14,0" Text="{Binding StorageCursor}" ToolTip="Used by Find Next File."/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8">
+                                        <Button Width="170" Margin="0,0,8,8" Click="FindFile_Click">Find File</Button>
+                                        <Button Width="170" Margin="0,0,8,8" Click="FindNextFile_Click">Find Next File</Button>
+                                        <Button Width="170" Margin="0,0,8,8" Click="GetFileByTime_Click">Get File By Time</Button>
+                                        <Button Width="170" Margin="0,0,8,8" Click="PlaybackByTime_Click">Playback By Time</Button>
+                                    </WrapPanel>
+
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding SdStatusVisibility}">
+                                        <TextBlock Width="140" Text="SD Status" VerticalAlignment="Center"/>
+                                        <TextBox Width="220" Text="{Binding SdStatus}" IsReadOnly="True"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding SdMediaTypeVisibility}">
+                                        <TextBlock Width="140" Text="Media Type" VerticalAlignment="Center"/>
+                                        <TextBox Width="220" Text="{Binding SdMediaType}" IsReadOnly="True"/>
+                                    </WrapPanel>
+                                    <TextBlock Text="{Binding RecordingState}" Foreground="#CFD7DE" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                    <TextBox Height="170" Text="{Binding RecordingDiagnostics}" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextWrapping="NoWrap" Background="#0E171E" BorderThickness="0" Foreground="#F2EAD3" FontFamily="Consolas"/>
+                                </StackPanel>
+                            </ScrollViewer>
                         </TabItem>
 
                         <TabItem Header="Maintenance">

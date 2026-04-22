@@ -232,6 +232,26 @@ app.MapPost("/api/recordings/reconcile", async (RecordingService recordingServic
     Results.Ok(await recordingService.ReconcileAutoStartAsync(ct)));
 app.MapPost("/api/recordings/housekeeping", async (Guid? deviceId, RecordingService recordingService, CancellationToken ct) =>
     Results.Ok(await recordingService.RunHousekeepingAsync(deviceId, ct)));
+app.MapPost("/api/devices/{id:guid}/playback/find-file", async (Guid id, NvrPlaybackRequest request, NvrPlaybackService playbackService, CancellationToken ct) =>
+{
+    var result = await playbackService.FindFileAsync(id, request, ct);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
+app.MapPost("/api/devices/{id:guid}/playback/find-next-file", async (Guid id, NvrPlaybackRequest request, NvrPlaybackService playbackService, CancellationToken ct) =>
+{
+    var result = await playbackService.FindNextFileAsync(id, request, ct);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
+app.MapPost("/api/devices/{id:guid}/playback/get-file-by-time", async (Guid id, NvrPlaybackRequest request, NvrPlaybackService playbackService, CancellationToken ct) =>
+{
+    var result = await playbackService.GetFileByTimeAsync(id, request, ct);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
+app.MapPost("/api/devices/{id:guid}/playback/playback-by-time", async (Guid id, NvrPlaybackRequest request, NvrPlaybackService playbackService, CancellationToken ct) =>
+{
+    var result = await playbackService.PlayBackByTimeExAsync(id, request, ct);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
 app.MapGet("/api/devices/{id:guid}/native-fallback-assessment", async (Guid id, IApplicationStore store, IEndpointContractCatalog contractCatalog, IOptions<BossCamRuntimeOptions> runtime, CancellationToken ct) =>
 {
     var device = await store.GetDeviceAsync(id, ct);

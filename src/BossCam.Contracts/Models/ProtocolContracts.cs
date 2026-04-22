@@ -160,6 +160,30 @@ public sealed record RecordingHousekeepingResult
     public DateTimeOffset ExecutedAt { get; init; } = DateTimeOffset.UtcNow;
 }
 
+public sealed record NvrPlaybackRequest
+{
+    public int SessionId { get; init; } = 0;
+    public int ChannelId { get; init; } = 1;
+    public DateTimeOffset BeginTime { get; init; }
+    public DateTimeOffset EndTime { get; init; }
+    public string Type { get; init; } = "all";
+    public string? Cursor { get; init; }
+}
+
+public sealed record NvrPlaybackCallResult
+{
+    public bool Success { get; init; }
+    public string Operation { get; init; } = string.Empty;
+    public string AdapterName { get; init; } = string.Empty;
+    public string Endpoint { get; init; } = string.Empty;
+    public string Method { get; init; } = "GET";
+    public int? StatusCode { get; init; }
+    public string? Message { get; init; }
+    public JsonNode? Response { get; init; }
+    public Dictionary<string, string> Query { get; init; } = [];
+    public DateTimeOffset ExecutedAt { get; init; } = DateTimeOffset.UtcNow;
+}
+
 public sealed record NativeFallbackRequirement
 {
     public string FieldKey { get; init; } = string.Empty;
