@@ -420,6 +420,30 @@
                                         <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding MotionSensitivitySlider}" IsEnabled="{Binding CanEditMotionSensitivity}"/>
                                         <TextBlock Grid.Column="2" Text="{Binding MotionSensitivity}" VerticalAlignment="Center" HorizontalAlignment="Right"/>
                                     </Grid>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding MotionAlarmDurationVisibility}">
+                                        <TextBlock Width="140" Text="Motion Alarm (s)" VerticalAlignment="Center"/>
+                                        <TextBox Width="220" Text="{Binding MotionAlarmDuration}" IsEnabled="{Binding CanEditMotionAlarmDuration}"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding MotionAlarmVisibility}">
+                                        <TextBlock Width="140" Text="Motion Trigger" VerticalAlignment="Center"/>
+                                        <CheckBox IsChecked="{Binding MotionAlarm}" IsEnabled="{Binding CanEditMotionAlarm}" VerticalAlignment="Center"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding MotionBuzzerVisibility}">
+                                        <TextBlock Width="140" Text="Motion Buzzer" VerticalAlignment="Center"/>
+                                        <CheckBox IsChecked="{Binding MotionBuzzer}" IsEnabled="{Binding CanEditMotionBuzzer}" VerticalAlignment="Center"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding VideoLossAlarmDurationVisibility}">
+                                        <TextBlock Width="140" Text="Video Loss (s)" VerticalAlignment="Center"/>
+                                        <TextBox Width="220" Text="{Binding VideoLossAlarmDuration}" IsEnabled="{Binding CanEditVideoLossAlarmDuration}"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding VideoLossAlarmVisibility}">
+                                        <TextBlock Width="140" Text="Video Loss Trigger" VerticalAlignment="Center"/>
+                                        <CheckBox IsChecked="{Binding VideoLossAlarm}" IsEnabled="{Binding CanEditVideoLossAlarm}" VerticalAlignment="Center"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding VideoLossBuzzerVisibility}">
+                                        <TextBlock Width="140" Text="Video Loss Buzzer" VerticalAlignment="Center"/>
+                                        <CheckBox IsChecked="{Binding VideoLossBuzzer}" IsEnabled="{Binding CanEditVideoLossBuzzer}" VerticalAlignment="Center"/>
+                                    </WrapPanel>
                                     <WrapPanel Margin="0,0,0,8" Visibility="{Binding PrivacyMaskEnabledVisibility}">
                                         <TextBlock Width="140" Text="Privacy Mask" VerticalAlignment="Center"/>
                                         <CheckBox IsChecked="{Binding PrivacyMaskEnabled}" IsEnabled="{Binding CanEditPrivacyMaskEnabled}" VerticalAlignment="Center"/>
@@ -451,6 +475,18 @@
                                     <WrapPanel Margin="0,0,0,8" Visibility="{Binding AlarmPulseDurationVisibility}">
                                         <TextBlock Width="140" Text="Alarm Pulse (ms)" VerticalAlignment="Center"/>
                                         <TextBox Width="220" Text="{Binding AlarmPulseDuration}" IsEnabled="{Binding CanEditAlarmPulseDuration}"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding AlarmDurationVisibility}">
+                                        <TextBlock Width="140" Text="Alarm Duration (s)" VerticalAlignment="Center"/>
+                                        <TextBox Width="220" Text="{Binding AlarmDuration}" IsEnabled="{Binding CanEditAlarmDuration}"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding AlarmEnabledVisibility}">
+                                        <TextBlock Width="140" Text="Alarm Enabled" VerticalAlignment="Center"/>
+                                        <CheckBox IsChecked="{Binding AlarmEnabled}" IsEnabled="{Binding CanEditAlarmEnabled}" VerticalAlignment="Center"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding AlarmBuzzerVisibility}">
+                                        <TextBlock Width="140" Text="Alarm Buzzer" VerticalAlignment="Center"/>
+                                        <CheckBox IsChecked="{Binding AlarmBuzzer}" IsEnabled="{Binding CanEditAlarmBuzzer}" VerticalAlignment="Center"/>
                                     </WrapPanel>
                                 </StackPanel>
                             </ScrollViewer>

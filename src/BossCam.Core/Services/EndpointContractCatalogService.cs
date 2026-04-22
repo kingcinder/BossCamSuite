@@ -543,7 +543,69 @@ public sealed class EndpointContractCatalogService(
                         Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "ipc-sdk-v1.4" }
                     },
                     EnumField("motionType", "Motion Type", "$.detectionType", ["grid", "region"]),
-                    NumericField("motionSensitivity", "Motion Sensitivity", "$.detectionGrid.sensitivityLevel", 0, 100)
+                    NumericField("motionSensitivity", "Motion Sensitivity", "$.detectionGrid.sensitivityLevel", 0, 100),
+                    NumericField("motionAlarmDuration", "Motion Alarm Duration", "$.mdalarmduration", 0, 300),
+                    new ContractField
+                    {
+                        Key = "motionAlarm",
+                        DisplayName = "Motion Alarm Trigger",
+                        SourcePath = "$.mdalarm",
+                        Kind = ContractFieldKind.Boolean,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.ServiceImpacting,
+                        Evidence = new ContractEvidence
+                        {
+                            TruthState = ContractTruthState.Inferred,
+                            Source = "nvr-sdk-v1.1.0.8",
+                            Notes = "HISI_DETECTIONINFO.mdalarm"
+                        }
+                    },
+                    new ContractField
+                    {
+                        Key = "motionBuzzer",
+                        DisplayName = "Motion Buzzer",
+                        SourcePath = "$.mdbuzzer",
+                        Kind = ContractFieldKind.Boolean,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.ServiceImpacting,
+                        Evidence = new ContractEvidence
+                        {
+                            TruthState = ContractTruthState.Inferred,
+                            Source = "nvr-sdk-v1.1.0.8",
+                            Notes = "HISI_DETECTIONINFO.mdbuzzer"
+                        }
+                    },
+                    NumericField("videoLossAlarmDuration", "Video Loss Alarm Duration", "$.vlalarmduration", 0, 300),
+                    new ContractField
+                    {
+                        Key = "videoLossAlarm",
+                        DisplayName = "Video Loss Alarm Trigger",
+                        SourcePath = "$.vlalarm",
+                        Kind = ContractFieldKind.Boolean,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.ServiceImpacting,
+                        Evidence = new ContractEvidence
+                        {
+                            TruthState = ContractTruthState.Inferred,
+                            Source = "nvr-sdk-v1.1.0.8",
+                            Notes = "HISI_DETECTIONINFO.vlalarm"
+                        }
+                    },
+                    new ContractField
+                    {
+                        Key = "videoLossBuzzer",
+                        DisplayName = "Video Loss Buzzer",
+                        SourcePath = "$.vlbuzzer",
+                        Kind = ContractFieldKind.Boolean,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.ServiceImpacting,
+                        Evidence = new ContractEvidence
+                        {
+                            TruthState = ContractTruthState.Inferred,
+                            Source = "nvr-sdk-v1.1.0.8",
+                            Notes = "HISI_DETECTIONINFO.vlbuzzer"
+                        }
+                    }
                 ]
             },
             new EndpointContract
@@ -580,6 +642,37 @@ public sealed class EndpointContractCatalogService(
                 [
                     EnumField("alarmOutputDefaultState", "Alarm Output Default State", "$.active.defaultState", ["high", "low"]),
                     EnumField("alarmOutputActiveState", "Alarm Output Active State", "$.active.activeState", ["high", "low"]),
+                    NumericField("alarmDuration", "Alarm Duration", "$.alarmduration", 0, 300),
+                    new ContractField
+                    {
+                        Key = "alarmEnabled",
+                        DisplayName = "Alarm Enabled",
+                        SourcePath = "$.alarm",
+                        Kind = ContractFieldKind.Boolean,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.ServiceImpacting,
+                        Evidence = new ContractEvidence
+                        {
+                            TruthState = ContractTruthState.Inferred,
+                            Source = "nvr-sdk-v1.1.0.8",
+                            Notes = "HISI_SENSORINFO.alarm"
+                        }
+                    },
+                    new ContractField
+                    {
+                        Key = "alarmBuzzer",
+                        DisplayName = "Alarm Buzzer",
+                        SourcePath = "$.buzzer",
+                        Kind = ContractFieldKind.Boolean,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.ServiceImpacting,
+                        Evidence = new ContractEvidence
+                        {
+                            TruthState = ContractTruthState.Inferred,
+                            Source = "nvr-sdk-v1.1.0.8",
+                            Notes = "HISI_SENSORINFO.buzzer"
+                        }
+                    },
                     NumericField("alarmPulseDuration", "Alarm Pulse Duration", "$.pulseDuration", 1000, 300000)
                 ]
             },
