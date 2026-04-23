@@ -206,6 +206,30 @@ public sealed class ControlPointInventoryServiceTests : IDisposable
                             SourceEndpoint = "/NetSDK/Video/input/channel/1",
                             Value = JsonNode.Parse("{\"id\":1,\"enabled\":true,\"brightnessLevel\":50}")
                         },
+                        ["/NetSDK/Video/input/channel/1/privacyMask/1"] = new()
+                        {
+                            Key = "/NetSDK/Video/input/channel/1/privacyMask/1",
+                            SourceEndpoint = "/NetSDK/Video/input/channel/1/privacyMask/1",
+                            Value = JsonNode.Parse("{\"id\":1,\"enabled\":true,\"regionX\":10,\"regionY\":10,\"regionWidth\":20,\"regionHeight\":20,\"regionColor\":\"0\"}")
+                        },
+                        ["/NetSDK/Video/encode/channel/101/properties"] = new()
+                        {
+                            Key = "/NetSDK/Video/encode/channel/101/properties",
+                            SourceEndpoint = "/NetSDK/Video/encode/channel/101/properties",
+                            Value = JsonNode.Parse("{\"codecType\":\"H.264\",\"resolution\":\"1920x1080\",\"constantBitRate\":2048,\"frameRate\":15,\"keyFrameInterval\":30}")
+                        },
+                        ["/NetSDK/Video/encode/channel/102/properties"] = new()
+                        {
+                            Key = "/NetSDK/Video/encode/channel/102/properties",
+                            SourceEndpoint = "/NetSDK/Video/encode/channel/102/properties",
+                            Value = JsonNode.Parse("{\"codecType\":\"H.265+\",\"resolution\":\"704x480\",\"constantBitRate\":384,\"frameRate\":13,\"keyFrameInterval\":26}")
+                        },
+                        ["/NetSDK/Video/encode/channel/101/snapShot"] = new()
+                        {
+                            Key = "/NetSDK/Video/encode/channel/101/snapShot",
+                            SourceEndpoint = "/NetSDK/Video/encode/channel/101/snapShot",
+                            Value = JsonValue.Create("/9j/4AAQSkZJRgABAQAAAQABAAD")
+                        },
                         ["/NetSDK/System/deviceInfo"] = new()
                         {
                             Key = "/NetSDK/System/deviceInfo",
@@ -228,6 +252,18 @@ public sealed class ControlPointInventoryServiceTests : IDisposable
         var videoInput = report.Endpoints.First(item => item.ContractKey == "video.input.channel.0");
         Assert.True(videoInput.CurrentPayloadAvailable);
         Assert.NotNull(videoInput.SuggestedPayload);
+        Assert.Equal(50, videoInput.CurrentPayload!["brightnessLevel"]!.GetValue<int>());
+        Assert.Null(videoInput.CurrentPayload!["regionWidth"]);
+
+        var videoEncode = report.Endpoints.First(item => item.ContractKey == "video.encode.channel");
+        Assert.True(videoEncode.CurrentPayloadAvailable);
+        Assert.Equal("1920x1080", videoEncode.CurrentPayload!["resolution"]!.GetValue<string>());
+        Assert.Equal("H.264", videoEncode.CurrentPayload!["codecType"]!.GetValue<string>());
+        Assert.Null(videoEncode.CurrentPayload!["snapShotImageType"]);
+
+        var privacyMask = report.Endpoints.First(item => item.ContractKey == "video.privacy.mask");
+        Assert.True(privacyMask.CurrentPayloadAvailable);
+        Assert.Equal(20, privacyMask.CurrentPayload!["regionWidth"]!.GetValue<int>());
 
         var keyframe = report.Endpoints.First(item => item.ContractKey == "video.encode.channel.keyframe");
         Assert.True(keyframe.SupportsExecution);

@@ -127,6 +127,29 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private Visibility _toastVisibility = Visibility.Collapsed;
     private string _firmwareUploadPath = string.Empty;
     private EndpointSurfaceRow? _selectedEndpointSurface;
+    private UserAccountRow? _selectedUserAccount;
+    private JsonObject? _motionDetectionPayload;
+    private string _motionDetectionEndpoint = string.Empty;
+    private JsonObject? _privacyMaskPayload;
+    private string _privacyMaskEndpoint = string.Empty;
+    private JsonObject? _channelNameOverlayPayload;
+    private string _channelNameOverlayEndpoint = string.Empty;
+    private JsonObject? _dateTimeOverlayPayload;
+    private string _dateTimeOverlayEndpoint = string.Empty;
+    private JsonObject? _ntpPayload;
+    private string _ntpEndpoint = string.Empty;
+    private JsonObject? _eseePayload;
+    private string _eseeEndpoint = string.Empty;
+    private string _privacyMaskColor = "0";
+    private string _osdNameX = "0";
+    private string _osdNameY = "0";
+    private string _osdDateX = "0";
+    private string _osdDateY = "0";
+    private bool _osdDisplayChinese;
+    private int _motionGridColumns = 32;
+    private int _motionGridRows = 24;
+    private bool _motionGridDirty;
+    private string _motionGridSummary = "Motion grid not loaded.";
     private readonly DispatcherTimer _toastTimer = new() { Interval = TimeSpan.FromSeconds(3.5) };
     private readonly List<FieldDependencyRule> _dependencyRules = [];
     private readonly Dictionary<string, ImageFieldBehaviorMap> _imageBehaviorByField = new(StringComparer.OrdinalIgnoreCase);
@@ -141,10 +164,13 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public ObservableCollection<ImageControlInventoryItem> ImageInventoryRows { get; } = [];
     public ObservableCollection<ControlPointInventoryItem> ControlPointInventoryRows { get; } = [];
     public ObservableCollection<EndpointSurfaceRow> EndpointSurfaceRows { get; } = [];
+    public ObservableCollection<CompositePermutationCoverageRow> CompositeCoverageRows { get; } = [];
+    public ObservableCollection<MotionGridCellRow> MotionGridCells { get; } = [];
     public ObservableCollection<ImageBehaviorRow> ImageBehaviorRows { get; } = [];
     public ObservableCollection<PromotedImageRow> PromotedImageRows { get; } = [];
     public ObservableCollection<ProbeStageMode> ProbeModes { get; } = new(Enum.GetValues<ProbeStageMode>());
     public ObservableCollection<string> UserList { get; } = [];
+    public ObservableCollection<UserAccountRow> UserAccounts { get; } = [];
     public ObservableCollection<string> PersistenceFieldOptions { get; } = [];
     public ObservableCollection<string> VideoCodecOptions { get; } = [];
     public ObservableCollection<string> VideoProfileOptions { get; } = [];
@@ -593,12 +619,104 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public string SelectedEndpointHint => SelectedEndpointSurface is null
         ? "Select an endpoint family to inspect or execute."
         : $"{SelectedEndpointSurface.Method} {SelectedEndpointSurface.Endpoint} | {SelectedEndpointSurface.DisruptionClass} | {(SelectedEndpointSurface.RequiresConfirmation ? "confirmation required" : "safe path")}";
+    public UserAccountRow? SelectedUserAccount
+    {
+        get => _selectedUserAccount;
+        set
+        {
+            if (!Equals(_selectedUserAccount, value))
+            {
+                _selectedUserAccount = value;
+                if (value is not null && !string.IsNullOrWhiteSpace(value.Username))
+                {
+                    PasswordChangeUsername = value.Username;
+                }
 
-    public bool HasPendingChanges => _fieldByKey.Values.Any(field => !string.Equals(field.EditableValue, field.OriginalValue, StringComparison.Ordinal));
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(SelectedUserSummary));
+            }
+        }
+    }
+
+    public bool HasPendingChanges => _motionGridDirty || _fieldByKey.Values.Any(field => !string.Equals(field.EditableValue, field.OriginalValue, StringComparison.Ordinal));
     public string DirtyStateText => HasPendingChanges ? "Unsaved changes" : "All changes saved";
 
     public string CurrentControlUrl => string.IsNullOrWhiteSpace(SelectedDevice?.IpAddress) ? string.Empty : BuildUrlFromIpPort(SelectedDevice.IpAddress, NetworkPort);
     public string PredictedControlUrl => BuildUrlFromIpPort(NetworkIp, NetworkPort);
+    public Visibility NetworkStaticConfigVisibility => CompositeInteractionRules.IsStaticNetworkConfigurationVisible(NetworkDhcpMode) ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility WirelessApConfigVisibility => CompositeInteractionRules.IsWirelessApConfigurationVisible(WirelessMode, WirelessApMode) ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility MotionCompositeVisibility => CompositeInteractionRules.IsMotionConfigurationVisible(MotionEnabled) ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility PrivacyMaskRegionVisibility => CompositeInteractionRules.IsPrivacyMaskRegionVisible(PrivacyMaskEnabled) ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility OverlayNameEditorVisibility => CompositeInteractionRules.IsOverlayNameConfigurationVisible(ImageOsdChannelNameEnabled) ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility OverlayDateTimeEditorVisibility => CompositeInteractionRules.IsOverlayDateTimeConfigurationVisible(ImageOsdDateTimeEnabled) ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility MotionGridEditorVisibility => MotionEnabled
+        && MotionType.Equals("grid", StringComparison.OrdinalIgnoreCase)
+        && MotionGridCells.Count > 0
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    public Visibility MotionRegionBlockerVisibility => MotionEnabled
+        && MotionType.Equals("region", StringComparison.OrdinalIgnoreCase)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    public string NetworkCompositeSummary => NetworkDhcpMode
+        ? "DHCP controls addressing. Static address fields are withheld until DHCP is turned off."
+        : $"Static path active. Predicted control URL after save: {PredictedControlUrl}";
+    public string WirelessCompositeSummary => CompositeInteractionRules.IsWirelessApConfigurationVisible(WirelessMode, WirelessApMode)
+        ? string.IsNullOrWhiteSpace(_wirelessApPsk) || string.IsNullOrWhiteSpace(WirelessApSsid)
+            ? "Access-point mode requires SSID and PSK before save."
+            : $"Access-point bundle armed for SSID '{WirelessApSsid}'."
+        : $"Wireless mode '{(string.IsNullOrWhiteSpace(WirelessMode) ? "unknown" : WirelessMode)}' keeps AP credentials out of the operator path.";
+    public string MotionCompositeSummary => MotionEnabled
+        ? $"Motion detection is live in '{(string.IsNullOrWhiteSpace(MotionType) ? "unknown" : MotionType)}' mode. Trigger outputs stay bound to this branch."
+        : "Motion detection is off. Sensitivity and trigger tuning stay hidden until motion is enabled.";
+    public string PrivacyMaskCompositeSummary => PrivacyMaskEnabled
+        ? $"Region {PrivacyMaskX},{PrivacyMaskY} size {PrivacyMaskWidth}x{PrivacyMaskHeight} is edited as one mask object. Current 5523-W firmware reads this object, but live writes were rejected or ignored."
+        : "Privacy mask region stays hidden until the mask is enabled. Current 5523-W firmware reads this object, but live writes were rejected or ignored.";
+    public string OverlayCompositeSummary => BuildOverlayCompositeSummary(ImageOsdChannelNameEnabled, ImageOsdChannelNameText, ImageOsdDateTimeEnabled, ImageOsdDateFormat, ImageOsdTimeFormat, ImageOsdDisplayWeek);
+    public int MotionGridColumns
+    {
+        get => _motionGridColumns;
+        private set
+        {
+            if (_motionGridColumns != value)
+            {
+                _motionGridColumns = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public int MotionGridRows
+    {
+        get => _motionGridRows;
+        private set
+        {
+            if (_motionGridRows != value)
+            {
+                _motionGridRows = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public string MotionGridSummary
+    {
+        get => _motionGridSummary;
+        private set
+        {
+            if (_motionGridSummary != value)
+            {
+                _motionGridSummary = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public string MotionRegionBlockerText => "Region editing is not yet unlocked on this firmware fingerprint because the live motion payload only exposes a grid object. Detection type can still be switched, but no region object schema has been observed in current readback.";
+    public string SelectedUserSummary => SelectedUserAccount is null
+        ? "Select an account to prefill the password reset target."
+        : $"{SelectedUserAccount.Username} | {SelectedUserAccount.Role} | {(SelectedUserAccount.Enabled ? "enabled" : "status unknown")}";
+    public string PlaybackCompositeSummary => "Playback, export, and search actions reuse one validated request bundle. Cursor, filename, handle, and save path activate only for the operations that require them.";
 
     public string PasswordChangeUsername
     {
@@ -786,6 +904,15 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         get => ParseBool(GetValue("osdDisplayWeek"));
         set => SetValue("osdDisplayWeek", value ? "true" : "false");
     }
+    public string OsdNameX { get => _osdNameX; set => SetBackingField(ref _osdNameX, value); }
+    public string OsdNameY { get => _osdNameY; set => SetBackingField(ref _osdNameY, value); }
+    public string OsdDateX { get => _osdDateX; set => SetBackingField(ref _osdDateX, value); }
+    public string OsdDateY { get => _osdDateY; set => SetBackingField(ref _osdDateY, value); }
+    public bool OsdDisplayChinese
+    {
+        get => _osdDisplayChinese;
+        set => SetBackingField(ref _osdDisplayChinese, value);
+    }
 
     // Network/wireless typed bindings
     public string NetworkIp { get => GetValue("ip"); set => SetValue("ip", value); }
@@ -863,6 +990,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public string PrivacyMaskY { get => GetValue("privacyMaskY"); set => SetValue("privacyMaskY", value); }
     public string PrivacyMaskWidth { get => GetValue("privacyMaskWidth"); set => SetValue("privacyMaskWidth", value); }
     public string PrivacyMaskHeight { get => GetValue("privacyMaskHeight"); set => SetValue("privacyMaskHeight", value); }
+    public string PrivacyMaskColor { get => _privacyMaskColor; set => SetBackingField(ref _privacyMaskColor, value); }
     public string AlarmInputState { get => GetValue("alarmInputActiveState"); set => SetValue("alarmInputActiveState", value); }
     public string AlarmOutputState { get => GetValue("alarmOutputActiveState"); set => SetValue("alarmOutputActiveState", value); }
     public string AlarmPulseDuration { get => GetValue("alarmPulseDuration"); set => SetValue("alarmPulseDuration", value); }
@@ -969,6 +1097,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public bool CanEditWirelessMode => CanEdit("wirelessMode");
     public bool CanEditWirelessApMode => CanEdit("apMode");
     public bool CanEditWirelessApSsid => CanEdit("apSsid");
+    public bool CanEditWirelessApPsk => CanEdit("apPsk");
     public bool CanEditWirelessApChannel => CanEdit("apChannel");
     public bool CanEditMotionEnabled => CanEdit("motionEnabled");
     public bool CanEditMotionType => CanEdit("motionType");
@@ -1127,6 +1256,15 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private async void RebootCamera_Click(object sender, RoutedEventArgs e) => await RunAsync(() => ExecuteMaintenanceAsync("Reboot"));
     private async void FactoryDefault_Click(object sender, RoutedEventArgs e) => await RunAsync(() => ExecuteMaintenanceAsync("FactoryReset"));
     private async void ApplyPasswordChange_Click(object sender, RoutedEventArgs e) => await RunAsync(ApplyPasswordChangeAsync);
+    private async void SavePrivacyMask_Click(object sender, RoutedEventArgs e) => await RunAsync(ApplyPrivacyMaskAsync);
+    private async void SaveChannelNameOverlay_Click(object sender, RoutedEventArgs e) => await RunAsync(ApplyChannelNameOverlayAsync);
+    private async void SaveDateTimeOverlay_Click(object sender, RoutedEventArgs e) => await RunAsync(ApplyDateTimeOverlayAsync);
+    private async void SaveCloudTime_Click(object sender, RoutedEventArgs e) => await RunAsync(ApplyCloudTimeAsync);
+    private async void SaveMotionGrid_Click(object sender, RoutedEventArgs e) => await RunAsync(() => ApplyMotionGridAsync(expertOverride: false));
+    private void MotionGridCell_Click(object sender, RoutedEventArgs e) => MarkMotionGridDirty();
+    private void MotionGridEnableAll_Click(object sender, RoutedEventArgs e) => SetMotionGridState(static _ => true);
+    private void MotionGridClearAll_Click(object sender, RoutedEventArgs e) => SetMotionGridState(static _ => false);
+    private void MotionGridInvert_Click(object sender, RoutedEventArgs e) => SetMotionGridState(static value => !value);
     private async void StartRecording_Click(object sender, RoutedEventArgs e) => await RunAsync(StartRecordingAsync);
     private async void StopRecording_Click(object sender, RoutedEventArgs e) => await RunAsync(StopRecordingAsync);
     private async void RefreshRecordingIndex_Click(object sender, RoutedEventArgs e) => await RunAsync(RefreshRecordingIndexAsync);
@@ -1471,6 +1609,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         await LoadCapabilityProfileAsync(groups.Select(static group => group.FirmwareFingerprint).FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value)));
 
         PopulateUserList();
+        PopulateCompositeCoverage();
         await LoadSemanticTrustAsync();
         await LoadImageTruthAsync();
         await LoadControlPointInventoryAsync();
@@ -1512,6 +1651,130 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             .ThenBy(static item => item.ContractKey, StringComparer.OrdinalIgnoreCase)
             .ToList() ?? []);
         SelectedEndpointSurface = EndpointSurfaceRows.FirstOrDefault();
+        LoadStructuredCompositeStateFromEndpointSurface();
+    }
+
+    private void LoadStructuredCompositeStateFromEndpointSurface()
+    {
+        MotionGridCells.Clear();
+        _motionDetectionPayload = null;
+        _motionDetectionEndpoint = string.Empty;
+        _privacyMaskPayload = null;
+        _privacyMaskEndpoint = string.Empty;
+        _channelNameOverlayPayload = null;
+        _channelNameOverlayEndpoint = string.Empty;
+        _dateTimeOverlayPayload = null;
+        _dateTimeOverlayEndpoint = string.Empty;
+        _ntpPayload = null;
+        _ntpEndpoint = string.Empty;
+        _eseePayload = null;
+        _eseeEndpoint = string.Empty;
+        _motionGridDirty = false;
+        MotionGridColumns = 32;
+        MotionGridRows = 24;
+
+        if (TryLoadCompositeObject("video.privacy.mask", out var privacyRow, out var privacyPayload))
+        {
+            _privacyMaskPayload = privacyPayload;
+            _privacyMaskEndpoint = privacyRow!.Endpoint;
+            _privacyMaskColor = ReadPathString(privacyPayload!, "$.regionColor", _privacyMaskColor);
+        }
+
+        if (TryLoadCompositeObject("video.overlay.channelName", out var channelNameRow, out var channelNamePayload))
+        {
+            _channelNameOverlayPayload = channelNamePayload;
+            _channelNameOverlayEndpoint = channelNameRow!.Endpoint;
+            _osdNameX = ReadPathString(channelNamePayload!, "$.regionX", _osdNameX);
+            _osdNameY = ReadPathString(channelNamePayload!, "$.regionY", _osdNameY);
+        }
+
+        if (TryLoadCompositeObject("video.overlay.datetime", out var dateTimeRow, out var dateTimePayload))
+        {
+            _dateTimeOverlayPayload = dateTimePayload;
+            _dateTimeOverlayEndpoint = dateTimeRow!.Endpoint;
+            _osdDateX = ReadPathString(dateTimePayload!, "$.regionX", _osdDateX);
+            _osdDateY = ReadPathString(dateTimePayload!, "$.regionY", _osdDateY);
+            _osdDisplayChinese = ParseBoolNode(TryGetPathValue(dateTimePayload!, "$.displayChinese"));
+        }
+
+        if (TryLoadCompositeObject("system.time.ntp", out var ntpRow, out var ntpPayload))
+        {
+            _ntpPayload = ntpPayload;
+            _ntpEndpoint = ntpRow!.Endpoint;
+        }
+
+        if (TryLoadCompositeObject("network.esee", out var eseeRow, out var eseePayload))
+        {
+            _eseePayload = eseePayload;
+            _eseeEndpoint = eseeRow!.Endpoint;
+        }
+
+        LoadMotionGridFromEndpointSurface();
+        NotifyCompositeProperties();
+    }
+
+    private void LoadMotionGridFromEndpointSurface()
+    {
+        var motionRow = EndpointSurfaceRows.FirstOrDefault(row =>
+            row.ContractKey.Equals("motion.detection.channel", StringComparison.OrdinalIgnoreCase)
+            && row.CurrentPayloadAvailable);
+        if (motionRow is null)
+        {
+            MotionGridSummary = "Motion grid not available in the current endpoint snapshot.";
+            return;
+        }
+
+        var node = ParseObjectNode(motionRow.CurrentPayload);
+        if (node is null)
+        {
+            MotionGridSummary = "Motion grid payload could not be parsed from the cached endpoint object.";
+            return;
+        }
+
+        _motionDetectionPayload = (JsonObject)node.DeepClone();
+        _motionDetectionEndpoint = motionRow.Endpoint;
+        var rowCount = TryReadInt(node, "$.detectionGrid.rowGranularity") ?? 24;
+        var columnCount = TryReadInt(node, "$.detectionGrid.columnGranularity") ?? 32;
+        MotionGridRows = Math.Max(1, rowCount);
+        MotionGridColumns = Math.Max(1, columnCount);
+
+        var granularity = TryGetPathValue(node, "$.detectionGrid.granularity") as JsonArray;
+        if (granularity is null)
+        {
+            MotionGridSummary = $"Motion endpoint loaded from {_motionDetectionEndpoint}, but the grid array was missing.";
+            return;
+        }
+
+        for (var rowIndex = 0; rowIndex < granularity.Count; rowIndex++)
+        {
+            if (granularity[rowIndex] is not JsonArray rowArray)
+            {
+                continue;
+            }
+
+            for (var columnIndex = 0; columnIndex < rowArray.Count; columnIndex++)
+            {
+                MotionGridCells.Add(new MotionGridCellRow(rowIndex, columnIndex, ParseBoolNode(rowArray[columnIndex]), MarkMotionGridDirty));
+            }
+        }
+
+        UpdateMotionGridSummary();
+    }
+
+    private bool TryLoadCompositeObject(string contractKey, out EndpointSurfaceRow? row, out JsonObject? payload)
+    {
+        row = EndpointSurfaceRows.FirstOrDefault(candidate =>
+            candidate.ContractKey.Equals(contractKey, StringComparison.OrdinalIgnoreCase)
+            && candidate.CurrentPayloadAvailable);
+        payload = row is null ? null : ParseObjectNode(row.CurrentPayload);
+        if (payload is null)
+        {
+            row = null;
+            return false;
+        }
+
+        payload = (JsonObject)payload.DeepClone();
+        return true;
     }
 
     private async Task LoadTruthBadgeAsync()
@@ -1797,15 +2060,17 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             .Select(field => new TypedFieldChange(field.FieldKey, ParseNode(field.EditableValue)))
             .ToList();
 
-        if (changes.Count == 0)
+        if (changes.Count == 0 && !_motionGridDirty)
         {
             DiagnosticsText = "No contract-supported field changes to apply.";
             ShowToast("No changes to save.", success: false);
             return;
         }
 
-        var applied = await PostAsync<List<WriteResult>>($"/api/devices/{SelectedDevice.Id}/settings/typed/apply-batch",
-            new TypedSettingBatchApplyRequest(changes, expertOverride)) ?? [];
+        var applied = changes.Count == 0
+            ? []
+            : await PostAsync<List<WriteResult>>($"/api/devices/{SelectedDevice.Id}/settings/typed/apply-batch",
+                new TypedSettingBatchApplyRequest(changes, expertOverride)) ?? [];
         var recoveryMessage = applied
             .Select(result => result.Message ?? string.Empty)
             .FirstOrDefault(message => message.Contains("networkRecovery:recovered:", StringComparison.OrdinalIgnoreCase));
@@ -1819,6 +2084,13 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             }
         }
 
+        WriteResult? motionGridResult = null;
+        if (_motionGridDirty && MotionType.Equals("grid", StringComparison.OrdinalIgnoreCase))
+        {
+            await LoadEndpointSurfaceAsync();
+            motionGridResult = await ApplyMotionGridAsync(expertOverride);
+        }
+
         DiagnosticsText = JsonSerializer.Serialize(applied.Select(result => new
         {
             result.Success,
@@ -1826,8 +2098,21 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             result.Message,
             result.ContractKey,
             result.ContractViolations
-        }), SerializerOptions);
-        ShowToast(applied.All(result => result.Success) ? "Changes saved." : "Some changes failed to apply.", success: applied.All(result => result.Success));
+        }).Concat(motionGridResult is null
+            ? []
+            : new[]
+            {
+                new
+                {
+                    motionGridResult.Success,
+                    motionGridResult.SemanticStatus,
+                    motionGridResult.Message,
+                    motionGridResult.ContractKey,
+                    motionGridResult.ContractViolations
+                }
+            }), SerializerOptions);
+        var overallSuccess = applied.All(result => result.Success) && (motionGridResult?.Success ?? true);
+        ShowToast(overallSuccess ? "Changes saved." : "Some changes failed to apply.", success: overallSuccess);
         await LoadTypedAsync();
         await LoadValidationAsync();
         await LoadSemanticTrustAsync();
@@ -1879,7 +2164,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             Payload = payload,
             SnapshotBeforeWrite = true,
             RequireWriteVerification = !SelectedEndpointSurface.RequiresConfirmation,
-            AllowRollback = !SelectedEndpointSurface.RequiresConfirmation,
+            AllowRollback = false,
             ContractKey = SelectedEndpointSurface.ContractKey
         };
         var result = await PostAsync<WriteResult>($"/api/devices/{SelectedDevice.Id}/settings/write", plan);
@@ -2032,6 +2317,303 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         var result = await PostAsync<MaintenanceResult>($"/api/devices/{SelectedDevice.Id}/maintenance/PasswordReset", payload);
         MaintenanceState = result is null ? "Password change failed." : $"Password change: {(result.Success ? "ok" : "failed")}";
         DiagnosticsText = JsonSerializer.Serialize(result, SerializerOptions);
+    }
+
+    private void SetMotionGridState(Func<bool, bool> transform)
+    {
+        if (MotionGridCells.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var cell in MotionGridCells)
+        {
+            cell.IsActive = transform(cell.IsActive);
+        }
+
+        MarkMotionGridDirty();
+    }
+
+    private async Task ApplyPrivacyMaskAsync()
+    {
+        if (!await EnsureCompositePayloadsLoadedAsync())
+        {
+            return;
+        }
+
+        if (_privacyMaskPayload is null || string.IsNullOrWhiteSpace(_privacyMaskEndpoint))
+        {
+            DiagnosticsText = "Privacy mask endpoint payload is not available from the current device snapshot.";
+            ShowToast("Privacy mask save blocked.", success: false);
+            return;
+        }
+
+        var payload = (JsonObject)_privacyMaskPayload.DeepClone();
+        SetPathValue(payload, "$.enabled", JsonValue.Create(PrivacyMaskEnabled));
+        SetPathValue(payload, "$.regionX", JsonValue.Create(ParseIntOrDefault(PrivacyMaskX, 0)));
+        SetPathValue(payload, "$.regionY", JsonValue.Create(ParseIntOrDefault(PrivacyMaskY, 0)));
+        SetPathValue(payload, "$.regionWidth", JsonValue.Create(ParseIntOrDefault(PrivacyMaskWidth, 0)));
+        SetPathValue(payload, "$.regionHeight", JsonValue.Create(ParseIntOrDefault(PrivacyMaskHeight, 0)));
+        SetPathValue(payload, "$.regionColor", JsonValue.Create(string.IsNullOrWhiteSpace(PrivacyMaskColor) ? "0" : PrivacyMaskColor));
+
+        await ExecuteCompositeWriteAsync(
+            "video.privacy.mask",
+            "Motion / Privacy / Alarms",
+            _privacyMaskEndpoint,
+            payload,
+            "Privacy mask saved.");
+    }
+
+    private async Task ApplyChannelNameOverlayAsync()
+    {
+        if (!await EnsureCompositePayloadsLoadedAsync())
+        {
+            return;
+        }
+
+        if (_channelNameOverlayPayload is null || string.IsNullOrWhiteSpace(_channelNameOverlayEndpoint))
+        {
+            DiagnosticsText = "Channel-name overlay endpoint payload is not available from the current device snapshot.";
+            ShowToast("Name overlay save blocked.", success: false);
+            return;
+        }
+
+        var payload = (JsonObject)_channelNameOverlayPayload.DeepClone();
+        SetPathValue(payload, "$.enabled", JsonValue.Create(ImageOsdChannelNameEnabled));
+        SetPathValue(payload, "$.regionX", JsonValue.Create(ParseDouble(OsdNameX, 0)));
+        SetPathValue(payload, "$.regionY", JsonValue.Create(ParseDouble(OsdNameY, 0)));
+
+        await ExecuteCompositeWriteAsync(
+            "video.overlay.channelName",
+            "Video / Image",
+            _channelNameOverlayEndpoint,
+            payload,
+            "Name overlay saved.");
+    }
+
+    private async Task ApplyDateTimeOverlayAsync()
+    {
+        if (!await EnsureCompositePayloadsLoadedAsync())
+        {
+            return;
+        }
+
+        if (_dateTimeOverlayPayload is null || string.IsNullOrWhiteSpace(_dateTimeOverlayEndpoint))
+        {
+            DiagnosticsText = "Date/time overlay endpoint payload is not available from the current device snapshot.";
+            ShowToast("Date/time overlay save blocked.", success: false);
+            return;
+        }
+
+        var payload = (JsonObject)_dateTimeOverlayPayload.DeepClone();
+        SetPathValue(payload, "$.enabled", JsonValue.Create(ImageOsdDateTimeEnabled));
+        SetPathValue(payload, "$.regionX", JsonValue.Create(ParseDouble(OsdDateX, 0)));
+        SetPathValue(payload, "$.regionY", JsonValue.Create(ParseDouble(OsdDateY, 0)));
+        if (!string.IsNullOrWhiteSpace(ImageOsdDateFormat))
+        {
+            SetPathValue(payload, "$.dateFormat", JsonValue.Create(ImageOsdDateFormat));
+        }
+
+        if (!string.IsNullOrWhiteSpace(ImageOsdTimeFormat))
+        {
+            SetPathValue(payload, "$.timeFormat", JsonValue.Create(ImageOsdTimeFormat));
+        }
+
+        SetPathValue(payload, "$.displayWeek", JsonValue.Create(ImageOsdDisplayWeek));
+        SetPathValue(payload, "$.displayChinese", JsonValue.Create(OsdDisplayChinese));
+
+        await ExecuteCompositeWriteAsync(
+            "video.overlay.datetime",
+            "Video / Image",
+            _dateTimeOverlayEndpoint,
+            payload,
+            "Date/time overlay saved.");
+    }
+
+    private async Task ApplyCloudTimeAsync()
+    {
+        if (!await EnsureCompositePayloadsLoadedAsync())
+        {
+            return;
+        }
+
+        var results = new List<WriteResult>();
+        if (_ntpPayload is not null && !string.IsNullOrWhiteSpace(_ntpEndpoint))
+        {
+            var ntpPayload = (JsonObject)_ntpPayload.DeepClone();
+            SetPathValue(ntpPayload, "$.ntpEnabled", JsonValue.Create(NetworkNtpEnabled));
+            SetPathValue(ntpPayload, "$.ntpServerDomain", JsonValue.Create(NetworkNtpServer ?? string.Empty));
+            var ntpResult = await ExecuteCompositeWriteAsync(
+                "system.time.ntp",
+                "Users / Maintenance",
+                _ntpEndpoint,
+                ntpPayload,
+                "NTP settings saved.",
+                refreshAfterWrite: false);
+            if (ntpResult is not null)
+            {
+                results.Add(ntpResult);
+            }
+        }
+
+        if (_eseePayload is not null && !string.IsNullOrWhiteSpace(_eseeEndpoint))
+        {
+            var eseePayload = (JsonObject)_eseePayload.DeepClone();
+            SetPathValue(eseePayload, "$.enabled", JsonValue.Create(NetworkEseeEnabled));
+            var eseeResult = await ExecuteCompositeWriteAsync(
+                "network.esee",
+                "Network / Wireless",
+                _eseeEndpoint,
+                eseePayload,
+                "ESEE settings saved.",
+                refreshAfterWrite: false);
+            if (eseeResult is not null)
+            {
+                results.Add(eseeResult);
+            }
+        }
+
+        if (results.Count == 0)
+        {
+            DiagnosticsText = "Cloud/time endpoint payloads are not available from the current device snapshot.";
+            ShowToast("Cloud/time save blocked.", success: false);
+            return;
+        }
+
+        DiagnosticsText = JsonSerializer.Serialize(results, SerializerOptions);
+        await RefreshTypedFromDeviceAsync();
+        ShowToast(results.All(static item => item.Success) ? "Cloud/time settings saved." : "Cloud/time save partly failed.", results.All(static item => item.Success));
+    }
+
+    private async Task<bool> EnsureCompositePayloadsLoadedAsync()
+    {
+        if (SelectedDevice is null)
+        {
+            DiagnosticsText = "Select a device first.";
+            return false;
+        }
+
+        if (EndpointSurfaceRows.Count == 0)
+        {
+            await LoadEndpointSurfaceAsync();
+        }
+
+        return true;
+    }
+
+    private async Task<WriteResult?> ExecuteCompositeWriteAsync(
+        string contractKey,
+        string groupName,
+        string endpoint,
+        JsonObject payload,
+        string successMessage,
+        bool refreshAfterWrite = true)
+    {
+        if (SelectedDevice is null)
+        {
+            DiagnosticsText = "Select a device first.";
+            return null;
+        }
+
+        var plan = new WritePlan
+        {
+            GroupName = groupName,
+            Endpoint = endpoint,
+            Method = "PUT",
+            Payload = payload,
+            SnapshotBeforeWrite = true,
+            RequireWriteVerification = false,
+            AllowRollback = false,
+            ContractKey = contractKey
+        };
+
+        var result = await PostAsync<WriteResult>($"/api/devices/{SelectedDevice.Id}/settings/write", plan);
+        DiagnosticsText = JsonSerializer.Serialize(result, SerializerOptions);
+        if (refreshAfterWrite)
+        {
+            await RefreshTypedFromDeviceAsync();
+        }
+
+        ShowToast(result?.Success == true ? successMessage : $"{successMessage.TrimEnd('.')} failed.", result?.Success == true);
+        return result;
+    }
+
+    private async Task RefreshTypedFromDeviceAsync()
+    {
+        if (SelectedDevice is null)
+        {
+            return;
+        }
+
+        _ = await PostAsync<List<TypedSettingGroupSnapshot>>($"/api/devices/{SelectedDevice.Id}/settings/typed/refresh", null);
+        await LoadTypedAsync();
+    }
+
+    private async Task<WriteResult?> ApplyMotionGridAsync(bool expertOverride)
+    {
+        if (SelectedDevice is null)
+        {
+            DiagnosticsText = "Select a device first.";
+            return null;
+        }
+
+        if (_motionDetectionPayload is null || string.IsNullOrWhiteSpace(_motionDetectionEndpoint) || MotionGridCells.Count == 0)
+        {
+            DiagnosticsText = "Motion grid payload is not loaded from the current endpoint snapshot.";
+            return null;
+        }
+
+        var payload = (JsonObject)_motionDetectionPayload.DeepClone();
+        SetPathValue(payload, "$.enabled", JsonValue.Create(MotionEnabled));
+        SetPathValue(payload, "$.detectionType", JsonValue.Create(string.IsNullOrWhiteSpace(MotionType) ? "grid" : MotionType));
+        if (int.TryParse(MotionSensitivity, out var sensitivity))
+        {
+            SetPathValue(payload, "$.detectionGrid.sensitivityLevel", JsonValue.Create(sensitivity));
+        }
+
+        var rows = Math.Max(1, MotionGridRows);
+        var columns = Math.Max(1, MotionGridColumns);
+        var granularity = new JsonArray();
+        for (var rowIndex = 0; rowIndex < rows; rowIndex++)
+        {
+            var row = new JsonArray();
+            for (var columnIndex = 0; columnIndex < columns; columnIndex++)
+            {
+                var cell = MotionGridCells.FirstOrDefault(item => item.Row == rowIndex && item.Column == columnIndex);
+                row.Add(cell?.IsActive ?? false);
+            }
+
+            granularity.Add(row);
+        }
+
+        SetPathValue(payload, "$.detectionGrid.rowGranularity", JsonValue.Create(rows));
+        SetPathValue(payload, "$.detectionGrid.columnGranularity", JsonValue.Create(columns));
+        SetPathValue(payload, "$.detectionGrid.granularity", granularity);
+
+        var plan = new WritePlan
+        {
+            GroupName = "Motion / Privacy / Alarms",
+            Endpoint = _motionDetectionEndpoint,
+            Method = "PUT",
+            Payload = payload,
+            SnapshotBeforeWrite = true,
+            RequireWriteVerification = false,
+            AllowRollback = false,
+            ContractKey = "motion.detection.channel"
+        };
+
+        var result = await PostAsync<WriteResult>($"/api/devices/{SelectedDevice.Id}/settings/write", plan);
+        if (result?.Success == true)
+        {
+            _motionGridDirty = false;
+            ShowToast("Motion grid saved.", success: true);
+        }
+        else if (result is not null)
+        {
+            ShowToast("Motion grid save failed.", success: false);
+        }
+
+        return result;
     }
 
     private async Task StartRecordingAsync()
@@ -2235,6 +2817,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private void PopulateUserList()
     {
         UserList.Clear();
+        UserAccounts.Clear();
+        SelectedUserAccount = null;
         if (_fieldByKey.TryGetValue("userList", out var users))
         {
             if (users.EditableValue.StartsWith("[", StringComparison.Ordinal))
@@ -2247,19 +2831,71 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                         foreach (var item in arr)
                         {
                             UserList.Add(item?.ToJsonString() ?? string.Empty);
+                            UserAccounts.Add(UserAccountRow.FromNode(item));
                         }
                     }
                 }
                 catch
                 {
                     UserList.Add(users.EditableValue);
+                    UserAccounts.Add(new UserAccountRow
+                    {
+                        Username = users.EditableValue,
+                        Role = "Unparsed",
+                        Source = "userList"
+                    });
                 }
             }
             else
             {
                 UserList.Add(users.EditableValue);
+                UserAccounts.Add(new UserAccountRow
+                {
+                    Username = users.EditableValue,
+                    Role = "Unparsed",
+                    Source = "userList"
+                });
             }
         }
+
+        if (UserAccounts.Count == 0 && !string.IsNullOrWhiteSpace(PasswordChangeUsername))
+        {
+            UserAccounts.Add(new UserAccountRow
+            {
+                Username = PasswordChangeUsername,
+                Role = "Manual",
+                Source = "operator"
+            });
+        }
+
+        SelectedUserAccount = UserAccounts.FirstOrDefault();
+    }
+
+    private void PopulateCompositeCoverage()
+    {
+        ReplaceCollection(CompositeCoverageRows, CompositeInteractionRules.BuildCoverageSummary()
+            .OrderBy(static row => row.SystemName, StringComparer.OrdinalIgnoreCase)
+            .ToList());
+    }
+
+    private void MarkMotionGridDirty()
+    {
+        _motionGridDirty = true;
+        UpdateMotionGridSummary();
+        OnPropertyChanged(nameof(HasPendingChanges));
+        OnPropertyChanged(nameof(DirtyStateText));
+    }
+
+    private void UpdateMotionGridSummary()
+    {
+        if (MotionGridCells.Count == 0)
+        {
+            MotionGridSummary = "Motion grid not loaded.";
+            return;
+        }
+
+        var active = MotionGridCells.Count(static cell => cell.IsActive);
+        MotionGridSummary = $"{active}/{MotionGridCells.Count} cells active | {MotionGridRows}x{MotionGridColumns} | sensitivity {MotionSensitivity}{(_motionGridDirty ? " | unsaved grid edits" : string.Empty)}";
     }
 
     private string GetValue(string key)
@@ -2278,6 +2914,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
             OnPropertyChanged(nameof(HasPendingChanges));
             OnPropertyChanged(nameof(DirtyStateText));
+            ApplyDependencyFilters();
+            NotifyCompositeProperties();
         }
     }
 
@@ -2652,6 +3290,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private static double ParseDouble(string raw, double fallback)
         => double.TryParse(raw, out var parsed) ? parsed : fallback;
 
+    private static int ParseIntOrDefault(string? raw, int fallback)
+        => int.TryParse(raw, out var parsed) ? parsed : fallback;
+
     private static bool ParseBool(string raw)
         => bool.TryParse(raw, out var parsed) && parsed;
 
@@ -2679,6 +3320,54 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         return $"http://{ip}:{port}";
     }
 
+    private static string BuildOverlayCompositeSummary(bool nameEnabled, string? nameText, bool dateTimeEnabled, string? dateFormat, string? timeFormat, bool displayWeek)
+    {
+        var nameSummary = nameEnabled
+            ? $"Name overlay on ({(string.IsNullOrWhiteSpace(nameText) ? "empty text" : nameText)})"
+            : "Name overlay off";
+        var dateSummary = dateTimeEnabled
+            ? $"Date/time overlay on ({dateFormat ?? "format?"} / {timeFormat ?? "format?"}{(displayWeek ? ", weekday" : string.Empty)})"
+            : "Date/time overlay off";
+        return $"{nameSummary}; {dateSummary}.";
+    }
+
+    private void NotifyCompositeProperties()
+    {
+        foreach (var name in new[]
+        {
+            nameof(CurrentControlUrl),
+            nameof(PredictedControlUrl),
+            nameof(NetworkStaticConfigVisibility),
+            nameof(WirelessApConfigVisibility),
+            nameof(MotionCompositeVisibility),
+            nameof(MotionGridEditorVisibility),
+            nameof(MotionRegionBlockerVisibility),
+            nameof(PrivacyMaskRegionVisibility),
+            nameof(OverlayNameEditorVisibility),
+            nameof(OverlayDateTimeEditorVisibility),
+            nameof(NetworkCompositeSummary),
+            nameof(WirelessCompositeSummary),
+            nameof(MotionCompositeSummary),
+            nameof(MotionGridSummary),
+            nameof(MotionGridColumns),
+            nameof(MotionGridRows),
+            nameof(MotionRegionBlockerText),
+            nameof(PrivacyMaskCompositeSummary),
+            nameof(OverlayCompositeSummary),
+            nameof(OsdNameX),
+            nameof(OsdNameY),
+            nameof(OsdDateX),
+            nameof(OsdDateY),
+            nameof(OsdDisplayChinese),
+            nameof(SelectedUserSummary),
+            nameof(PlaybackCompositeSummary),
+            nameof(PrivacyMaskColor)
+        })
+        {
+            OnPropertyChanged(name);
+        }
+    }
+
     private void NotifyAllEditorProperties()
     {
         foreach (var name in new[]
@@ -2689,10 +3378,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             nameof(VideoFpsHint),
             nameof(VideoFrameRate), nameof(VideoKeyframeInterval), nameof(StreamAudioEnabled), nameof(StreamAudioBitrate), nameof(StreamAudioSampleRate), nameof(ImageBrightness), nameof(ImageBrightnessSlider), nameof(ImageBrightnessMin), nameof(ImageBrightnessMax),
             nameof(ImageContrast), nameof(ImageContrastSlider), nameof(ImageSaturation), nameof(ImageSaturationSlider), nameof(ImageHue), nameof(ImageHueSlider), nameof(ImageGamma), nameof(ImageGammaSlider), nameof(ImageSharpness), nameof(ImageSharpnessSlider), nameof(ImageManualSharpness), nameof(ImageManualSharpnessSlider), nameof(ImageDenoise), nameof(ImageDenoiseSlider), nameof(ImageWdrStrength), nameof(ImageWdrStrengthSlider),
-            nameof(ImageWhiteLight), nameof(ImageWhiteLightSlider), nameof(ImageInfrared), nameof(ImageInfraredSlider), nameof(ImageOsd), nameof(ImageOsdChannelNameEnabled), nameof(ImageOsdChannelNameText), nameof(ImageOsdDateTimeEnabled), nameof(ImageOsdDateFormat), nameof(ImageOsdTimeFormat), nameof(ImageOsdDisplayWeek), nameof(ImageMirror), nameof(ImageFlip),
+            nameof(ImageWhiteLight), nameof(ImageWhiteLightSlider), nameof(ImageInfrared), nameof(ImageInfraredSlider), nameof(ImageOsd), nameof(ImageOsdChannelNameEnabled), nameof(ImageOsdChannelNameText), nameof(ImageOsdDateTimeEnabled), nameof(ImageOsdDateFormat), nameof(ImageOsdTimeFormat), nameof(ImageOsdDisplayWeek), nameof(OsdNameX), nameof(OsdNameY), nameof(OsdDateX), nameof(OsdDateY), nameof(OsdDisplayChinese), nameof(ImageMirror), nameof(ImageFlip),
             nameof(ImageBrightnessBehaviorBadge), nameof(ImageContrastBehaviorBadge), nameof(ImageSaturationBehaviorBadge), nameof(ImageSharpnessBehaviorBadge), nameof(ImageWdrBehaviorBadge), nameof(ImageTruthSummary),
             nameof(NetworkIp), nameof(NetworkNetmask), nameof(NetworkGateway), nameof(NetworkDns), nameof(NetworkPort), nameof(NetworkDhcpMode), nameof(NetworkEseeEnabled), nameof(NetworkNtpEnabled), nameof(NetworkNtpServer), nameof(NetworkEseeId), nameof(WirelessMode), nameof(WirelessApMode), nameof(MotionEnabled), nameof(MotionType), nameof(MotionSensitivity), nameof(MotionSensitivitySlider), nameof(MotionAlarmDuration), nameof(MotionAlarm), nameof(MotionBuzzer), nameof(VideoLossAlarmDuration), nameof(VideoLossAlarm), nameof(VideoLossBuzzer),
-            nameof(PrivacyMaskEnabled), nameof(PrivacyMaskX), nameof(PrivacyMaskY), nameof(PrivacyMaskWidth), nameof(PrivacyMaskHeight), nameof(AlarmInputState), nameof(AlarmOutputState), nameof(AlarmPulseDuration), nameof(SdStatus), nameof(SdMediaType), nameof(CameraSerial), nameof(CameraMac),
+            nameof(PrivacyMaskEnabled), nameof(PrivacyMaskX), nameof(PrivacyMaskY), nameof(PrivacyMaskWidth), nameof(PrivacyMaskHeight), nameof(PrivacyMaskColor), nameof(AlarmInputState), nameof(AlarmOutputState), nameof(AlarmPulseDuration), nameof(SdStatus), nameof(SdMediaType), nameof(CameraSerial), nameof(CameraMac),
             nameof(AlarmDuration), nameof(AlarmEnabled), nameof(AlarmBuzzer),
             nameof(CurrentControlUrl), nameof(PredictedControlUrl),
             nameof(WirelessApSsid), nameof(WirelessApChannel),
@@ -2703,7 +3392,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             nameof(CanEditPrivacyMaskEnabled), nameof(CanEditPrivacyMaskX), nameof(CanEditPrivacyMaskY), nameof(CanEditPrivacyMaskWidth), nameof(CanEditPrivacyMaskHeight), nameof(CanEditAlarmInputState), nameof(CanEditAlarmOutputState), nameof(CanEditAlarmPulseDuration), nameof(CanEditAlarmDuration), nameof(CanEditAlarmEnabled), nameof(CanEditAlarmBuzzer),
             nameof(CanEditStreamBitrate), nameof(CanEditStreamFrameRate), nameof(CanEditStreamKeyframe), nameof(CanEditStreamAudioEnabled), nameof(CanEditStreamAudioBitrate), nameof(CanEditStreamAudioSampleRate),
             nameof(CanEditNetworkIp), nameof(CanEditNetworkNetmask), nameof(CanEditNetworkGateway), nameof(CanEditNetworkDns), nameof(CanEditNetworkPort), nameof(CanEditNetworkDhcpMode), nameof(CanEditNetworkEseeEnabled), nameof(CanEditNetworkNtpEnabled), nameof(CanEditNetworkNtpServer), nameof(CanEditWirelessMode), nameof(CanEditWirelessApMode),
-            nameof(CanEditWirelessApSsid), nameof(CanEditWirelessApChannel),
+            nameof(CanEditWirelessApSsid), nameof(CanEditWirelessApPsk), nameof(CanEditWirelessApChannel),
             nameof(VideoCodecVisibility), nameof(VideoProfileVisibility), nameof(VideoDayNightVisibility), nameof(VideoWdrVisibility), nameof(VideoIrCutVisibility), nameof(VideoIrCutMethodVisibility), nameof(VideoSceneModeVisibility), nameof(VideoExposureVisibility), nameof(VideoAwbVisibility), nameof(VideoLowlightVisibility), nameof(VideoResolutionVisibility),
             nameof(VideoBitrateVisibility), nameof(VideoFrameRateVisibility), nameof(StreamResolutionVisibility), nameof(StreamCodecVisibility), nameof(StreamProfileVisibility), nameof(StreamBitrateModeVisibility), nameof(StreamDefinitionVisibility), nameof(StreamBitrateVisibility), nameof(StreamFpsVisibility), nameof(StreamKeyframeVisibility), nameof(StreamAudioEnabledVisibility), nameof(StreamAudioBitrateVisibility), nameof(StreamAudioSampleRateVisibility),
             nameof(ImageBrightnessVisibility), nameof(ImageContrastVisibility), nameof(ImageSaturationVisibility), nameof(ImageManualSharpnessVisibility), nameof(ImageDenoiseVisibility), nameof(ImageWdrStrengthVisibility), nameof(ImageMirrorVisibility), nameof(ImageFlipVisibility), nameof(ImageDayNightVisibility), nameof(ImageIrModeVisibility), nameof(ImageIrCutVisibility), nameof(ImageIrCutMethodVisibility), nameof(ImageSceneModeVisibility), nameof(ImageExposureVisibility), nameof(ImageAwbVisibility), nameof(ImageLowlightVisibility),
@@ -2766,6 +3455,184 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
 
         return null;
+    }
+
+    private static bool ParseBoolNode(JsonNode? node)
+    {
+        if (node is JsonValue value && value.TryGetValue<bool>(out var parsed))
+        {
+            return parsed;
+        }
+
+        return bool.TryParse(node?.ToJsonString().Trim('"'), out parsed) && parsed;
+    }
+
+    private static string ReadPathString(JsonObject root, string path, string fallback)
+    {
+        var node = TryGetPathValue(root, path);
+        if (node is JsonValue value)
+        {
+            if (value.TryGetValue<string>(out var text))
+            {
+                return text;
+            }
+
+            if (value.TryGetValue<int>(out var integer))
+            {
+                return integer.ToString();
+            }
+
+            if (value.TryGetValue<decimal>(out var number))
+            {
+                return number.ToString();
+            }
+
+            if (value.TryGetValue<bool>(out var flag))
+            {
+                return flag ? "true" : "false";
+            }
+        }
+
+        return node?.ToJsonString().Trim('"') ?? fallback;
+    }
+
+    private static int? TryReadInt(JsonObject root, string path)
+    {
+        var node = TryGetPathValue(root, path);
+        if (node is null)
+        {
+            return null;
+        }
+
+        if (node is JsonValue value && value.TryGetValue<int>(out var parsed))
+        {
+            return parsed;
+        }
+
+        return int.TryParse(node.ToJsonString().Trim('"'), out parsed) ? parsed : null;
+    }
+
+    private static JsonNode? TryGetPathValue(JsonNode? root, string path)
+    {
+        if (root is null || string.IsNullOrWhiteSpace(path) || path == "$")
+        {
+            return root;
+        }
+
+        var current = root;
+        foreach (var segment in ParsePath(path))
+        {
+            if (segment.Index is int index)
+            {
+                if (current is not JsonArray arr || index < 0 || index >= arr.Count)
+                {
+                    return null;
+                }
+
+                current = arr[index];
+            }
+            else
+            {
+                if (current is not JsonObject obj || !obj.TryGetPropertyValue(segment.Name!, out current))
+                {
+                    return null;
+                }
+            }
+        }
+
+        return current;
+    }
+
+    private static void SetPathValue(JsonObject root, string path, JsonNode? value)
+    {
+        if (string.IsNullOrWhiteSpace(path) || path == "$")
+        {
+            return;
+        }
+
+        var segments = ParsePath(path);
+        JsonNode current = root;
+        for (var i = 0; i < segments.Count; i++)
+        {
+            var segment = segments[i];
+            var isLeaf = i == segments.Count - 1;
+
+            if (segment.Index is int index)
+            {
+                if (current is not JsonArray array)
+                {
+                    return;
+                }
+
+                while (array.Count <= index)
+                {
+                    array.Add(null);
+                }
+
+                if (isLeaf)
+                {
+                    array[index] = value?.DeepClone();
+                    return;
+                }
+
+                array[index] ??= segments[i + 1].Index is int ? new JsonArray() : new JsonObject();
+                current = array[index]!;
+            }
+            else
+            {
+                if (current is not JsonObject obj)
+                {
+                    return;
+                }
+
+                if (isLeaf)
+                {
+                    obj[segment.Name!] = value?.DeepClone();
+                    return;
+                }
+
+                obj[segment.Name!] ??= segments[i + 1].Index is int ? new JsonArray() : new JsonObject();
+                current = obj[segment.Name!]!;
+            }
+        }
+    }
+
+    private static List<PathSegment> ParsePath(string path)
+    {
+        var cleaned = path.Trim();
+        if (cleaned.StartsWith("$.", StringComparison.Ordinal))
+        {
+            cleaned = cleaned[2..];
+        }
+        else if (cleaned.StartsWith("$", StringComparison.Ordinal))
+        {
+            cleaned = cleaned[1..];
+        }
+
+        var segments = new List<PathSegment>();
+        foreach (var raw in cleaned.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (raw.Contains('[', StringComparison.Ordinal))
+            {
+                var name = raw[..raw.IndexOf('[', StringComparison.Ordinal)];
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    segments.Add(new PathSegment(name, null));
+                }
+
+                var indexText = raw[(raw.IndexOf('[', StringComparison.Ordinal) + 1)..raw.IndexOf(']', StringComparison.Ordinal)];
+                if (int.TryParse(indexText, out var index))
+                {
+                    segments.Add(new PathSegment(null, index));
+                }
+            }
+            else
+            {
+                segments.Add(new PathSegment(raw, null));
+            }
+        }
+
+        return segments;
     }
 
     private void Devices_SelectionChanged(object sender, RoutedEventArgs e)
@@ -2846,6 +3713,20 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+
+    private void SetBackingField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
+    {
+        if (EqualityComparer<T>.Default.Equals(field, value))
+        {
+            return;
+        }
+
+        field = value;
+        OnPropertyChanged(propertyName);
+        OnPropertyChanged(nameof(HasPendingChanges));
+        OnPropertyChanged(nameof(DirtyStateText));
+        NotifyCompositeProperties();
+    }
 }
 
 public sealed class TypedFieldRow
@@ -3019,6 +3900,109 @@ public sealed class EndpointSurfaceRow
         };
     }
 }
+
+public sealed class UserAccountRow
+{
+    public string Username { get; init; } = string.Empty;
+    public string Role { get; init; } = "Unknown";
+    public bool Enabled { get; init; } = true;
+    public string Source { get; init; } = string.Empty;
+
+    public static UserAccountRow FromNode(JsonNode? node)
+    {
+        if (node is not JsonObject obj)
+        {
+            return new UserAccountRow
+            {
+                Username = node?.ToJsonString() ?? string.Empty,
+                Role = "Unknown",
+                Source = "json"
+            };
+        }
+
+        return new UserAccountRow
+        {
+            Username = ReadString(obj, "username", "userName", "name", "user"),
+            Role = ReadString(obj, "role", "group", "level", "authority", "userType", fallback: "Unknown"),
+            Enabled = ReadBool(obj, "enabled", "enable", "active", fallback: true),
+            Source = obj.ToJsonString()
+        };
+    }
+
+    private static string ReadString(JsonObject obj, string key1, string key2, string key3, string key4, string? key5 = null, string fallback = "")
+    {
+        foreach (var key in new[] { key1, key2, key3, key4, key5 }.Where(static key => !string.IsNullOrWhiteSpace(key)))
+        {
+            if (obj.TryGetPropertyValue(key!, out var value) && value is not null)
+            {
+                var raw = value.ToJsonString().Trim('"');
+                if (!string.IsNullOrWhiteSpace(raw))
+                {
+                    return raw;
+                }
+            }
+        }
+
+        return fallback;
+    }
+
+    private static bool ReadBool(JsonObject obj, string key1, string key2, string key3, bool fallback)
+    {
+        foreach (var key in new[] { key1, key2, key3 })
+        {
+            if (obj.TryGetPropertyValue(key, out var value) && value is not null)
+            {
+                if (value is JsonValue node && node.TryGetValue<bool>(out var parsed))
+                {
+                    return parsed;
+                }
+
+                if (bool.TryParse(value.ToJsonString().Trim('"'), out parsed))
+                {
+                    return parsed;
+                }
+            }
+        }
+
+        return fallback;
+    }
+}
+
+public sealed class MotionGridCellRow : INotifyPropertyChanged
+{
+    private readonly Action _onChanged;
+    private bool _isActive;
+
+    public MotionGridCellRow(int row, int column, bool isActive, Action onChanged)
+    {
+        Row = row;
+        Column = column;
+        _isActive = isActive;
+        _onChanged = onChanged;
+    }
+
+    public int Row { get; }
+    public int Column { get; }
+    public string Label => $"R{Row + 1} C{Column + 1}";
+
+    public bool IsActive
+    {
+        get => _isActive;
+        set
+        {
+            if (_isActive != value)
+            {
+                _isActive = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsActive)));
+                _onChanged();
+            }
+        }
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+}
+
+public sealed record PathSegment(string? Name, int? Index);
 
 public sealed record TypedSettingApplyRequest(string FieldKey, JsonNode? Value, bool ExpertOverride);
 public sealed record TypedSettingBatchApplyRequest(IReadOnlyCollection<TypedFieldChange> Changes, bool ExpertOverride);

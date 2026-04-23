@@ -239,6 +239,9 @@
                                         <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding ImageInfraredSlider}" IsEnabled="{Binding CanEditImageInfrared}"/>
                                         <TextBlock Grid.Column="2" Text="{Binding ImageInfrared}" VerticalAlignment="Center" HorizontalAlignment="Right"/>
                                     </Grid>
+                                    <Separator Margin="0,10,0,10"/>
+                                    <TextBlock Text="Overlay / OSD" FontSize="16" FontWeight="SemiBold"/>
+                                    <TextBlock Margin="0,4,0,10" Foreground="#C4D4E5" Text="{Binding OverlayCompositeSummary}" TextWrapping="Wrap"/>
                                     <WrapPanel Margin="0,0,0,8" Visibility="{Binding ImageOsdVisibility}">
                                         <TextBlock Width="140" Text="OSD Label" VerticalAlignment="Center"/>
                                         <TextBox Width="220" Text="{Binding ImageOsd}" IsEnabled="{Binding CanEditImageOsd}"/>
@@ -251,6 +254,16 @@
                                         <TextBlock Width="140" Text="Name Text" VerticalAlignment="Center"/>
                                         <TextBox Width="220" Text="{Binding ImageOsdChannelNameText}" IsEnabled="{Binding CanEditImageOsdChannelNameText}"/>
                                     </WrapPanel>
+                                    <StackPanel Visibility="{Binding OverlayNameEditorVisibility}">
+                                        <WrapPanel Margin="0,0,0,8">
+                                            <TextBlock Width="140" Text="Name Position" VerticalAlignment="Center"/>
+                                            <TextBlock Text="X" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                            <TextBox Width="72" Text="{Binding OsdNameX}" IsEnabled="{Binding CanEditImageOsdChannelNameEnabled}"/>
+                                            <TextBlock Text="Y" VerticalAlignment="Center" Margin="12,0,4,0"/>
+                                            <TextBox Width="72" Text="{Binding OsdNameY}" IsEnabled="{Binding CanEditImageOsdChannelNameEnabled}"/>
+                                        </WrapPanel>
+                                        <Button Width="170" HorizontalAlignment="Left" Margin="140,0,0,8" Content="Save Name Overlay" Click="SaveChannelNameOverlay_Click" IsEnabled="{Binding CanEditImageOsdChannelNameEnabled}"/>
+                                    </StackPanel>
                                     <WrapPanel Margin="0,0,0,8" Visibility="{Binding ImageOsdDateTimeEnabledVisibility}">
                                         <TextBlock Width="140" Text="Date/Time Overlay" VerticalAlignment="Center"/>
                                         <CheckBox IsChecked="{Binding ImageOsdDateTimeEnabled}" IsEnabled="{Binding CanEditImageOsdDateTimeEnabled}" VerticalAlignment="Center"/>
@@ -267,7 +280,23 @@
                                         <TextBlock Width="140" Text="Display Weekday" VerticalAlignment="Center"/>
                                         <CheckBox IsChecked="{Binding ImageOsdDisplayWeek}" IsEnabled="{Binding CanEditImageOsdDisplayWeek}" VerticalAlignment="Center"/>
                                     </WrapPanel>
+                                    <StackPanel Visibility="{Binding OverlayDateTimeEditorVisibility}">
+                                        <WrapPanel Margin="0,0,0,8">
+                                            <TextBlock Width="140" Text="Date Position" VerticalAlignment="Center"/>
+                                            <TextBlock Text="X" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                            <TextBox Width="72" Text="{Binding OsdDateX}" IsEnabled="{Binding CanEditImageOsdDateTimeEnabled}"/>
+                                            <TextBlock Text="Y" VerticalAlignment="Center" Margin="12,0,4,0"/>
+                                            <TextBox Width="72" Text="{Binding OsdDateY}" IsEnabled="{Binding CanEditImageOsdDateTimeEnabled}"/>
+                                        </WrapPanel>
+                                        <WrapPanel Margin="0,0,0,8">
+                                            <TextBlock Width="140" Text="Chinese Locale" VerticalAlignment="Center"/>
+                                            <CheckBox IsChecked="{Binding OsdDisplayChinese}" IsEnabled="{Binding CanEditImageOsdDateTimeEnabled}" VerticalAlignment="Center"/>
+                                        </WrapPanel>
+                                        <Button Width="170" HorizontalAlignment="Left" Margin="140,0,0,8" Content="Save Date/Time Overlay" Click="SaveDateTimeOverlay_Click" IsEnabled="{Binding CanEditImageOsdDateTimeEnabled}"/>
+                                    </StackPanel>
 
+                                    <Separator Margin="0,10,0,10"/>
+                                    <TextBlock Text="Orientation And Modes" FontSize="16" FontWeight="SemiBold"/>
                                     <CheckBox Content="Mirror" Margin="0,0,0,8" IsChecked="{Binding ImageMirror}" IsEnabled="{Binding CanEditImageMirror}" Visibility="{Binding ImageMirrorVisibility}" ToolTip="{Binding ImageMirrorReadOnlyTooltip}" ToolTipService.ShowOnDisabled="True"/>
                                     <CheckBox Content="Flip" Margin="0,0,0,8" IsChecked="{Binding ImageFlip}" IsEnabled="{Binding CanEditImageFlip}" Visibility="{Binding ImageFlipVisibility}" ToolTip="{Binding ImageFlipReadOnlyTooltip}" ToolTipService.ShowOnDisabled="True"/>
 
@@ -361,183 +390,324 @@
 
                         <TabItem Header="Network">
                             <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                <StackPanel Margin="8">
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding NetworkIpVisibility}">
-                                        <TextBlock Width="140" Text="IP" VerticalAlignment="Center"/>
-                                        <TextBox Width="220" Text="{Binding NetworkIp}" IsEnabled="{Binding CanEditNetworkIp}"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding NetworkNetmaskVisibility}">
-                                        <TextBlock Width="140" Text="Netmask" VerticalAlignment="Center"/>
-                                        <TextBox Width="220" Text="{Binding NetworkNetmask}" IsEnabled="{Binding CanEditNetworkNetmask}"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding NetworkGatewayVisibility}">
-                                        <TextBlock Width="140" Text="Gateway" VerticalAlignment="Center"/>
-                                        <TextBox Width="220" Text="{Binding NetworkGateway}" IsEnabled="{Binding CanEditNetworkGateway}"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding NetworkDnsVisibility}">
-                                        <TextBlock Width="140" Text="DNS" VerticalAlignment="Center"/>
-                                        <TextBox Width="220" Text="{Binding NetworkDns}" IsEnabled="{Binding CanEditNetworkDns}"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding NetworkPortVisibility}">
-                                        <TextBlock Width="140" Text="HTTP Port" VerticalAlignment="Center"/>
-                                        <TextBox Width="220" Text="{Binding NetworkPort}" IsEnabled="{Binding CanEditNetworkPort}"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding NetworkDhcpModeVisibility}">
-                                        <TextBlock Width="140" Text="DHCP" VerticalAlignment="Center"/>
-                                        <CheckBox IsChecked="{Binding NetworkDhcpMode}" IsEnabled="{Binding CanEditNetworkDhcpMode}" VerticalAlignment="Center"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding NetworkEseeVisibility}">
-                                        <TextBlock Width="140" Text="ESEE Enabled" VerticalAlignment="Center"/>
-                                        <CheckBox IsChecked="{Binding NetworkEseeEnabled}" IsEnabled="{Binding CanEditNetworkEseeEnabled}" VerticalAlignment="Center"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding NetworkNtpEnabledVisibility}">
-                                        <TextBlock Width="140" Text="NTP Enabled" VerticalAlignment="Center"/>
-                                        <CheckBox IsChecked="{Binding NetworkNtpEnabled}" IsEnabled="{Binding CanEditNetworkNtpEnabled}" VerticalAlignment="Center"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding NetworkNtpServerVisibility}">
-                                        <TextBlock Width="140" Text="NTP Server" VerticalAlignment="Center"/>
-                                        <TextBox Width="220" Text="{Binding NetworkNtpServer}" IsEnabled="{Binding CanEditNetworkNtpServer}"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding NetworkEseeIdVisibility}">
-                                        <TextBlock Width="140" Text="ESEE ID" VerticalAlignment="Center"/>
-                                        <TextBox Width="220" Text="{Binding NetworkEseeId}" IsReadOnly="True"/>
-                                    </WrapPanel>
-                                    <Separator Margin="0,8,0,8"/>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding WirelessModeVisibility}">
-                                        <TextBlock Width="140" Text="WiFi Mode" VerticalAlignment="Center"/>
-                                        <ComboBox Width="220" ItemsSource="{Binding WirelessModeOptions}" SelectedItem="{Binding WirelessMode}" IsEnabled="{Binding CanEditWirelessMode}"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding WirelessApModeVisibility}">
-                                        <TextBlock Width="140" Text="AP Mode" VerticalAlignment="Center"/>
-                                        <ComboBox Width="220" ItemsSource="{Binding WirelessApModeOptions}" SelectedItem="{Binding WirelessApMode}" IsEnabled="{Binding CanEditWirelessApMode}"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding WirelessApSsidVisibility}">
-                                        <TextBlock Width="140" Text="AP SSID" VerticalAlignment="Center"/>
-                                        <TextBox Width="220" Text="{Binding WirelessApSsid}" IsEnabled="{Binding CanEditWirelessApSsid}"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding WirelessApPskVisibility}">
-                                        <TextBlock Width="140" Text="AP PSK" VerticalAlignment="Center"/>
-                                        <PasswordBox Width="220" PasswordChanged="WirelessPskPasswordChanged"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding WirelessApChannelVisibility}">
-                                        <TextBlock Width="140" Text="AP Channel" VerticalAlignment="Center"/>
-                                        <TextBox Width="220" Text="{Binding WirelessApChannel}" IsEnabled="{Binding CanEditWirelessApChannel}"/>
-                                    </WrapPanel>
-                                </StackPanel>
+                                <Grid Margin="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="14"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <Border Padding="12" Margin="0,0,0,12" CornerRadius="10" Background="#20313E">
+                                            <StackPanel>
+                                                <TextBlock Text="Connection" FontSize="16" FontWeight="SemiBold"/>
+                                                <TextBlock Margin="0,4,0,12" Foreground="#C4D4E5" Text="{Binding NetworkCompositeSummary}" TextWrapping="Wrap"/>
+                                                <WrapPanel Margin="0,0,0,8" Visibility="{Binding NetworkDhcpModeVisibility}">
+                                                    <TextBlock Width="140" Text="DHCP" VerticalAlignment="Center"/>
+                                                    <CheckBox IsChecked="{Binding NetworkDhcpMode}" IsEnabled="{Binding CanEditNetworkDhcpMode}" VerticalAlignment="Center"/>
+                                                </WrapPanel>
+                                                <WrapPanel Margin="0,0,0,8" Visibility="{Binding NetworkPortVisibility}">
+                                                    <TextBlock Width="140" Text="HTTP Port" VerticalAlignment="Center"/>
+                                                    <TextBox Width="220" Text="{Binding NetworkPort}" IsEnabled="{Binding CanEditNetworkPort}"/>
+                                                </WrapPanel>
+                                                <StackPanel Visibility="{Binding NetworkStaticConfigVisibility}">
+                                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding NetworkIpVisibility}">
+                                                        <TextBlock Width="140" Text="IP" VerticalAlignment="Center"/>
+                                                        <TextBox Width="220" Text="{Binding NetworkIp}" IsEnabled="{Binding CanEditNetworkIp}"/>
+                                                    </WrapPanel>
+                                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding NetworkNetmaskVisibility}">
+                                                        <TextBlock Width="140" Text="Netmask" VerticalAlignment="Center"/>
+                                                        <TextBox Width="220" Text="{Binding NetworkNetmask}" IsEnabled="{Binding CanEditNetworkNetmask}"/>
+                                                    </WrapPanel>
+                                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding NetworkGatewayVisibility}">
+                                                        <TextBlock Width="140" Text="Gateway" VerticalAlignment="Center"/>
+                                                        <TextBox Width="220" Text="{Binding NetworkGateway}" IsEnabled="{Binding CanEditNetworkGateway}"/>
+                                                    </WrapPanel>
+                                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding NetworkDnsVisibility}">
+                                                        <TextBlock Width="140" Text="DNS" VerticalAlignment="Center"/>
+                                                        <TextBox Width="220" Text="{Binding NetworkDns}" IsEnabled="{Binding CanEditNetworkDns}"/>
+                                                    </WrapPanel>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Border Padding="12" Margin="0,0,0,12" CornerRadius="10" Background="#20313E">
+                                            <StackPanel>
+                                                <TextBlock Text="Cloud And Time" FontSize="16" FontWeight="SemiBold"/>
+                                                <TextBlock Margin="0,4,0,12" Foreground="#C4D4E5" Text="Time sync and cloud identity share the same grouped save cycle." TextWrapping="Wrap"/>
+                                                <WrapPanel Margin="0,0,0,8" Visibility="{Binding NetworkNtpEnabledVisibility}">
+                                                    <TextBlock Width="140" Text="NTP Enabled" VerticalAlignment="Center"/>
+                                                    <CheckBox IsChecked="{Binding NetworkNtpEnabled}" IsEnabled="{Binding CanEditNetworkNtpEnabled}" VerticalAlignment="Center"/>
+                                                </WrapPanel>
+                                                <WrapPanel Margin="0,0,0,8" Visibility="{Binding NetworkNtpServerVisibility}">
+                                                    <TextBlock Width="140" Text="NTP Server" VerticalAlignment="Center"/>
+                                                    <TextBox Width="220" Text="{Binding NetworkNtpServer}" IsEnabled="{Binding CanEditNetworkNtpServer}"/>
+                                                </WrapPanel>
+                                                <WrapPanel Margin="0,0,0,8" Visibility="{Binding NetworkEseeVisibility}">
+                                                    <TextBlock Width="140" Text="ESEE Enabled" VerticalAlignment="Center"/>
+                                                    <CheckBox IsChecked="{Binding NetworkEseeEnabled}" IsEnabled="{Binding CanEditNetworkEseeEnabled}" VerticalAlignment="Center"/>
+                                                </WrapPanel>
+                                                <WrapPanel Margin="0,0,0,8" Visibility="{Binding NetworkEseeIdVisibility}">
+                                                    <TextBlock Width="140" Text="ESEE ID" VerticalAlignment="Center"/>
+                                                    <TextBox Width="220" Text="{Binding NetworkEseeId}" IsReadOnly="True"/>
+                                                </WrapPanel>
+                                                <Button Width="170" HorizontalAlignment="Left" Margin="140,0,0,0" Content="Save Cloud/Time" Click="SaveCloudTime_Click"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Column="2">
+                                        <Border Padding="12" Margin="0,0,0,12" CornerRadius="10" Background="#20313E">
+                                            <StackPanel>
+                                                <TextBlock Text="Wireless" FontSize="16" FontWeight="SemiBold"/>
+                                                <TextBlock Margin="0,4,0,12" Foreground="#C4D4E5" Text="{Binding WirelessCompositeSummary}" TextWrapping="Wrap"/>
+                                                <WrapPanel Margin="0,0,0,8" Visibility="{Binding WirelessModeVisibility}">
+                                                    <TextBlock Width="140" Text="WiFi Mode" VerticalAlignment="Center"/>
+                                                    <ComboBox Width="220" ItemsSource="{Binding WirelessModeOptions}" SelectedItem="{Binding WirelessMode}" IsEnabled="{Binding CanEditWirelessMode}"/>
+                                                </WrapPanel>
+                                                <WrapPanel Margin="0,0,0,8" Visibility="{Binding WirelessApModeVisibility}">
+                                                    <TextBlock Width="140" Text="AP Mode" VerticalAlignment="Center"/>
+                                                    <ComboBox Width="220" ItemsSource="{Binding WirelessApModeOptions}" SelectedItem="{Binding WirelessApMode}" IsEnabled="{Binding CanEditWirelessApMode}"/>
+                                                </WrapPanel>
+                                                <StackPanel Visibility="{Binding WirelessApConfigVisibility}">
+                                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding WirelessApSsidVisibility}">
+                                                        <TextBlock Width="140" Text="AP SSID" VerticalAlignment="Center"/>
+                                                        <TextBox Width="220" Text="{Binding WirelessApSsid}" IsEnabled="{Binding CanEditWirelessApSsid}"/>
+                                                    </WrapPanel>
+                                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding WirelessApPskVisibility}">
+                                                        <TextBlock Width="140" Text="AP PSK" VerticalAlignment="Center"/>
+                                                        <PasswordBox Width="220" PasswordChanged="WirelessPskPasswordChanged" IsEnabled="{Binding CanEditWirelessApPsk}"/>
+                                                    </WrapPanel>
+                                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding WirelessApChannelVisibility}">
+                                                        <TextBlock Width="140" Text="AP Channel" VerticalAlignment="Center"/>
+                                                        <TextBox Width="220" Text="{Binding WirelessApChannel}" IsEnabled="{Binding CanEditWirelessApChannel}"/>
+                                                    </WrapPanel>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Border Padding="12" CornerRadius="10" Background="#20313E">
+                                            <StackPanel>
+                                                <TextBlock Text="Control Path" FontSize="16" FontWeight="SemiBold"/>
+                                                <TextBlock Margin="0,4,0,12" Foreground="#C4D4E5" Text="{Binding NetworkRecoveryHint}" TextWrapping="Wrap"/>
+                                                <WrapPanel Margin="0,0,0,8">
+                                                    <TextBlock Width="140" Text="Current URL" VerticalAlignment="Center"/>
+                                                    <TextBox Width="260" Text="{Binding CurrentControlUrl}" IsReadOnly="True"/>
+                                                </WrapPanel>
+                                                <WrapPanel Margin="0,0,0,8">
+                                                    <TextBlock Width="140" Text="Predicted URL" VerticalAlignment="Center"/>
+                                                    <TextBox Width="260" Text="{Binding PredictedControlUrl}" IsReadOnly="True"/>
+                                                </WrapPanel>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                </Grid>
                             </ScrollViewer>
                         </TabItem>
                         <TabItem Header="Users">
-                            <StackPanel Margin="8">
-                                <TextBlock Text="Users" FontWeight="SemiBold" Margin="0,0,0,8"/>
-                                <ListBox Height="120" ItemsSource="{Binding UserList}" Margin="0,0,0,10"/>
-                                <WrapPanel Margin="0,0,0,8">
-                                    <TextBlock Width="140" Text="Username" VerticalAlignment="Center"/>
-                                    <TextBox Width="220" Text="{Binding PasswordChangeUsername}"/>
-                                </WrapPanel>
-                                <WrapPanel Margin="0,0,0,8">
-                                    <TextBlock Width="140" Text="New Password" VerticalAlignment="Center"/>
-                                    <PasswordBox Width="220" PasswordChanged="PasswordChangePasswordChanged"/>
-                                </WrapPanel>
-                                <Button Width="180" Click="ApplyPasswordChange_Click">Apply Password Change</Button>
-                            </StackPanel>
+                            <Grid Margin="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="1.4*"/>
+                                    <ColumnDefinition Width="14"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" Padding="12" CornerRadius="10" Background="#20313E">
+                                    <StackPanel>
+                                        <TextBlock Text="Accounts" FontSize="16" FontWeight="SemiBold"/>
+                                        <TextBlock Margin="0,4,0,12" Foreground="#C4D4E5" Text="Select an account to reuse its username in the password reset flow." TextWrapping="Wrap"/>
+                                        <DataGrid Height="230" ItemsSource="{Binding UserAccounts}" SelectedItem="{Binding SelectedUserAccount}" AutoGenerateColumns="False" Background="#0E171E" BorderThickness="0">
+                                            <DataGrid.Columns>
+                                                <DataGridTextColumn Header="Username" Binding="{Binding Username}" Width="1.2*"/>
+                                                <DataGridTextColumn Header="Role" Binding="{Binding Role}" Width="1*"/>
+                                                <DataGridCheckBoxColumn Header="Enabled" Binding="{Binding Enabled}" Width="0.8*"/>
+                                            </DataGrid.Columns>
+                                        </DataGrid>
+                                    </StackPanel>
+                                </Border>
+                                <Border Grid.Column="2" Padding="12" CornerRadius="10" Background="#20313E">
+                                    <StackPanel>
+                                        <TextBlock Text="Password Reset" FontSize="16" FontWeight="SemiBold"/>
+                                        <TextBlock Margin="0,4,0,12" Foreground="#C4D4E5" Text="{Binding SelectedUserSummary}" TextWrapping="Wrap"/>
+                                        <WrapPanel Margin="0,0,0,8">
+                                            <TextBlock Width="140" Text="Username" VerticalAlignment="Center"/>
+                                            <TextBox Width="220" Text="{Binding PasswordChangeUsername}"/>
+                                        </WrapPanel>
+                                        <WrapPanel Margin="0,0,0,8">
+                                            <TextBlock Width="140" Text="New Password" VerticalAlignment="Center"/>
+                                            <PasswordBox Width="220" PasswordChanged="PasswordChangePasswordChanged"/>
+                                        </WrapPanel>
+                                        <Button Width="180" Click="ApplyPasswordChange_Click">Apply Password Change</Button>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
                         </TabItem>
 
                         <TabItem Header="Motion/Alarm">
                             <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                <StackPanel Margin="8">
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding MotionEnabledVisibility}">
-                                        <TextBlock Width="140" Text="Motion Enabled" VerticalAlignment="Center"/>
-                                        <CheckBox IsChecked="{Binding MotionEnabled}" IsEnabled="{Binding CanEditMotionEnabled}" VerticalAlignment="Center"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding MotionTypeVisibility}">
-                                        <TextBlock Width="140" Text="Motion Type" VerticalAlignment="Center"/>
-                                        <ComboBox Width="220" ItemsSource="{Binding MotionTypeOptions}" SelectedItem="{Binding MotionType}" IsEnabled="{Binding CanEditMotionType}"/>
-                                    </WrapPanel>
-                                    <Grid Margin="0,0,0,10" Visibility="{Binding MotionSensitivityVisibility}">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="140"/>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="68"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Text="Sensitivity" VerticalAlignment="Center"/>
-                                        <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding MotionSensitivitySlider}" IsEnabled="{Binding CanEditMotionSensitivity}"/>
-                                        <TextBlock Grid.Column="2" Text="{Binding MotionSensitivity}" VerticalAlignment="Center" HorizontalAlignment="Right"/>
-                                    </Grid>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding MotionAlarmDurationVisibility}">
-                                        <TextBlock Width="140" Text="Motion Alarm (s)" VerticalAlignment="Center"/>
-                                        <TextBox Width="220" Text="{Binding MotionAlarmDuration}" IsEnabled="{Binding CanEditMotionAlarmDuration}"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding MotionAlarmVisibility}">
-                                        <TextBlock Width="140" Text="Motion Trigger" VerticalAlignment="Center"/>
-                                        <CheckBox IsChecked="{Binding MotionAlarm}" IsEnabled="{Binding CanEditMotionAlarm}" VerticalAlignment="Center"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding MotionBuzzerVisibility}">
-                                        <TextBlock Width="140" Text="Motion Buzzer" VerticalAlignment="Center"/>
-                                        <CheckBox IsChecked="{Binding MotionBuzzer}" IsEnabled="{Binding CanEditMotionBuzzer}" VerticalAlignment="Center"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding VideoLossAlarmDurationVisibility}">
-                                        <TextBlock Width="140" Text="Video Loss (s)" VerticalAlignment="Center"/>
-                                        <TextBox Width="220" Text="{Binding VideoLossAlarmDuration}" IsEnabled="{Binding CanEditVideoLossAlarmDuration}"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding VideoLossAlarmVisibility}">
-                                        <TextBlock Width="140" Text="Video Loss Trigger" VerticalAlignment="Center"/>
-                                        <CheckBox IsChecked="{Binding VideoLossAlarm}" IsEnabled="{Binding CanEditVideoLossAlarm}" VerticalAlignment="Center"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding VideoLossBuzzerVisibility}">
-                                        <TextBlock Width="140" Text="Video Loss Buzzer" VerticalAlignment="Center"/>
-                                        <CheckBox IsChecked="{Binding VideoLossBuzzer}" IsEnabled="{Binding CanEditVideoLossBuzzer}" VerticalAlignment="Center"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding PrivacyMaskEnabledVisibility}">
-                                        <TextBlock Width="140" Text="Privacy Mask" VerticalAlignment="Center"/>
-                                        <CheckBox IsChecked="{Binding PrivacyMaskEnabled}" IsEnabled="{Binding CanEditPrivacyMaskEnabled}" VerticalAlignment="Center"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding PrivacyMaskXVisibility}">
-                                        <TextBlock Width="140" Text="Mask X" VerticalAlignment="Center"/>
-                                        <TextBox Width="220" Text="{Binding PrivacyMaskX}" IsEnabled="{Binding CanEditPrivacyMaskX}"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding PrivacyMaskYVisibility}">
-                                        <TextBlock Width="140" Text="Mask Y" VerticalAlignment="Center"/>
-                                        <TextBox Width="220" Text="{Binding PrivacyMaskY}" IsEnabled="{Binding CanEditPrivacyMaskY}"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding PrivacyMaskWidthVisibility}">
-                                        <TextBlock Width="140" Text="Mask Width" VerticalAlignment="Center"/>
-                                        <TextBox Width="220" Text="{Binding PrivacyMaskWidth}" IsEnabled="{Binding CanEditPrivacyMaskWidth}"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding PrivacyMaskHeightVisibility}">
-                                        <TextBlock Width="140" Text="Mask Height" VerticalAlignment="Center"/>
-                                        <TextBox Width="220" Text="{Binding PrivacyMaskHeight}" IsEnabled="{Binding CanEditPrivacyMaskHeight}"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding AlarmInputStateVisibility}">
-                                        <TextBlock Width="140" Text="Alarm Input" VerticalAlignment="Center"/>
-                                        <TextBox Width="220" Text="{Binding AlarmInputState}" IsEnabled="{Binding CanEditAlarmInputState}"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding AlarmOutputStateVisibility}">
-                                        <TextBlock Width="140" Text="Alarm Output" VerticalAlignment="Center"/>
-                                        <TextBox Width="220" Text="{Binding AlarmOutputState}" IsEnabled="{Binding CanEditAlarmOutputState}"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding AlarmPulseDurationVisibility}">
-                                        <TextBlock Width="140" Text="Alarm Pulse (ms)" VerticalAlignment="Center"/>
-                                        <TextBox Width="220" Text="{Binding AlarmPulseDuration}" IsEnabled="{Binding CanEditAlarmPulseDuration}"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding AlarmDurationVisibility}">
-                                        <TextBlock Width="140" Text="Alarm Duration (s)" VerticalAlignment="Center"/>
-                                        <TextBox Width="220" Text="{Binding AlarmDuration}" IsEnabled="{Binding CanEditAlarmDuration}"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding AlarmEnabledVisibility}">
-                                        <TextBlock Width="140" Text="Alarm Enabled" VerticalAlignment="Center"/>
-                                        <CheckBox IsChecked="{Binding AlarmEnabled}" IsEnabled="{Binding CanEditAlarmEnabled}" VerticalAlignment="Center"/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding AlarmBuzzerVisibility}">
-                                        <TextBlock Width="140" Text="Alarm Buzzer" VerticalAlignment="Center"/>
-                                        <CheckBox IsChecked="{Binding AlarmBuzzer}" IsEnabled="{Binding CanEditAlarmBuzzer}" VerticalAlignment="Center"/>
-                                    </WrapPanel>
-                                </StackPanel>
+                                <Grid Margin="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="14"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <Border Padding="12" Margin="0,0,0,12" CornerRadius="10" Background="#20313E">
+                                            <StackPanel>
+                                                <TextBlock Text="Motion Detection" FontSize="16" FontWeight="SemiBold"/>
+                                                <TextBlock Margin="0,4,0,12" Foreground="#C4D4E5" Text="{Binding MotionCompositeSummary}" TextWrapping="Wrap"/>
+                                                <WrapPanel Margin="0,0,0,8" Visibility="{Binding MotionEnabledVisibility}">
+                                                    <TextBlock Width="140" Text="Motion Enabled" VerticalAlignment="Center"/>
+                                                    <CheckBox IsChecked="{Binding MotionEnabled}" IsEnabled="{Binding CanEditMotionEnabled}" VerticalAlignment="Center"/>
+                                                </WrapPanel>
+                                                <StackPanel Visibility="{Binding MotionCompositeVisibility}">
+                                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding MotionTypeVisibility}">
+                                                        <TextBlock Width="140" Text="Motion Type" VerticalAlignment="Center"/>
+                                                        <ComboBox Width="220" ItemsSource="{Binding MotionTypeOptions}" SelectedItem="{Binding MotionType}" IsEnabled="{Binding CanEditMotionType}"/>
+                                                    </WrapPanel>
+                                                    <Grid Margin="0,0,0,10" Visibility="{Binding MotionSensitivityVisibility}">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="140"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="68"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Text="Sensitivity" VerticalAlignment="Center"/>
+                                                        <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding MotionSensitivitySlider}" IsEnabled="{Binding CanEditMotionSensitivity}"/>
+                                                        <TextBlock Grid.Column="2" Text="{Binding MotionSensitivity}" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                                                    </Grid>
+                                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding MotionAlarmDurationVisibility}">
+                                                        <TextBlock Width="140" Text="Motion Alarm (s)" VerticalAlignment="Center"/>
+                                                        <TextBox Width="220" Text="{Binding MotionAlarmDuration}" IsEnabled="{Binding CanEditMotionAlarmDuration}"/>
+                                                    </WrapPanel>
+                                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding MotionAlarmVisibility}">
+                                                        <TextBlock Width="140" Text="Motion Trigger" VerticalAlignment="Center"/>
+                                                        <CheckBox IsChecked="{Binding MotionAlarm}" IsEnabled="{Binding CanEditMotionAlarm}" VerticalAlignment="Center"/>
+                                                    </WrapPanel>
+                                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding MotionBuzzerVisibility}">
+                                                        <TextBlock Width="140" Text="Motion Buzzer" VerticalAlignment="Center"/>
+                                                        <CheckBox IsChecked="{Binding MotionBuzzer}" IsEnabled="{Binding CanEditMotionBuzzer}" VerticalAlignment="Center"/>
+                                                    </WrapPanel>
+                                                    <TextBlock Text="Motion Grid" FontWeight="SemiBold" Margin="0,8,0,6" Visibility="{Binding MotionGridEditorVisibility}"/>
+                                                    <TextBlock Margin="0,0,0,8" Foreground="#C4D4E5" Text="{Binding MotionGridSummary}" TextWrapping="Wrap" Visibility="{Binding MotionGridEditorVisibility}"/>
+                                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding MotionGridEditorVisibility}">
+                                                        <Button Margin="0,0,8,0" Padding="10,5" Click="MotionGridEnableAll_Click">Enable All</Button>
+                                                        <Button Margin="0,0,8,0" Padding="10,5" Click="MotionGridClearAll_Click">Clear All</Button>
+                                                        <Button Margin="0,0,8,0" Padding="10,5" Click="MotionGridInvert_Click">Invert</Button>
+                                                        <Button Padding="10,5" Click="SaveMotionGrid_Click">Save Motion Grid</Button>
+                                                    </WrapPanel>
+                                                    <Border Padding="8" Background="#0E171E" CornerRadius="8" Visibility="{Binding MotionGridEditorVisibility}">
+                                                        <ScrollViewer Height="260" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                                                            <ItemsControl ItemsSource="{Binding MotionGridCells}">
+                                                                <ItemsControl.ItemsPanel>
+                                                                    <ItemsPanelTemplate>
+                                                                        <UniformGrid Columns="{Binding DataContext.MotionGridColumns, RelativeSource={RelativeSource AncestorType=ItemsControl}}"/>
+                                                                    </ItemsPanelTemplate>
+                                                                </ItemsControl.ItemsPanel>
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate>
+                                                                        <CheckBox Margin="1" Width="16" Height="16" IsChecked="{Binding IsActive}" Click="MotionGridCell_Click" ToolTip="{Binding Label}"/>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+                                                        </ScrollViewer>
+                                                    </Border>
+                                                    <TextBlock Margin="0,8,0,0" Foreground="#FFD27A" Text="{Binding MotionRegionBlockerText}" TextWrapping="Wrap" Visibility="{Binding MotionRegionBlockerVisibility}"/>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Border Padding="12" CornerRadius="10" Background="#20313E">
+                                            <StackPanel>
+                                                <TextBlock Text="Privacy Mask" FontSize="16" FontWeight="SemiBold"/>
+                                                <TextBlock Margin="0,4,0,12" Foreground="#C4D4E5" Text="{Binding PrivacyMaskCompositeSummary}" TextWrapping="Wrap"/>
+                                                <WrapPanel Margin="0,0,0,8" Visibility="{Binding PrivacyMaskEnabledVisibility}">
+                                                    <TextBlock Width="140" Text="Privacy Mask" VerticalAlignment="Center"/>
+                                                    <CheckBox IsChecked="{Binding PrivacyMaskEnabled}" IsEnabled="{Binding CanEditPrivacyMaskEnabled}" VerticalAlignment="Center"/>
+                                                </WrapPanel>
+                                                <StackPanel Visibility="{Binding PrivacyMaskRegionVisibility}">
+                                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding PrivacyMaskXVisibility}">
+                                                        <TextBlock Width="140" Text="Mask X" VerticalAlignment="Center"/>
+                                                        <TextBox Width="220" Text="{Binding PrivacyMaskX}" IsEnabled="{Binding CanEditPrivacyMaskX}"/>
+                                                    </WrapPanel>
+                                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding PrivacyMaskYVisibility}">
+                                                        <TextBlock Width="140" Text="Mask Y" VerticalAlignment="Center"/>
+                                                        <TextBox Width="220" Text="{Binding PrivacyMaskY}" IsEnabled="{Binding CanEditPrivacyMaskY}"/>
+                                                    </WrapPanel>
+                                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding PrivacyMaskWidthVisibility}">
+                                                        <TextBlock Width="140" Text="Mask Width" VerticalAlignment="Center"/>
+                                                        <TextBox Width="220" Text="{Binding PrivacyMaskWidth}" IsEnabled="{Binding CanEditPrivacyMaskWidth}"/>
+                                                    </WrapPanel>
+                                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding PrivacyMaskHeightVisibility}">
+                                                        <TextBlock Width="140" Text="Mask Height" VerticalAlignment="Center"/>
+                                                        <TextBox Width="220" Text="{Binding PrivacyMaskHeight}" IsEnabled="{Binding CanEditPrivacyMaskHeight}"/>
+                                                    </WrapPanel>
+                                                    <WrapPanel Margin="0,0,0,8">
+                                                        <TextBlock Width="140" Text="Mask Color" VerticalAlignment="Center"/>
+                                                        <TextBox Width="220" Text="{Binding PrivacyMaskColor}" IsEnabled="{Binding CanEditPrivacyMaskEnabled}"/>
+                                                    </WrapPanel>
+                                                    <Button Width="170" HorizontalAlignment="Left" Margin="140,0,0,0" Content="Save Privacy Mask" Click="SavePrivacyMask_Click" IsEnabled="{Binding CanEditPrivacyMaskEnabled}"/>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Column="2">
+                                        <Border Padding="12" Margin="0,0,0,12" CornerRadius="10" Background="#20313E">
+                                            <StackPanel>
+                                                <TextBlock Text="Video Loss" FontSize="16" FontWeight="SemiBold"/>
+                                                <TextBlock Margin="0,4,0,12" Foreground="#C4D4E5" Text="Video-loss outputs remain separate from motion detection, but share the same save cycle." TextWrapping="Wrap"/>
+                                                <WrapPanel Margin="0,0,0,8" Visibility="{Binding VideoLossAlarmDurationVisibility}">
+                                                    <TextBlock Width="140" Text="Video Loss (s)" VerticalAlignment="Center"/>
+                                                    <TextBox Width="220" Text="{Binding VideoLossAlarmDuration}" IsEnabled="{Binding CanEditVideoLossAlarmDuration}"/>
+                                                </WrapPanel>
+                                                <WrapPanel Margin="0,0,0,8" Visibility="{Binding VideoLossAlarmVisibility}">
+                                                    <TextBlock Width="140" Text="Video Loss Trigger" VerticalAlignment="Center"/>
+                                                    <CheckBox IsChecked="{Binding VideoLossAlarm}" IsEnabled="{Binding CanEditVideoLossAlarm}" VerticalAlignment="Center"/>
+                                                </WrapPanel>
+                                                <WrapPanel Margin="0,0,0,8" Visibility="{Binding VideoLossBuzzerVisibility}">
+                                                    <TextBlock Width="140" Text="Video Loss Buzzer" VerticalAlignment="Center"/>
+                                                    <CheckBox IsChecked="{Binding VideoLossBuzzer}" IsEnabled="{Binding CanEditVideoLossBuzzer}" VerticalAlignment="Center"/>
+                                                </WrapPanel>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Border Padding="12" CornerRadius="10" Background="#20313E">
+                                            <StackPanel>
+                                                <TextBlock Text="Alarm Outputs" FontSize="16" FontWeight="SemiBold"/>
+                                                <TextBlock Margin="0,4,0,12" Foreground="#C4D4E5" Text="These output states are applied as one alarm bundle." TextWrapping="Wrap"/>
+                                                <WrapPanel Margin="0,0,0,8" Visibility="{Binding AlarmInputStateVisibility}">
+                                                    <TextBlock Width="140" Text="Alarm Input" VerticalAlignment="Center"/>
+                                                    <TextBox Width="220" Text="{Binding AlarmInputState}" IsEnabled="{Binding CanEditAlarmInputState}"/>
+                                                </WrapPanel>
+                                                <WrapPanel Margin="0,0,0,8" Visibility="{Binding AlarmOutputStateVisibility}">
+                                                    <TextBlock Width="140" Text="Alarm Output" VerticalAlignment="Center"/>
+                                                    <TextBox Width="220" Text="{Binding AlarmOutputState}" IsEnabled="{Binding CanEditAlarmOutputState}"/>
+                                                </WrapPanel>
+                                                <WrapPanel Margin="0,0,0,8" Visibility="{Binding AlarmPulseDurationVisibility}">
+                                                    <TextBlock Width="140" Text="Alarm Pulse (ms)" VerticalAlignment="Center"/>
+                                                    <TextBox Width="220" Text="{Binding AlarmPulseDuration}" IsEnabled="{Binding CanEditAlarmPulseDuration}"/>
+                                                </WrapPanel>
+                                                <WrapPanel Margin="0,0,0,8" Visibility="{Binding AlarmDurationVisibility}">
+                                                    <TextBlock Width="140" Text="Alarm Duration (s)" VerticalAlignment="Center"/>
+                                                    <TextBox Width="220" Text="{Binding AlarmDuration}" IsEnabled="{Binding CanEditAlarmDuration}"/>
+                                                </WrapPanel>
+                                                <WrapPanel Margin="0,0,0,8" Visibility="{Binding AlarmEnabledVisibility}">
+                                                    <TextBlock Width="140" Text="Alarm Enabled" VerticalAlignment="Center"/>
+                                                    <CheckBox IsChecked="{Binding AlarmEnabled}" IsEnabled="{Binding CanEditAlarmEnabled}" VerticalAlignment="Center"/>
+                                                </WrapPanel>
+                                                <WrapPanel Margin="0,0,0,8" Visibility="{Binding AlarmBuzzerVisibility}">
+                                                    <TextBlock Width="140" Text="Alarm Buzzer" VerticalAlignment="Center"/>
+                                                    <CheckBox IsChecked="{Binding AlarmBuzzer}" IsEnabled="{Binding CanEditAlarmBuzzer}" VerticalAlignment="Center"/>
+                                                </WrapPanel>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                </Grid>
                             </ScrollViewer>
                         </TabItem>
                         <TabItem Header="Storage">
                             <ScrollViewer VerticalScrollBarVisibility="Auto">
                                 <StackPanel Margin="8">
                                     <TextBlock Text="Recording" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                    <TextBlock Margin="0,0,0,10" Foreground="#C4D4E5" Text="Operator recording controls stay separate from playback/export workflows so disruptive actions are explicit." TextWrapping="Wrap"/>
                                     <WrapPanel Margin="0,0,0,8">
                                         <Button Width="170" Margin="0,0,8,8" Click="StartRecording_Click">Start Recording</Button>
                                         <Button Width="170" Margin="0,0,8,8" Click="StopRecording_Click">Stop Recording</Button>
@@ -546,6 +716,7 @@
                                     </WrapPanel>
 
                                     <TextBlock Text="NVR Playback Search" FontWeight="SemiBold" Margin="0,8,0,8"/>
+                                    <TextBlock Margin="0,0,0,10" Foreground="#C4D4E5" Text="{Binding PlaybackCompositeSummary}" TextWrapping="Wrap"/>
                                     <WrapPanel Margin="0,0,0,8">
                                         <TextBlock Width="100" Text="Session ID" VerticalAlignment="Center"/>
                                         <TextBox Width="120" Margin="0,0,14,0" Text="{Binding StorageSessionId}"/>
@@ -701,6 +872,25 @@
                                                     <TextBox Text="{Binding EndpointEditablePayloadText, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextWrapping="NoWrap" Background="#0E171E" BorderThickness="0" Foreground="#F2EAD3" FontFamily="Consolas"/>
                                                 </GroupBox>
                                             </Grid>
+                                        </Grid>
+                                    </TabItem>
+                                    <TabItem Header="Composite Coverage">
+                                        <Grid Margin="4">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="8"/>
+                                                <RowDefinition Height="*"/>
+                                            </Grid.RowDefinitions>
+                                            <TextBlock Text="Bounded permutation coverage for the structured operator editors. Freeform values are counted as validated semantic bundles instead of infinite raw combinations." Foreground="#C4D4E5" TextWrapping="Wrap"/>
+                                            <DataGrid Grid.Row="2" ItemsSource="{Binding CompositeCoverageRows}" AutoGenerateColumns="False" Background="#0E171E" BorderThickness="0">
+                                                <DataGrid.Columns>
+                                                    <DataGridTextColumn Header="System" Binding="{Binding SystemName}" Width="1.4*"/>
+                                                    <DataGridTextColumn Header="Class" Binding="{Binding Classification}" Width="1.1*"/>
+                                                    <DataGridTextColumn Header="Valid States" Binding="{Binding ValidStateCount}" Width="0.8*"/>
+                                                    <DataGridTextColumn Header="Bounded By" Binding="{Binding BoundedBy}" Width="2.4*"/>
+                                                    <DataGridTextColumn Header="Rules" Binding="{Binding Rules}" Width="2.4*"/>
+                                                </DataGrid.Columns>
+                                            </DataGrid>
                                         </Grid>
                                     </TabItem>
                                     <TabItem Header="Inventory">

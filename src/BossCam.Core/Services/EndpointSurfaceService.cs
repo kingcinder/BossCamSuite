@@ -1,5 +1,4 @@
 using System.Text.Json.Nodes;
-using System.Text.RegularExpressions;
 using BossCam.Contracts;
 
 namespace BossCam.Core;
@@ -42,8 +41,13 @@ public sealed class EndpointSurfaceService(
     private static EndpointSurfaceItem BuildItem(Guid deviceId, EndpointContract contract, IReadOnlyCollection<SettingValue> rawValues)
     {
         var matched = rawValues
-            .Where(value => EndpointPatternMatches(contract.Endpoint, value.SourceEndpoint ?? value.Key))
-            .OrderByDescending(static value => value.CapturedAt)
+            .Select(value => new { Value = value, Score = EndpointMatchScore(contract.Endpoint, value.SourceEndpoint ?? value.Key) })
+            .Where(candidate => candidate.Score is not null)
+            .OrderByDescending(static candidate => candidate.Score!.Value)
+            .ThenByDescending(static candidate => PayloadScore(candidate.Value))
+            .ThenByDescending(static candidate => EndpointPriorityScore(candidate.Value.SourceEndpoint ?? candidate.Value.Key))
+            .ThenByDescending(static candidate => candidate.Value.CapturedAt)
+            .Select(static candidate => candidate.Value)
             .FirstOrDefault();
         var currentPayload = matched?.Value?.DeepClone();
         var suggested = currentPayload as JsonObject is not null
@@ -108,10 +112,108 @@ public sealed class EndpointSurfaceService(
             _ => JsonValue.Create(string.Empty)
         };
 
-    private static bool EndpointPatternMatches(string pattern, string endpoint)
+    private static int? EndpointMatchScore(string pattern, string endpoint)
     {
-        var regex = "^" + Regex.Escape(NormalizeEndpoint(pattern)).Replace("\\*", ".*") + "$";
-        return Regex.IsMatch(NormalizeEndpoint(endpoint), regex, RegexOptions.IgnoreCase);
+        var normalizedPattern = NormalizeEndpoint(pattern);
+        var normalizedEndpoint = NormalizeEndpoint(endpoint);
+        var endpointCandidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { normalizedEndpoint };
+        if (normalizedEndpoint.EndsWith("/properties", StringComparison.OrdinalIgnoreCase))
+        {
+            endpointCandidates.Add(normalizedEndpoint[..^"/properties".Length]);
+        }
+
+        if (endpointCandidates.Contains(normalizedPattern))
+        {
+            return 1000;
+        }
+
+        var patternSegments = normalizedPattern.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        foreach (var endpointCandidate in endpointCandidates)
+        {
+            var endpointSegments = endpointCandidate.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (patternSegments.Length != endpointSegments.Length)
+            {
+                continue;
+            }
+
+            var score = 0;
+            var matched = true;
+            for (var i = 0; i < patternSegments.Length; i++)
+            {
+                if (patternSegments[i] == "*")
+                {
+                    score += 25;
+                    continue;
+                }
+
+                if (!patternSegments[i].Equals(endpointSegments[i], StringComparison.OrdinalIgnoreCase))
+                {
+                    matched = false;
+                    break;
+                }
+
+                score += 100;
+            }
+
+            if (matched)
+            {
+                return score;
+            }
+        }
+
+        return null;
+    }
+
+    private static int PayloadScore(SettingValue value)
+    {
+        if (value.Value is JsonObject)
+        {
+            return 100;
+        }
+
+        if (value.Value is JsonArray)
+        {
+            return 70;
+        }
+
+        if (value.Value is JsonValue scalar)
+        {
+            var text = scalar.ToJsonString();
+            if (text.Contains("<html", StringComparison.OrdinalIgnoreCase)
+                || text.Contains("404", StringComparison.OrdinalIgnoreCase))
+            {
+                return -1000;
+            }
+
+            if (text.StartsWith("\"/9j/", StringComparison.OrdinalIgnoreCase))
+            {
+                return -750;
+            }
+        }
+
+        return 0;
+    }
+
+    private static int EndpointPriorityScore(string endpoint)
+    {
+        var normalized = NormalizeEndpoint(endpoint);
+        var segments = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        for (var i = 0; i < segments.Length - 1; i++)
+        {
+            if (segments[i].Equals("channel", StringComparison.OrdinalIgnoreCase)
+                && (segments[i + 1].Equals("101", StringComparison.OrdinalIgnoreCase)
+                    || segments[i + 1].Equals("1", StringComparison.OrdinalIgnoreCase)))
+            {
+                return 25;
+            }
+        }
+
+        if (normalized.Contains("/channels", StringComparison.OrdinalIgnoreCase))
+        {
+            return 10;
+        }
+
+        return 0;
     }
 
     private static string NormalizeEndpoint(string endpoint)

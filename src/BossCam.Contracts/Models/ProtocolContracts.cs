@@ -11,7 +11,7 @@ public sealed record WritePlan
     public string? AdapterName { get; init; }
     public bool SnapshotBeforeWrite { get; init; } = true;
     public bool RequireWriteVerification { get; init; } = true;
-    public bool AllowRollback { get; init; } = true;
+    public bool AllowRollback { get; init; }
     public string? ContractKey { get; init; }
     public IReadOnlyCollection<string> SensitivePaths { get; init; } = [];
 }
