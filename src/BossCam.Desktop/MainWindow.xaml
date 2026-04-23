@@ -618,6 +618,7 @@
                                             <StackPanel>
                                                 <TextBlock Text="Privacy Mask" FontSize="16" FontWeight="SemiBold"/>
                                                 <TextBlock Margin="0,4,0,12" Foreground="#C4D4E5" Text="{Binding PrivacyMaskCompositeSummary}" TextWrapping="Wrap"/>
+                                                <TextBlock Margin="0,0,0,12" Foreground="#FFD27A" Text="{Binding PrivacyMaskBlockerDetail}" TextWrapping="Wrap"/>
                                                 <WrapPanel Margin="0,0,0,8" Visibility="{Binding PrivacyMaskEnabledVisibility}">
                                                     <TextBlock Width="140" Text="Privacy Mask" VerticalAlignment="Center"/>
                                                     <CheckBox IsChecked="{Binding PrivacyMaskEnabled}" IsEnabled="{Binding CanEditPrivacyMaskEnabled}" VerticalAlignment="Center"/>

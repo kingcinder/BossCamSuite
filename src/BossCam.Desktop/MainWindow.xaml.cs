@@ -670,8 +670,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         ? $"Motion detection is live in '{(string.IsNullOrWhiteSpace(MotionType) ? "unknown" : MotionType)}' mode. Trigger outputs stay bound to this branch."
         : "Motion detection is off. Sensitivity and trigger tuning stay hidden until motion is enabled.";
     public string PrivacyMaskCompositeSummary => PrivacyMaskEnabled
-        ? $"Region {PrivacyMaskX},{PrivacyMaskY} size {PrivacyMaskWidth}x{PrivacyMaskHeight} is edited as one mask object. Current 5523-W firmware reads this object, but live writes were rejected or ignored."
-        : "Privacy mask region stays hidden until the mask is enabled. Current 5523-W firmware reads this object, but live writes were rejected or ignored.";
+        ? $"Read-only on this 5523-W firmware: region {PrivacyMaskX},{PrivacyMaskY} size {PrivacyMaskWidth}x{PrivacyMaskHeight}. Child writes return Invalid Document and parent writes are ignored after readback."
+        : "Privacy mask is readable, but blocked for normal saves on this 5523-W firmware: properties are read-only, child writes return Invalid Document, and parent writes are ignored.";
+    public string PrivacyMaskBlockerDetail => CompositeInteractionRules.PrivacyMaskBlockedReason;
     public string OverlayCompositeSummary => BuildOverlayCompositeSummary(ImageOsdChannelNameEnabled, ImageOsdChannelNameText, ImageOsdDateTimeEnabled, ImageOsdDateFormat, ImageOsdTimeFormat, ImageOsdDisplayWeek);
     public int MotionGridColumns
     {
@@ -712,7 +713,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
     }
 
-    public string MotionRegionBlockerText => "Region editing is not yet unlocked on this firmware fingerprint because the live motion payload only exposes a grid object. Detection type can still be switched, but no region object schema has been observed in current readback.";
+    public string MotionRegionBlockerText => CompositeInteractionRules.MotionRegionBlockedReason;
     public string SelectedUserSummary => SelectedUserAccount is null
         ? "Select an account to prefill the password reset target."
         : $"{SelectedUserAccount.Username} | {SelectedUserAccount.Role} | {(SelectedUserAccount.Enabled ? "enabled" : "status unknown")}";
@@ -1108,11 +1109,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public bool CanEditVideoLossAlarmDuration => CanEdit("videoLossAlarmDuration");
     public bool CanEditVideoLossAlarm => CanEdit("videoLossAlarm");
     public bool CanEditVideoLossBuzzer => CanEdit("videoLossBuzzer");
-    public bool CanEditPrivacyMaskEnabled => CanEdit("privacyMaskEnabled");
-    public bool CanEditPrivacyMaskX => CanEdit("privacyMaskX");
-    public bool CanEditPrivacyMaskY => CanEdit("privacyMaskY");
-    public bool CanEditPrivacyMaskWidth => CanEdit("privacyMaskWidth");
-    public bool CanEditPrivacyMaskHeight => CanEdit("privacyMaskHeight");
+    public bool CanEditPrivacyMaskEnabled => false;
+    public bool CanEditPrivacyMaskX => false;
+    public bool CanEditPrivacyMaskY => false;
+    public bool CanEditPrivacyMaskWidth => false;
+    public bool CanEditPrivacyMaskHeight => false;
     public bool CanEditAlarmInputState => CanEdit("alarmInputActiveState");
     public bool CanEditAlarmOutputState => CanEdit("alarmOutputActiveState");
     public bool CanEditAlarmPulseDuration => CanEdit("alarmPulseDuration");
@@ -2336,32 +2337,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private async Task ApplyPrivacyMaskAsync()
     {
-        if (!await EnsureCompositePayloadsLoadedAsync())
-        {
-            return;
-        }
-
-        if (_privacyMaskPayload is null || string.IsNullOrWhiteSpace(_privacyMaskEndpoint))
-        {
-            DiagnosticsText = "Privacy mask endpoint payload is not available from the current device snapshot.";
-            ShowToast("Privacy mask save blocked.", success: false);
-            return;
-        }
-
-        var payload = (JsonObject)_privacyMaskPayload.DeepClone();
-        SetPathValue(payload, "$.enabled", JsonValue.Create(PrivacyMaskEnabled));
-        SetPathValue(payload, "$.regionX", JsonValue.Create(ParseIntOrDefault(PrivacyMaskX, 0)));
-        SetPathValue(payload, "$.regionY", JsonValue.Create(ParseIntOrDefault(PrivacyMaskY, 0)));
-        SetPathValue(payload, "$.regionWidth", JsonValue.Create(ParseIntOrDefault(PrivacyMaskWidth, 0)));
-        SetPathValue(payload, "$.regionHeight", JsonValue.Create(ParseIntOrDefault(PrivacyMaskHeight, 0)));
-        SetPathValue(payload, "$.regionColor", JsonValue.Create(string.IsNullOrWhiteSpace(PrivacyMaskColor) ? "0" : PrivacyMaskColor));
-
-        await ExecuteCompositeWriteAsync(
-            "video.privacy.mask",
-            "Motion / Privacy / Alarms",
-            _privacyMaskEndpoint,
-            payload,
-            "Privacy mask saved.");
+        DiagnosticsText = CompositeInteractionRules.PrivacyMaskBlockedReason;
+        ShowToast("Privacy mask save blocked by firmware evidence.", success: false);
+        await Task.CompletedTask;
     }
 
     private async Task ApplyChannelNameOverlayAsync()

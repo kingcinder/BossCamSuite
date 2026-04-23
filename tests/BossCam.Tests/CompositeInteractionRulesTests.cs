@@ -49,6 +49,54 @@ public sealed class CompositeInteractionRulesTests
     }
 
     [Fact]
+    public void DeferredObjectiveLedger_ClosesPrivacyMaskWithDistinctEvidenceFamilies()
+    {
+        var ledger = CompositeInteractionRules.BuildDeferredObjectiveLedger();
+        var privacy = ledger.Single(row => row.SystemKey == "video.privacy.mask");
+
+        Assert.Equal("Blocked", privacy.Status);
+        Assert.Contains("Invalid Document", privacy.ExactFailureReason);
+        Assert.Contains("readback remains unchanged", privacy.ExactFailureReason);
+        Assert.Contains("native/private bridge has no callable", privacy.ExactFailureReason);
+        Assert.Equal(4, privacy.Attempts.Count);
+        Assert.Contains(privacy.Attempts, attempt => attempt.AttemptFamily.StartsWith("A - REST", StringComparison.Ordinal));
+        Assert.Contains(privacy.Attempts, attempt => attempt.AttemptFamily.StartsWith("B - Full parent", StringComparison.Ordinal));
+        Assert.Contains(privacy.Attempts, attempt => attempt.AttemptFamily.StartsWith("C - Alternate", StringComparison.Ordinal));
+        Assert.Contains(privacy.Attempts, attempt => attempt.AttemptFamily.StartsWith("D - Native", StringComparison.Ordinal));
+        Assert.All(privacy.Attempts, attempt =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(attempt.TransportPath));
+            Assert.False(string.IsNullOrWhiteSpace(attempt.PayloadShape));
+            Assert.False(string.IsNullOrWhiteSpace(attempt.LiveResponse));
+            Assert.False(string.IsNullOrWhiteSpace(attempt.ReadbackBehavior));
+            Assert.False(string.IsNullOrWhiteSpace(attempt.EvidenceLocation));
+        });
+    }
+
+    [Fact]
+    public void DeferredObjectiveLedger_ClosesMotionRegionWithDistinctEvidenceFamilies()
+    {
+        var ledger = CompositeInteractionRules.BuildDeferredObjectiveLedger();
+        var motionRegion = ledger.Single(row => row.SystemKey == "motion.detection.region");
+
+        Assert.Equal("Blocked", motionRegion.Status);
+        Assert.Contains("child region endpoints return 404", motionRegion.ExactFailureReason);
+        Assert.Contains("readback remains grid", motionRegion.ExactFailureReason);
+        Assert.Equal(3, motionRegion.Attempts.Count);
+        Assert.Contains(motionRegion.Attempts, attempt => attempt.AttemptFamily.StartsWith("A - REST", StringComparison.Ordinal));
+        Assert.Contains(motionRegion.Attempts, attempt => attempt.AttemptFamily.StartsWith("B - Full parent", StringComparison.Ordinal));
+        Assert.Contains(motionRegion.Attempts, attempt => attempt.AttemptFamily.StartsWith("C - Full parent", StringComparison.Ordinal));
+        Assert.All(motionRegion.Attempts, attempt =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(attempt.TransportPath));
+            Assert.False(string.IsNullOrWhiteSpace(attempt.PayloadShape));
+            Assert.False(string.IsNullOrWhiteSpace(attempt.LiveResponse));
+            Assert.False(string.IsNullOrWhiteSpace(attempt.ReadbackBehavior));
+            Assert.False(string.IsNullOrWhiteSpace(attempt.EvidenceLocation));
+        });
+    }
+
+    [Fact]
     public void WritePlan_Defaults_DoNotRollbackOperatorCompositeSaves()
     {
         var plan = new WritePlan();
