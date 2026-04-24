@@ -360,7 +360,7 @@ public partial class MainWindow
         }
 
         tile.Status = NvrStreamStatus.Failed;
-        tile.Message = "No frames received from any live source.";
+        tile.Message = BuildLiveFailureSummary(failures);
         NvrDiagnostics = string.Join($"{Environment.NewLine}{Environment.NewLine}", failures);
     }
 
@@ -581,17 +581,39 @@ public partial class MainWindow
     private static string BuildTileFailureMessage(Exception ex)
     {
         var message = ex.GetBaseException().Message;
+        if (message.Contains("401", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("Unauthorized", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("authorization failed", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Authentication failed (401). Verify camera stream credentials.";
+        }
+
+        if (message.Contains("ffmpeg not found", StringComparison.OrdinalIgnoreCase))
+        {
+            return "FFmpeg is not available on this machine.";
+        }
+
+        if (message.Contains("Error number -138", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Stream endpoint rejected the request (error -138).";
+        }
+
+        if (message.Contains("Invalid data found", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Stream opened but returned invalid media data.";
+        }
+
         if (message.Contains("No frames received", StringComparison.OrdinalIgnoreCase))
         {
-            return "No frames received.";
+            return "No frames received from the selected source.";
         }
 
         if (message.Contains("exited before the first frame", StringComparison.OrdinalIgnoreCase))
         {
-            return "FFmpeg exited before frames arrived.";
+            return "Decoder exited before first frame.";
         }
 
-        return "Decode error.";
+        return $"Decode error: {message}";
     }
 
     private string BuildNvrFailureDiagnostics(NvrTileViewModel tile, string label, string source, NvrFrameDecodeSession session, Exception ex)
@@ -643,6 +665,27 @@ public partial class MainWindow
         return $"No FFmpeg-decodable live source was available for {device.DisplayName}.{Environment.NewLine}{listed}";
     }
 
+    private static string BuildLiveFailureSummary(IReadOnlyCollection<string> failures)
+    {
+        var combined = string.Join(" ", failures);
+        if (combined.Contains("401", StringComparison.OrdinalIgnoreCase) || combined.Contains("Unauthorized", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Authentication failed for RTSP source (401 Unauthorized).";
+        }
+
+        if (combined.Contains("Error number -138", StringComparison.OrdinalIgnoreCase))
+        {
+            return "HTTP stream endpoint rejected the request (error -138).";
+        }
+
+        if (combined.Contains("Invalid data found", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Stream returned invalid media data.";
+        }
+
+        return "No frames received from any live source.";
+    }
+
     private static IEnumerable<NvrSourceCandidate> BuildLiveSourceCandidates(DeviceIdentity device, IEnumerable<VideoSourceDescriptor> sources)
     {
         var candidates = new List<NvrSourceCandidate>();
@@ -653,9 +696,12 @@ public partial class MainWindow
                 continue;
             }
 
-            if (TryBuildCredentialedVariant(source.Url, ResolvePreferredCredentials(device), out var credentialedUrl, out var credentialLabel))
+            if (TryBuildCredentialedVariants(source.Url, ResolvePreferredCredentials(device), out var credentialedVariants))
             {
-                candidates.Add(new NvrSourceCandidate(credentialedUrl, $"{source.Kind} ({credentialLabel})"));
+                foreach (var variant in credentialedVariants)
+                {
+                    candidates.Add(new NvrSourceCandidate(variant.Url, $"{source.Kind} ({variant.Label})"));
+                }
             }
 
             candidates.Add(new NvrSourceCandidate(source.Url, source.Kind.ToString()));
@@ -682,10 +728,9 @@ public partial class MainWindow
         return ("admin", string.Empty, "default admin");
     }
 
-    private static bool TryBuildCredentialedVariant(string source, (string Username, string Password, string Label) credentials, out string credentialedSource, out string credentialLabel)
+    private static bool TryBuildCredentialedVariants(string source, (string Username, string Password, string Label) credentials, out IReadOnlyCollection<(string Url, string Label)> variants)
     {
-        credentialedSource = string.Empty;
-        credentialLabel = credentials.Label;
+        variants = [];
         if (!Uri.TryCreate(source, UriKind.Absolute, out var uri) || !string.IsNullOrWhiteSpace(uri.UserInfo))
         {
             return false;
@@ -694,7 +739,23 @@ public partial class MainWindow
         var authority = uri.IsDefaultPort ? uri.Host : $"{uri.Host}:{uri.Port}";
         var user = Uri.EscapeDataString(credentials.Username);
         var password = Uri.EscapeDataString(credentials.Password ?? string.Empty);
-        credentialedSource = $"{uri.Scheme}://{user}:{password}@{authority}{uri.PathAndQuery}{uri.Fragment}";
+        var path = uri.PathAndQuery;
+        if (uri.Scheme.Equals("rtsp", StringComparison.OrdinalIgnoreCase) && path == "/")
+        {
+            path = string.Empty;
+        }
+
+        var list = new List<(string Url, string Label)>
+        {
+            ($"{uri.Scheme}://{user}:{password}@{authority}{path}{uri.Fragment}", $"{credentials.Label}:user+pass")
+        };
+
+        if (uri.Scheme.Equals("rtsp", StringComparison.OrdinalIgnoreCase))
+        {
+            list.Add(($"{uri.Scheme}://{user}@{authority}{path}{uri.Fragment}", $"{credentials.Label}:user-only"));
+        }
+
+        variants = list;
         return true;
     }
 
