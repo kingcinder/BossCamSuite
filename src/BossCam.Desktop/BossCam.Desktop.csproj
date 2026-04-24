@@ -3,8 +3,13 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
+    <ApplicationIcon>Assets\BossCamSuite.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\BossCam.Contracts\BossCam.Contracts.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Assets\BossCamSuite.ico" />
+    <Resource Include="Assets\BossCamSuite.png" />
   </ItemGroup>
 </Project>

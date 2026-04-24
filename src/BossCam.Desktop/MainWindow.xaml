@@ -5,10 +5,171 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="BossCamSuite"
+        Icon="Assets/BossCamSuite.ico"
         Height="980"
         Width="1700"
-        Background="#0F1720"
+        Background="#050506"
         Foreground="#F2F4F7">
+    <Window.Resources>
+        <ImageBrush x:Key="BossCamThemeImage"
+                    ImageSource="Assets/BossCamSuite.png"
+                    Stretch="UniformToFill"
+                    Opacity="0.18"/>
+        <SolidColorBrush x:Key="ThemePanelBrush" Color="#CC0B090B"/>
+        <SolidColorBrush x:Key="ThemePanelAltBrush" Color="#D9161214"/>
+        <SolidColorBrush x:Key="ThemeBorderBrush" Color="#66FF5A1F"/>
+        <SolidColorBrush x:Key="ThemeAccentBrush" Color="#FFFF6A1F"/>
+        <SolidColorBrush x:Key="ThemeAccentMutedBrush" Color="#CCAC2F11"/>
+        <SolidColorBrush x:Key="ThemeTextMutedBrush" Color="#FFE0C9C0"/>
+
+        <Style TargetType="Button">
+            <Setter Property="Foreground" Value="#FFFFF2EA"/>
+            <Setter Property="Background" Value="#CC1A1010"/>
+            <Setter Property="BorderBrush" Value="{StaticResource ThemeBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="10,5"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="#E6331713"/>
+                                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="#FFFFA33E"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="#FF4A160D"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="ButtonBorder" Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="TextBox">
+            <Setter Property="Foreground" Value="#FFFFF5EE"/>
+            <Setter Property="Background" Value="#B30B090B"/>
+            <Setter Property="BorderBrush" Value="#55FF5A1F"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,5"/>
+        </Style>
+
+        <Style TargetType="ComboBox">
+            <Setter Property="Foreground" Value="#FFFFF5EE"/>
+            <Setter Property="Background" Value="#B30B090B"/>
+            <Setter Property="BorderBrush" Value="#55FF5A1F"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="6,4"/>
+        </Style>
+
+        <Style TargetType="DatePicker">
+            <Setter Property="Foreground" Value="#FFFFF5EE"/>
+            <Setter Property="Background" Value="#B30B090B"/>
+            <Setter Property="BorderBrush" Value="#55FF5A1F"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+
+        <Style TargetType="ListBox">
+            <Setter Property="Background" Value="#73080507"/>
+            <Setter Property="BorderBrush" Value="#44FF5A1F"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="#FFFFF5EE"/>
+        </Style>
+
+        <Style TargetType="ListBoxItem">
+            <Setter Property="Padding" Value="8,6"/>
+            <Setter Property="Margin" Value="0,0,0,4"/>
+            <Setter Property="Background" Value="#33000000"/>
+            <Setter Property="BorderBrush" Value="#00FFFFFF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="ItemBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="#551A0A07"/>
+                                <Setter TargetName="ItemBorder" Property="BorderBrush" Value="#55FF5A1F"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="#AA3B120B"/>
+                                <Setter TargetName="ItemBorder" Property="BorderBrush" Value="#FFFF6A1F"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="TabControl">
+            <Setter Property="Background" Value="#00000000"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+
+        <Style TargetType="TabItem">
+            <Setter Property="Foreground" Value="#FFE0C9C0"/>
+            <Setter Property="Background" Value="#660A0809"/>
+            <Setter Property="BorderBrush" Value="#33FF5A1F"/>
+            <Setter Property="Padding" Value="16,8"/>
+            <Setter Property="Margin" Value="0,0,6,0"/>
+        </Style>
+
+        <Style TargetType="GroupBox">
+            <Setter Property="BorderBrush" Value="#44FF5A1F"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="6"/>
+            <Setter Property="Background" Value="#66080507"/>
+        </Style>
+
+        <Style TargetType="DataGrid">
+            <Setter Property="Background" Value="#73080507"/>
+            <Setter Property="Foreground" Value="#FFFFF5EE"/>
+            <Setter Property="BorderBrush" Value="#44FF5A1F"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="GridLinesVisibility" Value="Horizontal"/>
+            <Setter Property="HorizontalGridLinesBrush" Value="#22FF5A1F"/>
+            <Setter Property="VerticalGridLinesBrush" Value="#00000000"/>
+            <Setter Property="RowBackground" Value="#22000000"/>
+            <Setter Property="AlternatingRowBackground" Value="#33100606"/>
+            <Setter Property="HeadersVisibility" Value="Column"/>
+        </Style>
+    </Window.Resources>
+    <Grid>
+        <Border Background="#050506"/>
+        <Border Background="{StaticResource BossCamThemeImage}"/>
+        <Border>
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                    <GradientStop Color="#EE040405" Offset="0"/>
+                    <GradientStop Color="#D9080608" Offset="0.42"/>
+                    <GradientStop Color="#F2040506" Offset="1"/>
+                </LinearGradientBrush>
+            </Border.Background>
+        </Border>
+        <Border HorizontalAlignment="Right" VerticalAlignment="Center" Width="980" Height="980" Margin="0,0,-220,0" Opacity="0.12">
+            <Border.Background>
+                <ImageBrush ImageSource="Assets/BossCamSuite.png" Stretch="Uniform"/>
+            </Border.Background>
+        </Border>
+
     <Grid Margin="14">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="340"/>
@@ -16,11 +177,17 @@
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
-        <Border Grid.Column="0" Padding="12" CornerRadius="12" Background="#17232E">
+        <Border Grid.Column="0" Padding="12" CornerRadius="12" Background="{StaticResource ThemePanelBrush}" BorderBrush="{StaticResource ThemeBorderBrush}" BorderThickness="1">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
-                    <TextBlock Text="BossCamSuite" FontSize="26" FontWeight="SemiBold"/>
-                    <TextBlock Text="Camera Settings" Foreground="#CFD7DE" Margin="0,4,0,12"/>
+                    <Border Height="126" CornerRadius="12" Margin="0,0,0,12" BorderBrush="#55FF5A1F" BorderThickness="1">
+                        <Border.Background>
+                            <ImageBrush ImageSource="Assets/BossCamSuite.png" Stretch="UniformToFill" Opacity="0.82"/>
+                        </Border.Background>
+                    </Border>
+                    <TextBlock Text="BossCamSuite" FontSize="26" FontWeight="SemiBold" Foreground="#FFFFE8DD"/>
+                    <TextBlock Text="Infernal Control Surface" Foreground="{StaticResource ThemeTextMutedBrush}" Margin="0,4,0,2"/>
+                    <TextBlock Text="Camera Settings" Foreground="#CFD7DE" Margin="0,0,0,12"/>
                     <WrapPanel>
                         <Button Margin="0,0,8,8" Padding="10,5" Click="LoadStore_Click">Load Cameras</Button>
                         <Button Margin="0,0,8,8" Padding="10,5" Click="Discover_Click">Discover</Button>
@@ -39,19 +206,19 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <Border Grid.Row="0" Padding="12" CornerRadius="12" Background="#2B3C4B">
+            <Border Grid.Row="0" Padding="12" CornerRadius="12" Background="{StaticResource ThemePanelAltBrush}" BorderBrush="#55FF5A1F" BorderThickness="1">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <StackPanel>
-                        <TextBlock Text="{Binding SelectedDevice.DisplayName, TargetNullValue=No camera selected}" FontSize="24" FontWeight="Bold"/>
-                        <TextBlock Text="{Binding SelectedDevice.IpAddress, StringFormat=IP: {0}, TargetNullValue=IP: -}"/>
-                        <TextBlock Text="{Binding SelectedDevice.FirmwareVersion, StringFormat=Firmware: {0}, TargetNullValue=Firmware: -}"/>
-                        <TextBlock Text="{Binding SelectedDevice.HardwareModel, StringFormat=Model: {0}, TargetNullValue=Model: -}"/>
+                        <TextBlock Text="{Binding SelectedDevice.DisplayName, TargetNullValue=No camera selected}" FontSize="24" FontWeight="Bold" Foreground="#FFFFE8DD"/>
+                        <TextBlock Text="{Binding SelectedDevice.IpAddress, StringFormat=IP: {0}, TargetNullValue=IP: -}" Foreground="{StaticResource ThemeTextMutedBrush}"/>
+                        <TextBlock Text="{Binding SelectedDevice.FirmwareVersion, StringFormat=Firmware: {0}, TargetNullValue=Firmware: -}" Foreground="{StaticResource ThemeTextMutedBrush}"/>
+                        <TextBlock Text="{Binding SelectedDevice.HardwareModel, StringFormat=Model: {0}, TargetNullValue=Model: -}" Foreground="{StaticResource ThemeTextMutedBrush}"/>
                         <WrapPanel Margin="0,8,0,0">
-                            <TextBlock Text="{Binding DirtyStateText}" FontWeight="SemiBold" Margin="0,0,18,0"/>
+                            <TextBlock Text="{Binding DirtyStateText}" FontWeight="SemiBold" Margin="0,0,18,0" Foreground="#FFFFA34D"/>
                             <TextBlock Text="{Binding LastSyncText}" Foreground="#D5DEE7"/>
                             <TextBlock Text="{Binding GroupedApplyIndicator}" Foreground="#D5DEE7" Margin="18,0,0,0"/>
                         </WrapPanel>
@@ -65,7 +232,7 @@
             </Border>
 
             <Grid Grid.Row="2">
-                <Border Padding="10" CornerRadius="12" Background="#17232E">
+                <Border Padding="10" CornerRadius="12" Background="{StaticResource ThemePanelBrush}" BorderBrush="{StaticResource ThemeBorderBrush}" BorderThickness="1">
                     <TabControl>
                         <TabItem Header="Camera">
                             <StackPanel Margin="8">
@@ -76,7 +243,7 @@
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="Name" Foreground="#CFD7DE"/>
-                                    <TextBox Grid.Column="1" Text="{Binding SelectedDevice.DisplayName}" IsReadOnly="True"/>
+                                    <TextBox Grid.Column="1" Text="{Binding SelectedDevice.DisplayName, Mode=OneWay}" IsReadOnly="True"/>
                                 </Grid>
                                 <Grid Margin="0,0,0,8">
                                     <Grid.ColumnDefinitions>
@@ -84,7 +251,7 @@
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="IP Address" Foreground="#CFD7DE"/>
-                                    <TextBox Grid.Column="1" Text="{Binding SelectedDevice.IpAddress}" IsReadOnly="True"/>
+                                    <TextBox Grid.Column="1" Text="{Binding SelectedDevice.IpAddress, Mode=OneWay}" IsReadOnly="True"/>
                                 </Grid>
                                 <Grid Margin="0,0,0,8">
                                     <Grid.ColumnDefinitions>
@@ -92,7 +259,7 @@
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="Model" Foreground="#CFD7DE"/>
-                                    <TextBox Grid.Column="1" Text="{Binding SelectedDevice.HardwareModel}" IsReadOnly="True"/>
+                                    <TextBox Grid.Column="1" Text="{Binding SelectedDevice.HardwareModel, Mode=OneWay}" IsReadOnly="True"/>
                                 </Grid>
                                 <Grid Margin="0,0,0,8">
                                     <Grid.ColumnDefinitions>
@@ -100,7 +267,7 @@
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="Firmware" Foreground="#CFD7DE"/>
-                                    <TextBox Grid.Column="1" Text="{Binding SelectedDevice.FirmwareVersion}" IsReadOnly="True"/>
+                                    <TextBox Grid.Column="1" Text="{Binding SelectedDevice.FirmwareVersion, Mode=OneWay}" IsReadOnly="True"/>
                                 </Grid>
                                 <Grid Margin="0,0,0,8" Visibility="{Binding CameraSerialVisibility}">
                                     <Grid.ColumnDefinitions>
@@ -108,7 +275,7 @@
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="Serial" Foreground="#CFD7DE"/>
-                                    <TextBox Grid.Column="1" Text="{Binding CameraSerial}" IsReadOnly="True"/>
+                                    <TextBox Grid.Column="1" Text="{Binding CameraSerial, Mode=OneWay}" IsReadOnly="True"/>
                                 </Grid>
                                 <Grid Margin="0,0,0,8" Visibility="{Binding CameraMacVisibility}">
                                     <Grid.ColumnDefinitions>
@@ -116,7 +283,7 @@
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="MAC" Foreground="#CFD7DE"/>
-                                    <TextBox Grid.Column="1" Text="{Binding CameraMac}" IsReadOnly="True"/>
+                                    <TextBox Grid.Column="1" Text="{Binding CameraMac, Mode=OneWay}" IsReadOnly="True"/>
                                 </Grid>
                             </StackPanel>
                         </TabItem>
@@ -448,7 +615,7 @@
                                                 </WrapPanel>
                                                 <WrapPanel Margin="0,0,0,8" Visibility="{Binding NetworkEseeIdVisibility}">
                                                     <TextBlock Width="140" Text="ESEE ID" VerticalAlignment="Center"/>
-                                                    <TextBox Width="220" Text="{Binding NetworkEseeId}" IsReadOnly="True"/>
+                                                    <TextBox Width="220" Text="{Binding NetworkEseeId, Mode=OneWay}" IsReadOnly="True"/>
                                                 </WrapPanel>
                                                 <Button Width="170" HorizontalAlignment="Left" Margin="140,0,0,0" Content="Save Cloud/Time" Click="SaveCloudTime_Click"/>
                                             </StackPanel>
@@ -491,11 +658,11 @@
                                                 <TextBlock Margin="0,4,0,12" Foreground="#C4D4E5" Text="{Binding NetworkRecoveryHint}" TextWrapping="Wrap"/>
                                                 <WrapPanel Margin="0,0,0,8">
                                                     <TextBlock Width="140" Text="Current URL" VerticalAlignment="Center"/>
-                                                    <TextBox Width="260" Text="{Binding CurrentControlUrl}" IsReadOnly="True"/>
+                                                    <TextBox Width="260" Text="{Binding CurrentControlUrl, Mode=OneWay}" IsReadOnly="True"/>
                                                 </WrapPanel>
                                                 <WrapPanel Margin="0,0,0,8">
                                                     <TextBlock Width="140" Text="Predicted URL" VerticalAlignment="Center"/>
-                                                    <TextBox Width="260" Text="{Binding PredictedControlUrl}" IsReadOnly="True"/>
+                                                    <TextBox Width="260" Text="{Binding PredictedControlUrl, Mode=OneWay}" IsReadOnly="True"/>
                                                 </WrapPanel>
                                             </StackPanel>
                                         </Border>
@@ -765,11 +932,11 @@
 
                                     <WrapPanel Margin="0,0,0,8" Visibility="{Binding SdStatusVisibility}">
                                         <TextBlock Width="140" Text="SD Status" VerticalAlignment="Center"/>
-                                        <TextBox Width="220" Text="{Binding SdStatus}" IsReadOnly="True"/>
+                                        <TextBox Width="220" Text="{Binding SdStatus, Mode=OneWay}" IsReadOnly="True"/>
                                     </WrapPanel>
                                     <WrapPanel Margin="0,0,0,8" Visibility="{Binding SdMediaTypeVisibility}">
                                         <TextBlock Width="140" Text="Media Type" VerticalAlignment="Center"/>
-                                        <TextBox Width="220" Text="{Binding SdMediaType}" IsReadOnly="True"/>
+                                        <TextBox Width="220" Text="{Binding SdMediaType, Mode=OneWay}" IsReadOnly="True"/>
                                     </WrapPanel>
                                     <TextBlock Text="{Binding RecordingState}" Foreground="#CFD7DE" TextWrapping="Wrap" Margin="0,0,0,8"/>
                                     <TextBox Height="170" Text="{Binding RecordingDiagnostics}" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextWrapping="NoWrap" Background="#0E171E" BorderThickness="0" Foreground="#F2EAD3" FontFamily="Consolas"/>
@@ -785,12 +952,117 @@
                                 </WrapPanel>
                                 <TextBlock Text="Firmware Upload" FontWeight="SemiBold" Margin="0,0,0,8"/>
                                 <WrapPanel Margin="0,0,0,8">
-                                    <TextBox Width="420" Text="{Binding FirmwareUploadPath}" IsReadOnly="True" Margin="0,0,8,8"/>
+                                    <TextBox Width="420" Text="{Binding FirmwareUploadPath, Mode=OneWay}" IsReadOnly="True" Margin="0,0,8,8"/>
                                     <Button Width="120" Margin="0,0,8,8" Click="BrowseFirmware_Click">Browse</Button>
                                     <Button Width="140" Margin="0,0,8,8" Click="UploadFirmware_Click">Upload Firmware</Button>
                                 </WrapPanel>
                                 <TextBlock Text="{Binding MaintenanceState}" Foreground="#FFD27A" TextWrapping="Wrap"/>
                             </StackPanel>
+                        </TabItem>
+
+                        <TabItem Header="NVR">
+                            <Grid Margin="4">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="8"/>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="8"/>
+                                    <RowDefinition Height="190"/>
+                                </Grid.RowDefinitions>
+
+                                <Border Grid.Row="0" Padding="10" CornerRadius="10" Background="#0E171E">
+                                    <DockPanel>
+                                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                            <Button Width="110" Margin="0,0,8,0" Click="RefreshNvrJobs_Click">Jobs</Button>
+                                            <Button Width="130" Margin="0,0,8,0" Click="RefreshNvrIndex_Click">Index</Button>
+                                            <Button Width="130" Margin="0,0,8,0" Click="NvrHousekeeping_Click">Housekeeping</Button>
+                                            <Button Width="120" Click="NvrExportClip_Click">Export</Button>
+                                        </StackPanel>
+                                        <WrapPanel>
+                                            <Button Width="90" Margin="0,0,8,8" Click="NvrLiveMode_Click">Live</Button>
+                                            <Button Width="90" Margin="0,0,8,8" Click="NvrPlaybackMode_Click">Playback</Button>
+                                            <TextBlock Text="{Binding NvrModeText}" VerticalAlignment="Center" Margin="0,0,14,8" Foreground="#CFD7DE"/>
+                                            <TextBlock Text="Layout" VerticalAlignment="Center" Margin="0,0,8,8"/>
+                                            <Button Width="42" Margin="0,0,4,8" Tag="1" Click="NvrLayout_Click">1</Button>
+                                            <Button Width="42" Margin="0,0,4,8" Tag="3" Click="NvrLayout_Click">3</Button>
+                                            <Button Width="42" Margin="0,0,4,8" Tag="4" Click="NvrLayout_Click">4</Button>
+                                            <Button Width="42" Margin="0,0,4,8" Tag="5" Click="NvrLayout_Click">5</Button>
+                                            <Button Width="42" Margin="0,0,4,8" Tag="6" Click="NvrLayout_Click">6</Button>
+                                            <Button Width="42" Margin="0,0,14,8" Tag="9" Click="NvrLayout_Click">9</Button>
+                                            <Button Width="140" Margin="0,0,8,8" Click="AssignSelectedCameraToNvr_Click">Bind Camera</Button>
+                                            <Button Width="120" Margin="0,0,8,8" Click="StartNvrLive_Click">Start Live</Button>
+                                            <Button Width="120" Margin="0,0,8,8" Click="StopSelectedNvrTile_Click">Stop Tile</Button>
+                                            <Button Width="130" Margin="0,0,8,8" Click="RefreshNvrSources_Click">Sources</Button>
+                                        </WrapPanel>
+                                    </DockPanel>
+                                </Border>
+
+                                <Grid Grid.Row="2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="10"/>
+                                        <ColumnDefinition Width="330"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <Grid x:Name="NvrTileGrid" Background="#071018"/>
+
+                                    <Border Grid.Column="2" Padding="10" CornerRadius="10" Background="#0E171E">
+                                        <StackPanel>
+                                            <TextBlock Text="Playback Time" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                            <DatePicker SelectedDate="{Binding PlaybackDate}" Margin="0,0,0,8"/>
+                                            <WrapPanel Margin="0,0,0,8">
+                                                <TextBlock Width="80" Text="Clock" VerticalAlignment="Center"/>
+                                                <TextBox Width="110" Text="{Binding PlaybackTime, UpdateSourceTrigger=PropertyChanged}"/>
+                                                <TextBlock Width="70" Margin="10,0,0,0" Text="Minutes" VerticalAlignment="Center"/>
+                                                <TextBox Width="45" Text="{Binding PlaybackWindowMinutes, UpdateSourceTrigger=PropertyChanged}"/>
+                                            </WrapPanel>
+                                            <WrapPanel Margin="0,0,0,12">
+                                                <Button Width="130" Margin="0,0,8,8" Click="NvrFindPlayback_Click">Find</Button>
+                                                <Button Width="130" Margin="0,0,8,8" Click="NvrPlayPlayback_Click">Play</Button>
+                                            </WrapPanel>
+
+                                            <TextBlock Text="Network Sources" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                            <DataGrid Height="150" ItemsSource="{Binding NvrSources}" AutoGenerateColumns="False" Background="#050A0F" BorderThickness="0">
+                                                <DataGrid.Columns>
+                                                    <DataGridTextColumn Header="Kind" Binding="{Binding Kind}" Width="80" IsReadOnly="True"/>
+                                                    <DataGridTextColumn Header="Rank" Binding="{Binding Rank}" Width="50" IsReadOnly="True"/>
+                                                    <DataGridTextColumn Header="URL" Binding="{Binding Url}" Width="*" IsReadOnly="True"/>
+                                                </DataGrid.Columns>
+                                            </DataGrid>
+
+                                            <TextBlock Text="NVR Diagnostics" FontWeight="SemiBold" Margin="0,12,0,8"/>
+                                            <TextBox Height="120" Text="{Binding NvrDiagnostics}" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextWrapping="NoWrap" Background="#050A0F" BorderThickness="0" Foreground="#F2EAD3" FontFamily="Consolas"/>
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+
+                                <Grid Grid.Row="4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="2*"/>
+                                        <ColumnDefinition Width="10"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <GroupBox Header="Indexed Segments" Foreground="#F2F4F7">
+                                        <DataGrid ItemsSource="{Binding NvrRecordingSegments}" SelectedItem="{Binding SelectedNvrRecordingSegment}" AutoGenerateColumns="False" Background="#0E171E" BorderThickness="0">
+                                            <DataGrid.Columns>
+                                                <DataGridTextColumn Header="Start" Binding="{Binding StartTime}" Width="1.2*" IsReadOnly="True"/>
+                                                <DataGridTextColumn Header="End" Binding="{Binding EndTime}" Width="1.2*" IsReadOnly="True"/>
+                                                <DataGridTextColumn Header="MB" Binding="{Binding SizeBytes}" Width="0.5*" IsReadOnly="True"/>
+                                                <DataGridTextColumn Header="Path" Binding="{Binding FilePath}" Width="2.5*" IsReadOnly="True"/>
+                                            </DataGrid.Columns>
+                                        </DataGrid>
+                                    </GroupBox>
+                                    <GroupBox Grid.Column="2" Header="Recording Jobs" Foreground="#F2F4F7">
+                                        <DataGrid ItemsSource="{Binding NvrRecordingJobs}" AutoGenerateColumns="False" Background="#0E171E" BorderThickness="0">
+                                            <DataGrid.Columns>
+                                                <DataGridTextColumn Header="Device" Binding="{Binding DeviceId}" Width="*" IsReadOnly="True"/>
+                                                <DataGridTextColumn Header="PID" Binding="{Binding ProcessId}" Width="70" IsReadOnly="True"/>
+                                                <DataGridCheckBoxColumn Header="Run" Binding="{Binding IsRunning}" Width="55" IsReadOnly="True"/>
+                                            </DataGrid.Columns>
+                                        </DataGrid>
+                                    </GroupBox>
+                                </Grid>
+                            </Grid>
                         </TabItem>
 
                         <TabItem Header="Advanced">
@@ -867,7 +1139,7 @@
                                                     <ColumnDefinition Width="*"/>
                                                 </Grid.ColumnDefinitions>
                                                 <GroupBox Header="Current Payload" Foreground="#F2F4F7">
-                                                    <TextBox Text="{Binding EndpointCurrentPayloadText}" IsReadOnly="True" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextWrapping="NoWrap" Background="#0E171E" BorderThickness="0" Foreground="#F2EAD3" FontFamily="Consolas"/>
+                                                    <TextBox Text="{Binding EndpointCurrentPayloadText, Mode=OneWay}" IsReadOnly="True" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextWrapping="NoWrap" Background="#0E171E" BorderThickness="0" Foreground="#F2EAD3" FontFamily="Consolas"/>
                                                 </GroupBox>
                                                 <GroupBox Grid.Column="2" Header="Editable Payload" Foreground="#F2F4F7">
                                                     <TextBox Text="{Binding EndpointEditablePayloadText, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextWrapping="NoWrap" Background="#0E171E" BorderThickness="0" Foreground="#F2EAD3" FontFamily="Consolas"/>
@@ -950,6 +1222,7 @@
                 </Border>
             </Grid>
         </Grid>
+    </Grid>
     </Grid>
 </Window>
 

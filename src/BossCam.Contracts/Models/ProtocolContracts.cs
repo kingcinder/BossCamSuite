@@ -81,6 +81,81 @@ public sealed record PlaybackSourceDescriptor
     public Dictionary<string, string> Metadata { get; init; } = [];
 }
 
+public enum NvrStreamMode
+{
+    Live,
+    Playback
+}
+
+public enum NvrStreamStatus
+{
+    Empty,
+    Resolving,
+    Starting,
+    Running,
+    Stopped,
+    Failed
+}
+
+public sealed record NvrTileStream
+{
+    public int TileId { get; init; }
+    public Guid? DeviceId { get; init; }
+    public NvrStreamMode Mode { get; init; } = NvrStreamMode.Live;
+    public string Source { get; init; } = string.Empty;
+    public DateTimeOffset? BeginTime { get; init; }
+    public DateTimeOffset? EndTime { get; init; }
+    public NvrStreamStatus Status { get; init; } = NvrStreamStatus.Empty;
+    public string? Message { get; init; }
+}
+
+public sealed record NvrTileLayoutSlot
+{
+    public int TileId { get; init; }
+    public int Row { get; init; }
+    public int Column { get; init; }
+    public int RowSpan { get; init; } = 1;
+    public int ColumnSpan { get; init; } = 1;
+}
+
+public static class NvrLayoutCatalog
+{
+    public static IReadOnlyList<int> SupportedLayouts { get; } = [1, 3, 4, 5, 6, 9];
+
+    public static IReadOnlyList<NvrTileLayoutSlot> GetSlots(int layout)
+        => layout switch
+        {
+            1 => [Slot(0, 0, 0, 1, 1)],
+            3 => [Slot(0, 0, 0, 2, 2), Slot(1, 0, 2), Slot(2, 1, 2)],
+            4 => [Slot(0, 0, 0), Slot(1, 0, 1), Slot(2, 1, 0), Slot(3, 1, 1)],
+            5 => [Slot(0, 0, 0, 2, 2), Slot(1, 0, 2), Slot(2, 1, 2), Slot(3, 2, 0), Slot(4, 2, 1)],
+            6 => [Slot(0, 0, 0), Slot(1, 0, 1), Slot(2, 0, 2), Slot(3, 1, 0), Slot(4, 1, 1), Slot(5, 1, 2)],
+            9 => [Slot(0, 0, 0), Slot(1, 0, 1), Slot(2, 0, 2), Slot(3, 1, 0), Slot(4, 1, 1), Slot(5, 1, 2), Slot(6, 2, 0), Slot(7, 2, 1), Slot(8, 2, 2)],
+            _ => throw new ArgumentOutOfRangeException(nameof(layout), $"Unsupported NVR layout '{layout}'.")
+        };
+
+    public static (int Rows, int Columns) GetGridSize(int layout)
+        => layout switch
+        {
+            1 => (1, 1),
+            3 => (2, 3),
+            4 => (2, 2),
+            5 or 9 => (3, 3),
+            6 => (2, 3),
+            _ => throw new ArgumentOutOfRangeException(nameof(layout), $"Unsupported NVR layout '{layout}'.")
+        };
+
+    private static NvrTileLayoutSlot Slot(int tileId, int row, int column, int rowSpan = 1, int columnSpan = 1)
+        => new()
+        {
+            TileId = tileId,
+            Row = row,
+            Column = column,
+            RowSpan = rowSpan,
+            ColumnSpan = columnSpan
+        };
+}
+
 public sealed record PreviewSession
 {
     public Guid DeviceId { get; init; }

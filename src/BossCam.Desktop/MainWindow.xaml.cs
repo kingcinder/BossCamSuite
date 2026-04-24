@@ -1227,6 +1227,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         InitializeComponent();
         DataContext = this;
+        InitializeNvr();
+        Closing += (_, _) => ShutdownNvr();
         _toastTimer.Tick += (_, _) =>
         {
             _toastTimer.Stop();

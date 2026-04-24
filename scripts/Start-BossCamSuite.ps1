@@ -61,6 +61,10 @@ try {
 
     $serviceProc = $null
     if (-not $SkipService) {
+        if (Wait-ForHealth -Url $HealthUrl -TimeoutSeconds 2) {
+            Write-Host "Service already healthy at $HealthUrl (using existing instance)."
+        }
+        else {
         $serviceOutLog = Join-Path $runtimeDir "service-$stamp.out.log"
         $serviceErrLog = Join-Path $runtimeDir "service-$stamp.err.log"
         Write-Host "Starting service..."
@@ -75,6 +79,7 @@ try {
             throw "Service did not become healthy within $HealthTimeoutSeconds seconds. Check logs: $serviceOutLog and $serviceErrLog"
         }
         Write-Host "Service healthy (PID $($serviceProc.Id)). Logs: $serviceOutLog ; $serviceErrLog"
+        }
     }
 
     if ($RunProbe) {
@@ -95,6 +100,14 @@ try {
             $desktopArgs += "--no-build"
         }
         $desktopProc = Start-Process -FilePath "dotnet" -ArgumentList $desktopArgs -WorkingDirectory $repoRoot -PassThru -RedirectStandardOutput $desktopOutLog -RedirectStandardError $desktopErrLog
+        Start-Sleep -Seconds 2
+        if ($desktopProc.HasExited) {
+            $desktopErrorTail = ""
+            if (Test-Path $desktopErrLog) {
+                $desktopErrorTail = (Get-Content $desktopErrLog -Tail 40 -ErrorAction SilentlyContinue) -join [Environment]::NewLine
+            }
+            throw "Desktop failed to stay running. Check logs: $desktopOutLog ; $desktopErrLog`n$desktopErrorTail"
+        }
         Write-Host "Desktop started (PID $($desktopProc.Id)). Logs: $desktopOutLog ; $desktopErrLog"
     }
 
