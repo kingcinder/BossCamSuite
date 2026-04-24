@@ -167,6 +167,9 @@ public sealed class TypedSettingsService(
 
         var fields = await store.GetNormalizedSettingFieldsAsync(deviceId, cancellationToken);
         var contracts = await contractCatalog.GetContractsForDeviceAsync(device, cancellationToken);
+        var groupedResults = (await store.GetGroupedRetestResultsAsync(deviceId, 1000, cancellationToken))
+            .GroupBy(static result => result.FieldKey, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(static group => group.Key, static group => group.OrderByDescending(result => result.CapturedAt).First(), StringComparer.OrdinalIgnoreCase);
         var latestFields = fields
             .GroupBy(field => field.FieldKey, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(static group => group.Key, static group => group.OrderByDescending(field => field.CapturedAt).First(), StringComparer.OrdinalIgnoreCase);
@@ -182,15 +185,15 @@ public sealed class TypedSettingsService(
                 continue;
             }
 
-            if (!expertOverride && (!field.WriteVerified || field.SupportState != ContractSupportState.Supported || field.Validity == FieldValidityState.Invalid))
+            if (!expertOverride && !IsOperatorWritable(field, groupedResults.GetValueOrDefault(change.FieldKey)))
             {
                 blocked.Add(new WriteResult
                 {
                     Success = false,
-                    Message = $"Field '{change.FieldKey}' blocked: write is not proven and supported.",
+                    Message = $"Field '{change.FieldKey}' blocked: write is not proven, grouped-tested writable, and supported.",
                     SemanticStatus = SemanticWriteStatus.ContractViolation,
                     ContractKey = field.ContractKey,
-                    ContractViolations = ["Write verification missing or field unsupported"]
+                    ContractViolations = ["Write verification missing, grouped retest missing, or field unsupported"]
                 });
                 continue;
             }
@@ -371,6 +374,23 @@ public sealed class TypedSettingsService(
         }
 
         return writes;
+    }
+
+    private static bool IsOperatorWritable(NormalizedSettingField field, GroupedUnsupportedRetestResult? grouped)
+    {
+        if (field.Validity == FieldValidityState.Invalid || field.ExpertOnly)
+        {
+            return false;
+        }
+
+        if (field.WriteVerified && field.SupportState == ContractSupportState.Supported)
+        {
+            return true;
+        }
+
+        return grouped?.Classification is ForcedFieldClassification.Writable
+            or ForcedFieldClassification.WritableNeedsCommitTrigger
+            or ForcedFieldClassification.DelayedApply;
     }
 
     public async Task<IReadOnlyCollection<PersistenceEligibleField>> GetPersistenceEligibleFieldsAsync(Guid deviceId, CancellationToken cancellationToken)

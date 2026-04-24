@@ -63,6 +63,32 @@
             <Setter Property="BorderBrush" Value="#55FF5A1F"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="8,5"/>
+            <Style.Triggers>
+                <Trigger Property="IsReadOnly" Value="True">
+                    <Setter Property="Background" Value="#99111316"/>
+                    <Setter Property="Foreground" Value="#FFF3E4D6"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Background" Value="#80202226"/>
+                    <Setter Property="Foreground" Value="#FFB9AEA5"/>
+                    <Setter Property="BorderBrush" Value="#554A4A4A"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style TargetType="PasswordBox">
+            <Setter Property="Foreground" Value="#FFFFF5EE"/>
+            <Setter Property="Background" Value="#B30B090B"/>
+            <Setter Property="BorderBrush" Value="#55FF5A1F"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,5"/>
+            <Style.Triggers>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Background" Value="#80202226"/>
+                    <Setter Property="Foreground" Value="#FFB9AEA5"/>
+                    <Setter Property="BorderBrush" Value="#554A4A4A"/>
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
         <Style TargetType="ComboBox">
@@ -71,6 +97,32 @@
             <Setter Property="BorderBrush" Value="#55FF5A1F"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="6,4"/>
+            <Setter Property="ItemContainerStyle">
+                <Setter.Value>
+                    <Style TargetType="ComboBoxItem">
+                        <Setter Property="Foreground" Value="#FFFFF5EE"/>
+                        <Setter Property="Background" Value="#FF121518"/>
+                        <Setter Property="Padding" Value="6,4"/>
+                        <Style.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter Property="Background" Value="#AA5A1F0F"/>
+                                <Setter Property="Foreground" Value="#FFFFFFFF"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Foreground" Value="#FFB9AEA5"/>
+                                <Setter Property="Background" Value="#80202226"/>
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Background" Value="#80202226"/>
+                    <Setter Property="Foreground" Value="#FFB9AEA5"/>
+                    <Setter Property="BorderBrush" Value="#554A4A4A"/>
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
         <Style TargetType="DatePicker">
@@ -78,6 +130,41 @@
             <Setter Property="Background" Value="#B30B090B"/>
             <Setter Property="BorderBrush" Value="#55FF5A1F"/>
             <Setter Property="BorderThickness" Value="1"/>
+            <Style.Triggers>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Background" Value="#80202226"/>
+                    <Setter Property="Foreground" Value="#FFB9AEA5"/>
+                    <Setter Property="BorderBrush" Value="#554A4A4A"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style TargetType="{x:Type DatePickerTextBox}">
+            <Setter Property="Foreground" Value="#FFFFF5EE"/>
+            <Setter Property="Background" Value="#B30B090B"/>
+        </Style>
+
+        <Style TargetType="Calendar">
+            <Setter Property="Background" Value="#FF121518"/>
+            <Setter Property="Foreground" Value="#FFFFF5EE"/>
+        </Style>
+
+        <Style TargetType="CheckBox">
+            <Setter Property="Foreground" Value="#FFFFF5EE"/>
+            <Style.Triggers>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Foreground" Value="#FFB9AEA5"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style TargetType="Slider">
+            <Setter Property="Foreground" Value="#FFFFA33E"/>
+            <Style.Triggers>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.6"/>
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
         <Style TargetType="ListBox">
@@ -112,6 +199,7 @@
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter TargetName="ItemBorder" Property="Background" Value="#AA3B120B"/>
                                 <Setter TargetName="ItemBorder" Property="BorderBrush" Value="#FFFF6A1F"/>
+                                <Setter Property="Foreground" Value="#FFFFFFFF"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -130,6 +218,16 @@
             <Setter Property="BorderBrush" Value="#33FF5A1F"/>
             <Setter Property="Padding" Value="16,8"/>
             <Setter Property="Margin" Value="0,0,6,0"/>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Foreground" Value="#FFFFF5EE"/>
+                    <Setter Property="Background" Value="#AA3B120B"/>
+                    <Setter Property="BorderBrush" Value="#FFFF6A1F"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Foreground" Value="#FF9E9089"/>
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
         <Style TargetType="GroupBox">
@@ -150,6 +248,36 @@
             <Setter Property="RowBackground" Value="#22000000"/>
             <Setter Property="AlternatingRowBackground" Value="#33100606"/>
             <Setter Property="HeadersVisibility" Value="Column"/>
+        </Style>
+
+        <Style TargetType="DataGridColumnHeader">
+            <Setter Property="Foreground" Value="#FFFFF5EE"/>
+            <Setter Property="Background" Value="#AA240E0A"/>
+            <Setter Property="BorderBrush" Value="#55FF5A1F"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+        </Style>
+
+        <Style TargetType="DataGridRow">
+            <Setter Property="Foreground" Value="#FFFFF5EE"/>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="#AA5A1F0F"/>
+                    <Setter Property="Foreground" Value="#FFFFFFFF"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Foreground" Value="#FFB9AEA5"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style TargetType="DataGridCell">
+            <Setter Property="Foreground" Value="#FFFFF5EE"/>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="#AA5A1F0F"/>
+                    <Setter Property="Foreground" Value="#FFFFFFFF"/>
+                </Trigger>
+            </Style.Triggers>
         </Style>
     </Window.Resources>
     <Grid>
@@ -215,8 +343,8 @@
                     <StackPanel>
                         <TextBlock Text="{Binding SelectedDevice.DisplayName, TargetNullValue=No camera selected}" FontSize="24" FontWeight="Bold" Foreground="#FFFFE8DD"/>
                         <TextBlock Text="{Binding SelectedDevice.IpAddress, StringFormat=IP: {0}, TargetNullValue=IP: -}" Foreground="{StaticResource ThemeTextMutedBrush}"/>
-                        <TextBlock Text="{Binding SelectedDevice.FirmwareVersion, StringFormat=Firmware: {0}, TargetNullValue=Firmware: -}" Foreground="{StaticResource ThemeTextMutedBrush}"/>
-                        <TextBlock Text="{Binding SelectedDevice.HardwareModel, StringFormat=Model: {0}, TargetNullValue=Model: -}" Foreground="{StaticResource ThemeTextMutedBrush}"/>
+                        <TextBlock Text="{Binding SelectedDeviceFirmwareText, StringFormat=Firmware: {0}}" Foreground="{StaticResource ThemeTextMutedBrush}"/>
+                        <TextBlock Text="{Binding SelectedDeviceModelText, StringFormat=Model: {0}}" Foreground="{StaticResource ThemeTextMutedBrush}"/>
                         <WrapPanel Margin="0,8,0,0">
                             <TextBlock Text="{Binding DirtyStateText}" FontWeight="SemiBold" Margin="0,0,18,0" Foreground="#FFFFA34D"/>
                             <TextBlock Text="{Binding LastSyncText}" Foreground="#D5DEE7"/>
@@ -259,7 +387,7 @@
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="Model" Foreground="#CFD7DE"/>
-                                    <TextBox Grid.Column="1" Text="{Binding SelectedDevice.HardwareModel, Mode=OneWay}" IsReadOnly="True"/>
+                                    <TextBox Grid.Column="1" Text="{Binding SelectedDeviceModelText, Mode=OneWay}" IsReadOnly="True"/>
                                 </Grid>
                                 <Grid Margin="0,0,0,8">
                                     <Grid.ColumnDefinitions>
@@ -267,7 +395,7 @@
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="Firmware" Foreground="#CFD7DE"/>
-                                    <TextBox Grid.Column="1" Text="{Binding SelectedDevice.FirmwareVersion, Mode=OneWay}" IsReadOnly="True"/>
+                                    <TextBox Grid.Column="1" Text="{Binding SelectedDeviceFirmwareText, Mode=OneWay}" IsReadOnly="True"/>
                                 </Grid>
                                 <Grid Margin="0,0,0,8" Visibility="{Binding CameraSerialVisibility}">
                                     <Grid.ColumnDefinitions>
@@ -564,6 +692,9 @@
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0">
+                                        <Border Padding="12" Margin="0,0,0,12" CornerRadius="10" Background="#20313E">
+                                            <TextBlock Foreground="#FFF3D7C7" Text="{Binding NetworkOperatorStatus}" TextWrapping="Wrap"/>
+                                        </Border>
                                         <Border Padding="12" Margin="0,0,0,12" CornerRadius="10" Background="#20313E">
                                             <StackPanel>
                                                 <TextBlock Text="Connection" FontSize="16" FontWeight="SemiBold"/>
@@ -876,6 +1007,22 @@
                                 <StackPanel Margin="8">
                                     <TextBlock Text="Recording" FontWeight="SemiBold" Margin="0,0,0,8"/>
                                     <TextBlock Margin="0,0,0,10" Foreground="#C4D4E5" Text="Operator recording controls stay separate from playback/export workflows so disruptive actions are explicit." TextWrapping="Wrap"/>
+                                    <TextBlock Text="Storage Locations" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                    <WrapPanel Margin="0,0,0,8">
+                                        <TextBlock Width="170" Text="Video Recording Folder" VerticalAlignment="Center"/>
+                                        <TextBox Width="520" Margin="0,0,8,0" Text="{Binding VideoRecordingStoragePath, Mode=OneWay}" IsReadOnly="True"/>
+                                        <Button Width="120" Click="BrowseVideoRecordingStorage_Click">Browse</Button>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,8">
+                                        <TextBlock Width="170" Text="Audio Recording Folder" VerticalAlignment="Center"/>
+                                        <TextBox Width="520" Margin="0,0,8,0" Text="{Binding AudioRecordingStoragePath, Mode=OneWay}" IsReadOnly="True"/>
+                                        <Button Width="120" Click="BrowseAudioRecordingStorage_Click">Browse</Button>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,0,0,12">
+                                        <TextBlock Width="170" Text="Screenshot Still Folder" VerticalAlignment="Center"/>
+                                        <TextBox Width="520" Margin="0,0,8,0" Text="{Binding ScreenshotStoragePath, Mode=OneWay}" IsReadOnly="True"/>
+                                        <Button Width="120" Click="BrowseScreenshotStorage_Click">Browse</Button>
+                                    </WrapPanel>
                                     <WrapPanel Margin="0,0,0,8">
                                         <Button Width="170" Margin="0,0,8,8" Click="StartRecording_Click">Start Recording</Button>
                                         <Button Width="170" Margin="0,0,8,8" Click="StopRecording_Click">Stop Recording</Button>

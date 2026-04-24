@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Text;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -17,9 +18,15 @@ public sealed class NvrFrameDecodeSession : IDisposable
     private readonly WriteableBitmap _target;
     private readonly DispatcherTimer _renderTimer;
     private readonly object _frameLock = new();
+    private readonly StringBuilder _stderrTail = new();
+
     private byte[]? _latestFrame;
     private CancellationTokenSource? _cts;
     private Process? _process;
+    private TaskCompletionSource<bool>? _firstFrameTcs;
+    private int _framesDecoded;
+    private DateTimeOffset? _lastFrameTimestamp;
+    private int? _exitCode;
 
     public NvrFrameDecodeSession(WriteableBitmap target)
     {
@@ -31,15 +38,32 @@ public sealed class NvrFrameDecodeSession : IDisposable
         _renderTimer.Tick += (_, _) => RenderLatestFrame();
     }
 
+    public string Source { get; private set; } = string.Empty;
+    public string FfmpegArguments { get; private set; } = string.Empty;
+    public int FramesDecoded => _framesDecoded;
+    public DateTimeOffset? LastFrameTimestamp => _lastFrameTimestamp;
+    public int? ExitCode => _exitCode;
+    public string StderrTail => _stderrTail.ToString();
+
     public async Task StartAsync(string source, CancellationToken cancellationToken)
     {
         Stop();
+        ResetState(source);
+        Source = source;
         var ffmpegPath = ResolveFfmpegPath() ?? throw new InvalidOperationException("ffmpeg not found. Set BOSSCAM_FFMPEG_PATH or add ffmpeg.exe to PATH.");
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _firstFrameTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var process = new Process
         {
             StartInfo = BuildStartInfo(ffmpegPath, source),
             EnableRaisingEvents = true
+        };
+        FfmpegArguments = string.Join(" ", process.StartInfo.ArgumentList.Select(QuoteIfNeeded));
+
+        process.Exited += (_, _) =>
+        {
+            _exitCode = SafeGetExitCode(process);
+            _firstFrameTcs?.TrySetResult(_framesDecoded > 0);
         };
 
         if (!process.Start())
@@ -49,8 +73,18 @@ public sealed class NvrFrameDecodeSession : IDisposable
 
         _process = process;
         _renderTimer.Start();
+        _ = Task.Run(() => PumpStandardErrorAsync(process, _cts.Token), CancellationToken.None);
         _ = Task.Run(() => ReadFramesAsync(process, _cts.Token), CancellationToken.None);
-        await Task.CompletedTask;
+
+        var started = await WaitForFirstFrameAsync(_cts.Token);
+        if (!started)
+        {
+            var failure = _exitCode is null
+                ? BuildFailureMessage("No frames received during startup.")
+                : BuildFailureMessage("FFmpeg exited before the first frame.");
+            Stop();
+            throw new InvalidOperationException(failure);
+        }
     }
 
     public void Stop()
@@ -82,6 +116,9 @@ public sealed class NvrFrameDecodeSession : IDisposable
         }
     }
 
+    public string BuildDiagnostics()
+        => $"source={Source}{Environment.NewLine}args={FfmpegArguments}{Environment.NewLine}frames={FramesDecoded}{Environment.NewLine}lastFrame={(LastFrameTimestamp?.ToString("O") ?? "none")}{Environment.NewLine}exitCode={(ExitCode?.ToString() ?? "running")}{Environment.NewLine}stderr={StderrTail}";
+
     public void Dispose() => Stop();
 
     private static ProcessStartInfo BuildStartInfo(string ffmpegPath, string source)
@@ -98,6 +135,8 @@ public sealed class NvrFrameDecodeSession : IDisposable
         info.ArgumentList.Add("-hide_banner");
         info.ArgumentList.Add("-loglevel");
         info.ArgumentList.Add("error");
+        info.ArgumentList.Add("-rw_timeout");
+        info.ArgumentList.Add("5000000");
         if (source.StartsWith("rtsp://", StringComparison.OrdinalIgnoreCase))
         {
             info.ArgumentList.Add("-rtsp_transport");
@@ -117,27 +156,76 @@ public sealed class NvrFrameDecodeSession : IDisposable
         return info;
     }
 
-    private async Task ReadFramesAsync(Process process, CancellationToken cancellationToken)
+    private async Task<bool> WaitForFirstFrameAsync(CancellationToken cancellationToken)
     {
-        _ = Task.Run(async () =>
+        var firstFrame = _firstFrameTcs ?? throw new InvalidOperationException("Decode session startup state was not initialized.");
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(6));
+        try
         {
-            try { await process.StandardError.ReadToEndAsync(cancellationToken); } catch { }
-        }, CancellationToken.None);
-
-        var stream = process.StandardOutput.BaseStream;
-        while (!cancellationToken.IsCancellationRequested && !process.HasExited)
+            using var registration = timeout.Token.Register(() => firstFrame.TrySetResult(false));
+            return await firstFrame.Task.WaitAsync(timeout.Token);
+        }
+        catch (OperationCanceledException)
         {
-            var frame = new byte[FrameBytes];
-            if (!await ReadExactAsync(stream, frame, cancellationToken))
-            {
-                break;
-            }
+            return false;
+        }
+    }
 
-            lock (_frameLock)
+    private async Task PumpStandardErrorAsync(Process process, CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
             {
-                _latestFrame = frame;
+                var line = await process.StandardError.ReadLineAsync(cancellationToken);
+                if (line is null)
+                {
+                    break;
+                }
+
+                AppendStderrLine(line);
             }
         }
+        catch (OperationCanceledException)
+        {
+        }
+        catch
+        {
+        }
+    }
+
+    private async Task ReadFramesAsync(Process process, CancellationToken cancellationToken)
+    {
+        var stream = process.StandardOutput.BaseStream;
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested && !process.HasExited)
+            {
+                var frame = new byte[FrameBytes];
+                if (!await ReadExactAsync(stream, frame, cancellationToken))
+                {
+                    break;
+                }
+
+                lock (_frameLock)
+                {
+                    _latestFrame = frame;
+                }
+
+                Interlocked.Increment(ref _framesDecoded);
+                _lastFrameTimestamp = DateTimeOffset.Now;
+                _firstFrameTcs?.TrySetResult(true);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch
+        {
+        }
+
+        _firstFrameTcs?.TrySetResult(_framesDecoded > 0);
     }
 
     private static async Task<bool> ReadExactAsync(Stream stream, byte[] buffer, CancellationToken cancellationToken)
@@ -178,6 +266,63 @@ public sealed class NvrFrameDecodeSession : IDisposable
             0);
     }
 
+    private void AppendStderrLine(string line)
+    {
+        lock (_stderrTail)
+        {
+            if (_stderrTail.Length > 0)
+            {
+                _stderrTail.Append(" | ");
+            }
+
+            _stderrTail.Append(line.Trim());
+            if (_stderrTail.Length > 900)
+            {
+                _stderrTail.Remove(0, _stderrTail.Length - 900);
+            }
+        }
+    }
+
+    private string BuildFailureMessage(string prefix)
+    {
+        var exitText = ExitCode is null ? "running" : ExitCode.Value.ToString();
+        return $"{prefix} source={Source}; exitCode={exitText}; frames={FramesDecoded}; stderr={StderrTail}";
+    }
+
+    private void ResetState(string source)
+    {
+        Source = source;
+        FfmpegArguments = string.Empty;
+        _framesDecoded = 0;
+        _lastFrameTimestamp = null;
+        _exitCode = null;
+        _firstFrameTcs = null;
+        lock (_frameLock)
+        {
+            _latestFrame = null;
+        }
+
+        lock (_stderrTail)
+        {
+            _stderrTail.Clear();
+        }
+    }
+
+    private static int? SafeGetExitCode(Process process)
+    {
+        try
+        {
+            return process.ExitCode;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string QuoteIfNeeded(string argument)
+        => argument.Contains(' ', StringComparison.Ordinal) ? $"\"{argument}\"" : argument;
+
     private static string? ResolveFfmpegPath()
     {
         var configured = Environment.GetEnvironmentVariable("BOSSCAM_FFMPEG_PATH");
@@ -206,7 +351,7 @@ public sealed class NvrTileViewModel : System.ComponentModel.INotifyPropertyChan
     private NvrStreamMode _mode = NvrStreamMode.Live;
     private NvrStreamStatus _status = NvrStreamStatus.Empty;
     private string _source = string.Empty;
-    private string _message = "Empty tile";
+    private string _message = "No camera selected.";
     private bool _isSelected;
 
     public NvrTileViewModel(int tileId)
@@ -309,7 +454,7 @@ public sealed class NvrTileViewModel : System.ComponentModel.INotifyPropertyChan
         Session?.Dispose();
         Session = null;
         Status = Device is null ? NvrStreamStatus.Empty : NvrStreamStatus.Stopped;
-        Message = Device is null ? "Empty tile" : "Stopped";
+        Message = Device is null ? "No camera selected." : "Stopped";
         Source = string.Empty;
     }
 

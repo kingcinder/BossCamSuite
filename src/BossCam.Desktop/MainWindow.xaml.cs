@@ -12,6 +12,8 @@ using System.Windows.Controls;
 using System.Windows.Threading;
 using BossCam.Contracts;
 using Microsoft.Win32;
+using MessageBox = System.Windows.MessageBox;
+using OpenFileDialog = Microsoft.Win32.OpenFileDialog;
 
 namespace BossCam.Desktop;
 
@@ -91,6 +93,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private readonly HttpClient _httpClient = new() { BaseAddress = new Uri("http://127.0.0.1:5317") };
     private readonly Dictionary<string, TypedFieldRow> _fieldByKey = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, EditorHint> _editorHintByKey = new(StringComparer.OrdinalIgnoreCase);
+    private readonly string _operatorStorageSettingsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BossCamSuite", "operator-storage.json");
 
     private DeviceIdentity? _selectedDevice;
     private string _diagnosticsText = "Load store to begin.";
@@ -113,6 +116,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private string _storageFileName = string.Empty;
     private string _storageSavePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "BossCam_Playback_Export.mp4");
     private string _storageHandleId = "0";
+    private string _videoRecordingStoragePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BossCamSuite", "recordings");
+    private string _audioRecordingStoragePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "BossCamSuite", "audio");
+    private string _screenshotStoragePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "BossCamSuite", "stills");
     private string _firmwareTruthBadge = "Truth: unknown";
     private string _imageTruthSummary = "Image truth not loaded.";
     private string _passwordChangeUsername = string.Empty;
@@ -201,6 +207,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             {
                 _selectedDevice = value;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(SelectedDeviceModelText));
+                OnPropertyChanged(nameof(SelectedDeviceFirmwareText));
+                NotifyCompositeProperties();
             }
         }
     }
@@ -346,6 +355,24 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 OnPropertyChanged();
             }
         }
+    }
+
+    public string VideoRecordingStoragePath
+    {
+        get => _videoRecordingStoragePath;
+        set => SetBackingField(ref _videoRecordingStoragePath, value);
+    }
+
+    public string AudioRecordingStoragePath
+    {
+        get => _audioRecordingStoragePath;
+        set => SetBackingField(ref _audioRecordingStoragePath, value);
+    }
+
+    public string ScreenshotStoragePath
+    {
+        get => _screenshotStoragePath;
+        set => SetBackingField(ref _screenshotStoragePath, value);
     }
 
     public EndpointSurfaceRow? SelectedEndpointSurface
@@ -643,6 +670,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     public string CurrentControlUrl => string.IsNullOrWhiteSpace(SelectedDevice?.IpAddress) ? string.Empty : BuildUrlFromIpPort(SelectedDevice.IpAddress, NetworkPort);
     public string PredictedControlUrl => BuildUrlFromIpPort(NetworkIp, NetworkPort);
+    public string SelectedDeviceModelText => FirstNonEmpty(SelectedDevice?.HardwareModel, GetSelectedMetadata("Device-Model"), GetSelectedMetadata("model"), "-");
+    public string SelectedDeviceFirmwareText => FirstNonEmpty(SelectedDevice?.FirmwareVersion, GetSelectedMetadata("Software-Version"), GetSelectedMetadata("firmwareVersion"), "-");
     public Visibility NetworkStaticConfigVisibility => CompositeInteractionRules.IsStaticNetworkConfigurationVisible(NetworkDhcpMode) ? Visibility.Visible : Visibility.Collapsed;
     public Visibility WirelessApConfigVisibility => CompositeInteractionRules.IsWirelessApConfigurationVisible(WirelessMode, WirelessApMode) ? Visibility.Visible : Visibility.Collapsed;
     public Visibility MotionCompositeVisibility => CompositeInteractionRules.IsMotionConfigurationVisible(MotionEnabled) ? Visibility.Visible : Visibility.Collapsed;
@@ -661,6 +690,26 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public string NetworkCompositeSummary => NetworkDhcpMode
         ? "DHCP controls addressing. Static address fields are withheld until DHCP is turned off."
         : $"Static path active. Predicted control URL after save: {PredictedControlUrl}";
+    public string NetworkOperatorStatus
+    {
+        get
+        {
+            var coreVisible = NetworkDhcpModeVisibility == Visibility.Visible || NetworkIpVisibility == Visibility.Visible || NetworkPortVisibility == Visibility.Visible;
+            var anyCoreEditable = CanEditNetworkDhcpMode || CanEditNetworkIp || CanEditNetworkNetmask || CanEditNetworkGateway || CanEditNetworkDns || CanEditNetworkPort;
+            var alternateVisible = WirelessModeVisibility == Visibility.Visible || NetworkEseeVisibility == Visibility.Visible || NetworkNtpEnabledVisibility == Visibility.Visible;
+            if (!coreVisible && alternateVisible)
+            {
+                return "Primary network interface controls are not exposed by the current firmware evidence. Use the wireless and cloud controls that remain available, and rely on the current URL panel for recovery.";
+            }
+
+            if (coreVisible && !anyCoreEditable)
+            {
+                return "Primary network fields are readable but blocked for writes on this firmware. If a save is rejected, the exact request error is surfaced in Raw JSON instead of leaving the tab silent.";
+            }
+
+            return "Network controls are loaded for the active device. Current and predicted URLs stay visible during edits.";
+        }
+    }
     public string WirelessCompositeSummary => CompositeInteractionRules.IsWirelessApConfigurationVisible(WirelessMode, WirelessApMode)
         ? string.IsNullOrWhiteSpace(_wirelessApPsk) || string.IsNullOrWhiteSpace(WirelessApSsid)
             ? "Access-point mode requires SSID and PSK before save."
@@ -1227,6 +1276,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         InitializeComponent();
         DataContext = this;
+        LoadOperatorStorageSettings();
         InitializeNvr();
         Closing += (_, _) => ShutdownNvr();
         _toastTimer.Tick += (_, _) =>
@@ -1303,6 +1353,42 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
     }
 
+    private async Task LoadSelectedDeviceStateAsync()
+    {
+        if (SelectedDevice is null)
+        {
+            return;
+        }
+
+        await LoadTypedAsync();
+        await LoadValidationAsync();
+        await LoadTranscriptsAsync();
+        await LoadRecordingStorageForSelectedDeviceAsync();
+    }
+
+    private DeviceIdentity? ChoosePreferredDevice(IReadOnlyCollection<DeviceIdentity> devices)
+    {
+        if (devices.Count == 0)
+        {
+            return null;
+        }
+
+        if (_selectedDevice is not null)
+        {
+            var match = devices.FirstOrDefault(device => device.Id == _selectedDevice.Id);
+            if (match is not null)
+            {
+                return match;
+            }
+        }
+
+        return devices
+            .OrderByDescending(static device => string.Equals(device.DisplayName, "5523-W", StringComparison.OrdinalIgnoreCase))
+            .ThenByDescending(static device => string.Equals(device.DeviceType, "IPC", StringComparison.OrdinalIgnoreCase))
+            .ThenByDescending(static device => !string.IsNullOrWhiteSpace(device.IpAddress))
+            .FirstOrDefault();
+    }
+
     private async Task RefreshSelectedAsync()
     {
         if (SelectedDevice is null)
@@ -1311,9 +1397,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             return;
         }
 
-        await LoadTypedAsync();
-        await LoadValidationAsync();
-        await LoadTranscriptsAsync();
+        await LoadSelectedDeviceStateAsync();
         ShowToast("Camera refreshed.", success: true);
     }
 
@@ -1356,7 +1440,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         var devices = await GetAsync<List<DeviceIdentity>>("/api/devices") ?? [];
         ReplaceCollection(Devices, devices);
+        SelectedDevice = ChoosePreferredDevice(devices);
         DiagnosticsText = JsonSerializer.Serialize(devices, SerializerOptions);
+        if (SelectedDevice is not null)
+        {
+            await LoadSelectedDeviceStateAsync();
+        }
         ShowToast($"Loaded {devices.Count} camera(s).", success: true);
     }
 
@@ -1364,7 +1453,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         var devices = await PostAsync<List<DeviceIdentity>>("/api/devices/discover", null) ?? [];
         ReplaceCollection(Devices, devices);
+        SelectedDevice = ChoosePreferredDevice(devices);
         DiagnosticsText = JsonSerializer.Serialize(devices, SerializerOptions);
+        if (SelectedDevice is not null)
+        {
+            await LoadSelectedDeviceStateAsync();
+        }
         ShowToast($"Discovery found {devices.Count} camera(s).", success: true);
     }
 
@@ -2053,13 +2147,14 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             return;
         }
 
+        var attemptedValues = _fieldByKey.Values
+            .Where(field => !string.Equals(field.EditableValue, field.OriginalValue, StringComparison.Ordinal))
+            .ToDictionary(field => field.FieldKey, field => field.EditableValue, StringComparer.OrdinalIgnoreCase);
         var changes = _fieldByKey.Values
             .Where(field => !string.Equals(field.EditableValue, field.OriginalValue, StringComparison.Ordinal))
             .Where(field => expertOverride
                 ? field.SupportState != nameof(ContractSupportState.Unsupported)
-                : field.WriteVerified
-                    && field.SupportState == nameof(ContractSupportState.Supported)
-                    && !field.ExpertOnly)
+                : IsOperatorWritableField(field))
             .Select(field => new TypedFieldChange(field.FieldKey, ParseNode(field.EditableValue)))
             .ToList();
 
@@ -2114,11 +2209,27 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                     motionGridResult.ContractViolations
                 }
             }), SerializerOptions);
+        var fieldOutcomes = BuildFieldApplyOutcomes(applied, changes.Select(static change => change.FieldKey));
+        var failedFields = fieldOutcomes.Where(static item => !item.Value).Select(static item => item.Key).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var successfulFields = fieldOutcomes.Where(static item => item.Value).Select(static item => item.Key).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         var overallSuccess = applied.All(result => result.Success) && (motionGridResult?.Success ?? true);
-        ShowToast(overallSuccess ? "Changes saved." : "Some changes failed to apply.", success: overallSuccess);
+        ShowToast(
+            changes.Count == 0 && _motionGridDirty
+                ? (overallSuccess ? "Grid changes saved." : "Grid save failed.")
+                : overallSuccess
+                    ? $"Saved: {string.Join(", ", successfulFields.DefaultIfEmpty("no fields"))}"
+                    : $"Failed: {string.Join(", ", failedFields.DefaultIfEmpty("unknown fields"))}",
+            success: overallSuccess);
         await LoadTypedAsync();
         await LoadValidationAsync();
         await LoadSemanticTrustAsync();
+        foreach (var fieldKey in failedFields)
+        {
+            if (attemptedValues.TryGetValue(fieldKey, out var failedValue))
+            {
+                SetValue(fieldKey, failedValue);
+            }
+        }
     }
 
     private void ResetSelectedEndpointPayload()
@@ -2596,11 +2707,158 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         return result;
     }
 
+    private void LoadOperatorStorageSettings()
+    {
+        var settings = OperatorStorageSettings.Load(_operatorStorageSettingsPath);
+        VideoRecordingStoragePath = string.IsNullOrWhiteSpace(settings.VideoRecordingPath) ? VideoRecordingStoragePath : settings.VideoRecordingPath;
+        AudioRecordingStoragePath = string.IsNullOrWhiteSpace(settings.AudioRecordingPath) ? AudioRecordingStoragePath : settings.AudioRecordingPath;
+        ScreenshotStoragePath = string.IsNullOrWhiteSpace(settings.ScreenshotStoragePath) ? ScreenshotStoragePath : settings.ScreenshotStoragePath;
+    }
+
+    private void SaveOperatorStorageSettings()
+    {
+        new OperatorStorageSettings
+        {
+            VideoRecordingPath = VideoRecordingStoragePath,
+            AudioRecordingPath = AudioRecordingStoragePath,
+            ScreenshotStoragePath = ScreenshotStoragePath
+        }.Save(_operatorStorageSettingsPath);
+    }
+
+    private void BrowseVideoRecordingStorage_Click(object sender, RoutedEventArgs e) => BrowseStorageFolder(
+        "Choose video recording folder",
+        VideoRecordingStoragePath,
+        path => VideoRecordingStoragePath = path,
+        "Video recording folder saved.");
+
+    private void BrowseAudioRecordingStorage_Click(object sender, RoutedEventArgs e) => BrowseStorageFolder(
+        "Choose optional audio recording folder",
+        AudioRecordingStoragePath,
+        path => AudioRecordingStoragePath = path,
+        "Audio recording folder saved.");
+
+    private void BrowseScreenshotStorage_Click(object sender, RoutedEventArgs e) => BrowseStorageFolder(
+        "Choose screenshot still folder",
+        ScreenshotStoragePath,
+        path => ScreenshotStoragePath = path,
+        "Screenshot folder saved.");
+
+    private void BrowseStorageFolder(string description, string currentPath, Action<string> apply, string successMessage)
+    {
+        using var dialog = new System.Windows.Forms.FolderBrowserDialog
+        {
+            Description = description,
+            UseDescriptionForTitle = true,
+            InitialDirectory = Directory.Exists(currentPath) ? currentPath : Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+            ShowNewFolderButton = true
+        };
+        if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK || string.IsNullOrWhiteSpace(dialog.SelectedPath))
+        {
+            return;
+        }
+
+        var selected = Path.GetFullPath(dialog.SelectedPath);
+        if (!TryEnsureDirectory(selected, out var error))
+        {
+            DiagnosticsText = error;
+            ShowToast(error, success: false);
+            return;
+        }
+
+        apply(selected);
+        SaveOperatorStorageSettings();
+        ShowToast(successMessage, success: true);
+    }
+
+    private async Task<bool> EnsureRecordingProfileConfiguredAsync()
+    {
+        if (SelectedDevice is null)
+        {
+            RecordingState = "Select a device first.";
+            return false;
+        }
+
+        if (!TryEnsureDirectory(VideoRecordingStoragePath, out var error))
+        {
+            RecordingState = error;
+            DiagnosticsText = error;
+            ShowToast("Recording folder is invalid.", success: false);
+            return false;
+        }
+
+        var profiles = await GetAsync<List<RecordingProfile>>($"/api/recordings?deviceId={SelectedDevice.Id}") ?? [];
+        var current = profiles.OrderBy(profile => profile.Name, StringComparer.OrdinalIgnoreCase).FirstOrDefault();
+        var profile = current is null
+            ? new RecordingProfile
+            {
+                DeviceId = SelectedDevice.Id,
+                Name = "Default",
+                OutputDirectory = VideoRecordingStoragePath,
+                SegmentSeconds = 300,
+                Enabled = true,
+                AutoStart = true
+            }
+            : current with
+            {
+                OutputDirectory = VideoRecordingStoragePath,
+                UpdatedAt = DateTimeOffset.UtcNow
+            };
+        using var response = await _httpClient.PostAsJsonAsync("/api/recordings", new[] { profile }, SerializerOptions);
+        if (!response.IsSuccessStatusCode)
+        {
+            DiagnosticsText = await response.Content.ReadAsStringAsync();
+            ShowToast("Recording folder save failed.", success: false);
+            return false;
+        }
+        return true;
+    }
+
+    private async Task LoadRecordingStorageForSelectedDeviceAsync()
+    {
+        if (SelectedDevice is null)
+        {
+            return;
+        }
+
+        var profiles = await GetAsync<List<RecordingProfile>>($"/api/recordings?deviceId={SelectedDevice.Id}") ?? [];
+        var profile = profiles.OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase).FirstOrDefault();
+        if (profile is not null && !string.IsNullOrWhiteSpace(profile.OutputDirectory))
+        {
+            VideoRecordingStoragePath = profile.OutputDirectory;
+        }
+    }
+
+    private static bool TryEnsureDirectory(string path, out string error)
+    {
+        error = string.Empty;
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            error = "Storage path is empty.";
+            return false;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(Path.GetFullPath(path));
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = $"Storage path '{path}' is invalid: {ex.Message}";
+            return false;
+        }
+    }
+
     private async Task StartRecordingAsync()
     {
         if (SelectedDevice is null)
         {
             RecordingState = "Select a device first.";
+            return;
+        }
+
+        if (!await EnsureRecordingProfileConfiguredAsync())
+        {
             return;
         }
 
@@ -2648,6 +2906,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         if (SelectedDevice is null)
         {
             RecordingState = "Select a device first.";
+            return;
+        }
+
+        if (!await EnsureRecordingProfileConfiguredAsync())
+        {
             return;
         }
 
@@ -2922,6 +3185,67 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
 
         return field.WriteVerified && field.SupportState.Equals(nameof(ContractSupportState.Supported), StringComparison.OrdinalIgnoreCase) && !field.ExpertOnly;
+    }
+
+    private bool IsOperatorWritableField(TypedFieldRow field)
+    {
+        if (field.ExpertOnly)
+        {
+            return false;
+        }
+
+        if (field.WriteVerified && field.SupportState.Equals(nameof(ContractSupportState.Supported), StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return _groupedRetestByField.TryGetValue(field.FieldKey, out var grouped)
+            && grouped.Classification is ForcedFieldClassification.Writable
+                or ForcedFieldClassification.WritableNeedsCommitTrigger
+                or ForcedFieldClassification.DelayedApply;
+    }
+
+    private static Dictionary<string, bool> BuildFieldApplyOutcomes(IEnumerable<WriteResult> results, IEnumerable<string> requestedFields)
+    {
+        var requested = requestedFields.Distinct(StringComparer.OrdinalIgnoreCase).ToDictionary(static field => field, static _ => false, StringComparer.OrdinalIgnoreCase);
+        foreach (var result in results)
+        {
+            if (!result.Success)
+            {
+                if (!string.IsNullOrWhiteSpace(result.ContractKey) && requested.Count == 1)
+                {
+                    requested[requested.Keys.First()] = false;
+                }
+
+                continue;
+            }
+
+            foreach (var token in (result.Message ?? string.Empty).Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                var parts = token.Split(':', 2, StringSplitOptions.TrimEntries);
+                if (parts.Length != 2)
+                {
+                    continue;
+                }
+
+                if (!requested.ContainsKey(parts[0]))
+                {
+                    continue;
+                }
+
+                requested[parts[0]] = parts[1] switch
+                {
+                    nameof(SemanticWriteStatus.AcceptedChanged) => true,
+                    nameof(SemanticWriteStatus.AcceptedClamped) => true,
+                    nameof(SemanticWriteStatus.AcceptedTranslated) => true,
+                    nameof(SemanticWriteStatus.PersistedAfterDelay) => true,
+                    nameof(SemanticWriteStatus.PersistedAfterReboot) => true,
+                    _ => false
+                };
+            }
+        }
+
+        return requested;
     }
 
     private Visibility FieldVisibility(string key, bool requireStaticNetwork = false)
@@ -3300,6 +3624,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         return $"http://{ip}:{port}";
     }
 
+    private string? GetSelectedMetadata(string key)
+        => SelectedDevice?.Metadata.TryGetValue(key, out var value) == true && !string.IsNullOrWhiteSpace(value) ? value : null;
+
+    private static string FirstNonEmpty(params string?[] values)
+        => values.FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
+
     private static string BuildOverlayCompositeSummary(bool nameEnabled, string? nameText, bool dateTimeEnabled, string? dateFormat, string? timeFormat, bool displayWeek)
     {
         var nameSummary = nameEnabled
@@ -3326,6 +3656,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             nameof(OverlayNameEditorVisibility),
             nameof(OverlayDateTimeEditorVisibility),
             nameof(NetworkCompositeSummary),
+            nameof(NetworkOperatorStatus),
             nameof(WirelessCompositeSummary),
             nameof(MotionCompositeSummary),
             nameof(MotionGridSummary),
@@ -3621,9 +3952,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         {
             if (SelectedDevice is not null)
             {
-                await LoadTypedAsync();
-                await LoadValidationAsync();
-                await LoadTranscriptsAsync();
+                await LoadSelectedDeviceStateAsync();
             }
         });
     }

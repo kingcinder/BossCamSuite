@@ -131,7 +131,7 @@ public sealed class SettingsService(
         if (plan.RequireWriteVerification)
         {
             var isWriteVerified = await protocolValidationService.IsEndpointWriteVerifiedAsync(device.Id, adapter.Name, plan.Endpoint, cancellationToken);
-            if (!isWriteVerified)
+            if (!isWriteVerified && !await HasGroupedWritableFallbackAsync(device.Id, plan, cancellationToken))
             {
                 return new WriteResult
                 {
@@ -230,6 +230,21 @@ public sealed class SettingsService(
         }, cancellationToken);
 
         return finalResult;
+    }
+
+    private async Task<bool> HasGroupedWritableFallbackAsync(Guid deviceId, WritePlan plan, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(plan.Endpoint))
+        {
+            return false;
+        }
+
+        var groupedResults = await store.GetGroupedRetestResultsAsync(deviceId, 1000, cancellationToken);
+        return groupedResults.Any(result =>
+            result.SourceEndpoint.Equals(plan.Endpoint, StringComparison.OrdinalIgnoreCase)
+            && result.Classification is ForcedFieldClassification.Writable
+                or ForcedFieldClassification.WritableNeedsCommitTrigger
+                or ForcedFieldClassification.DelayedApply);
     }
 
     public async Task<MaintenanceResult?> ExecuteMaintenanceAsync(Guid deviceId, MaintenanceOperation operation, JsonObject? payload, CancellationToken cancellationToken)

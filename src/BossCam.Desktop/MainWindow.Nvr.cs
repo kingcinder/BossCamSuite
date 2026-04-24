@@ -1,11 +1,16 @@
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Text;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Media;
 using BossCam.Contracts;
+using WpfBinding = System.Windows.Data.Binding;
+using WpfBrushes = System.Windows.Media.Brushes;
+using WpfColor = System.Windows.Media.Color;
+using WpfImage = System.Windows.Controls.Image;
 
 namespace BossCam.Desktop;
 
@@ -214,9 +219,9 @@ public partial class MainWindow
             Margin = new Thickness(4),
             Padding = new Thickness(8),
             CornerRadius = new CornerRadius(10),
-            Background = new SolidColorBrush(Color.FromRgb(5, 10, 15)),
+            Background = new SolidColorBrush(WpfColor.FromRgb(5, 10, 15)),
             BorderThickness = new Thickness(tile.IsSelected ? 3 : 1),
-            BorderBrush = new SolidColorBrush(tile.IsSelected ? Color.FromRgb(255, 210, 122) : Color.FromRgb(57, 75, 91)),
+            BorderBrush = new SolidColorBrush(tile.IsSelected ? WpfColor.FromRgb(255, 210, 122) : WpfColor.FromRgb(57, 75, 91)),
             DataContext = tile
         };
         border.MouseLeftButtonDown += (_, _) => SelectedNvrTile = tile;
@@ -226,17 +231,23 @@ public partial class MainWindow
         grid.RowDefinitions.Add(new RowDefinition());
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-        var title = new TextBlock { Foreground = Brushes.White, FontWeight = FontWeights.SemiBold };
-        title.SetBinding(TextBlock.TextProperty, new Binding(nameof(NvrTileViewModel.Title)));
+        var title = new TextBlock { Foreground = WpfBrushes.White, FontWeight = FontWeights.SemiBold };
+        title.SetBinding(TextBlock.TextProperty, new WpfBinding(nameof(NvrTileViewModel.Title)));
         grid.Children.Add(title);
 
-        var image = new Image { Stretch = Stretch.Uniform, Margin = new Thickness(0, 8, 0, 8), HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Stretch };
-        image.SetBinding(Image.SourceProperty, new Binding(nameof(NvrTileViewModel.FrameSource)));
+        var image = new WpfImage
+        {
+            Stretch = Stretch.Uniform,
+            Margin = new Thickness(0, 8, 0, 8),
+            HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch,
+            VerticalAlignment = System.Windows.VerticalAlignment.Stretch
+        };
+        image.SetBinding(WpfImage.SourceProperty, new WpfBinding(nameof(NvrTileViewModel.FrameSource)));
         Grid.SetRow(image, 1);
         grid.Children.Add(image);
 
-        var status = new TextBlock { Foreground = new SolidColorBrush(Color.FromRgb(196, 212, 229)), TextWrapping = TextWrapping.Wrap };
-        status.SetBinding(TextBlock.TextProperty, new Binding(nameof(NvrTileViewModel.StatusText)));
+        var status = new TextBlock { Foreground = new SolidColorBrush(WpfColor.FromRgb(196, 212, 229)), TextWrapping = TextWrapping.Wrap };
+        status.SetBinding(TextBlock.TextProperty, new WpfBinding(nameof(NvrTileViewModel.StatusText)));
         Grid.SetRow(status, 2);
         grid.Children.Add(status);
 
@@ -275,7 +286,7 @@ public partial class MainWindow
 
     private void NvrLayout_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is Button { Tag: string raw } && int.TryParse(raw, out var layout))
+        if (sender is System.Windows.Controls.Button { Tag: string raw } && int.TryParse(raw, out var layout))
         {
             SelectedNvrLayout = layout;
         }
@@ -326,16 +337,31 @@ public partial class MainWindow
         tile.Message = "Resolving live source.";
         var sources = await GetAsync<List<VideoSourceDescriptor>>($"/api/devices/{tile.Device.Id}/sources") ?? [];
         ReplaceCollection(NvrSources, sources);
-        var source = sources.OrderBy(static item => item.Rank).FirstOrDefault();
-        if (source is null || string.IsNullOrWhiteSpace(source.Url))
+        var candidates = BuildLiveSourceCandidates(tile.Device, sources).ToList();
+        if (candidates.Count == 0)
         {
             tile.Status = NvrStreamStatus.Failed;
-            tile.Message = "No live source available.";
+            tile.Message = "No decodable live source available.";
+            NvrDiagnostics = BuildMissingLiveSourceDiagnostics(tile.Device, sources);
             return;
         }
 
-        await StartTileDecodeAsync(tile, source.Url, NvrStreamMode.Live);
-        NvrDiagnostics = $"Live tile {tile.TileId + 1}: {source.Kind} {source.Url}";
+        var failures = new List<string>();
+        foreach (var candidate in candidates)
+        {
+            var failure = await TryStartTileDecodeAsync(tile, candidate.Url, NvrStreamMode.Live, candidate.Label);
+            if (failure is null)
+            {
+                NvrDiagnostics = $"Live tile {tile.TileId + 1} playing.{Environment.NewLine}{BuildNvrSessionDiagnostics(tile, candidate.Label)}";
+                return;
+            }
+
+            failures.Add(failure);
+        }
+
+        tile.Status = NvrStreamStatus.Failed;
+        tile.Message = "No frames received from any live source.";
+        NvrDiagnostics = string.Join($"{Environment.NewLine}{Environment.NewLine}", failures);
     }
 
     private async Task StartSelectedNvrPlaybackAsync()
@@ -354,33 +380,64 @@ public partial class MainWindow
 
         NvrMode = NvrStreamMode.Playback;
         tile.Mode = NvrStreamMode.Playback;
+        tile.Status = NvrStreamStatus.Resolving;
+        tile.Message = "Resolving playback source.";
         var segment = SelectedNvrRecordingSegment ?? await ResolvePlaybackSegmentAsync(tile.Device.Id);
-        if (segment is null || !File.Exists(segment.FilePath))
+        if (segment is null)
         {
             await FindNvrPlaybackAsync();
             tile.Status = NvrStreamStatus.Failed;
-            tile.Message = "No indexed local segment found for selected time.";
+            tile.Message = "No recording found for selected time.";
+            NvrDiagnostics = "Playback search completed, but no indexed local recording overlaps the selected date/time window.";
+            return;
+        }
+
+        if (!File.Exists(segment.FilePath))
+        {
+            tile.Status = NvrStreamStatus.Failed;
+            tile.Message = "Playback file is missing.";
+            NvrDiagnostics = $"Playback file missing for tile {tile.TileId + 1}.{Environment.NewLine}path={segment.FilePath}";
             return;
         }
 
         SelectedNvrRecordingSegment = segment;
-        await StartTileDecodeAsync(tile, segment.FilePath, NvrStreamMode.Playback);
-        NvrDiagnostics = $"Playback tile {tile.TileId + 1}: {segment.StartTime:yyyy-MM-dd HH:mm:ss} {segment.FilePath}";
+        var failure = await TryStartTileDecodeAsync(tile, segment.FilePath, NvrStreamMode.Playback, "Indexed recording");
+        if (failure is null)
+        {
+            NvrDiagnostics = $"Playback tile {tile.TileId + 1} playing.{Environment.NewLine}segment={segment.FilePath}{Environment.NewLine}{BuildNvrSessionDiagnostics(tile, "Indexed recording")}";
+            return;
+        }
+
+        tile.Status = NvrStreamStatus.Failed;
+        tile.Message = "Playback decode failed.";
+        NvrDiagnostics = failure;
     }
 
-    private async Task StartTileDecodeAsync(NvrTileViewModel tile, string source, NvrStreamMode mode)
+    private async Task<string?> TryStartTileDecodeAsync(NvrTileViewModel tile, string source, NvrStreamMode mode, string label)
     {
         tile.Stop();
         tile.Mode = mode;
         tile.Source = source;
         tile.Status = NvrStreamStatus.Starting;
-        tile.Message = "Starting FFmpeg decode.";
+        tile.Message = $"Starting FFmpeg ({label}).";
 
         var session = new NvrFrameDecodeSession(tile.FrameSource);
         tile.Session = session;
-        await session.StartAsync(source, _nvrShutdown.Token);
-        tile.Status = NvrStreamStatus.Running;
-        tile.Message = "Rendering latest decoded frame.";
+        try
+        {
+            await session.StartAsync(source, _nvrShutdown.Token);
+            tile.Status = NvrStreamStatus.Running;
+            tile.Message = "Playing";
+            return null;
+        }
+        catch (Exception ex)
+        {
+            tile.Session = null;
+            session.Dispose();
+            tile.Status = NvrStreamStatus.Failed;
+            tile.Message = BuildTileFailureMessage(ex);
+            return BuildNvrFailureDiagnostics(tile, label, source, session, ex);
+        }
     }
 
     private Task StopSelectedNvrTileAsync()
@@ -418,7 +475,9 @@ public partial class MainWindow
         await RefreshNvrIndexAsync();
         var request = BuildPlaybackRequest();
         var result = await PostAsync<NvrPlaybackCallResult>($"/api/devices/{device.Id}/playback/find-file", request);
-        NvrDiagnostics = JsonSerializer.Serialize(new { playback = result, indexedSegments = NvrRecordingSegments.Count }, SerializerOptions);
+        NvrDiagnostics = result is null
+            ? "Playback find-file request failed."
+            : JsonSerializer.Serialize(new { playback = result, indexedSegments = NvrRecordingSegments.Count }, SerializerOptions);
     }
 
     private async Task RefreshNvrIndexAsync()
@@ -518,4 +577,126 @@ public partial class MainWindow
 
         return new DateTimeOffset(date.Date.Add(time));
     }
+
+    private static string BuildTileFailureMessage(Exception ex)
+    {
+        var message = ex.GetBaseException().Message;
+        if (message.Contains("No frames received", StringComparison.OrdinalIgnoreCase))
+        {
+            return "No frames received.";
+        }
+
+        if (message.Contains("exited before the first frame", StringComparison.OrdinalIgnoreCase))
+        {
+            return "FFmpeg exited before frames arrived.";
+        }
+
+        return "Decode error.";
+    }
+
+    private string BuildNvrFailureDiagnostics(NvrTileViewModel tile, string label, string source, NvrFrameDecodeSession session, Exception ex)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine($"tile={tile.TileId + 1}");
+        builder.AppendLine($"mode={tile.Mode}");
+        builder.AppendLine($"attempt={label}");
+        builder.AppendLine($"source={source}");
+        builder.AppendLine($"error={ex.GetBaseException().Message}");
+        builder.AppendLine(BuildNvrSessionDiagnostics(tile, label, session));
+        return builder.ToString().Trim();
+    }
+
+    private string BuildNvrSessionDiagnostics(NvrTileViewModel tile, string label)
+        => BuildNvrSessionDiagnostics(tile, label, tile.Session);
+
+    private static string BuildNvrSessionDiagnostics(NvrTileViewModel tile, string label, NvrFrameDecodeSession? session)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine($"tile={tile.TileId + 1}");
+        builder.AppendLine($"mode={tile.Mode}");
+        builder.AppendLine($"attempt={label}");
+        builder.AppendLine($"status={tile.Status}");
+        builder.AppendLine($"message={tile.Message}");
+        if (session is not null)
+        {
+            builder.AppendLine($"source={session.Source}");
+            builder.AppendLine($"ffmpegArgs={session.FfmpegArguments}");
+            builder.AppendLine($"exitCode={(session.ExitCode?.ToString() ?? "running")}");
+            builder.AppendLine($"framesDecoded={session.FramesDecoded}");
+            builder.AppendLine($"lastFrameTimestamp={(session.LastFrameTimestamp?.ToString("O") ?? "none")}");
+            builder.AppendLine($"stderrTail={session.StderrTail}");
+        }
+
+        return builder.ToString().Trim();
+    }
+
+    private static string BuildMissingLiveSourceDiagnostics(DeviceIdentity device, IReadOnlyCollection<VideoSourceDescriptor> sources)
+    {
+        if (sources.Count == 0)
+        {
+            return $"No live sources were returned for {device.DisplayName}.";
+        }
+
+        var listed = string.Join(
+            Environment.NewLine,
+            sources.OrderBy(static item => item.Rank).Select(static item => $"{item.Kind} rank={item.Rank} url={item.Url}"));
+        return $"No FFmpeg-decodable live source was available for {device.DisplayName}.{Environment.NewLine}{listed}";
+    }
+
+    private static IEnumerable<NvrSourceCandidate> BuildLiveSourceCandidates(DeviceIdentity device, IEnumerable<VideoSourceDescriptor> sources)
+    {
+        var candidates = new List<NvrSourceCandidate>();
+        foreach (var source in sources.OrderBy(static item => item.Rank))
+        {
+            if (string.IsNullOrWhiteSpace(source.Url) || !IsDirectDecodeCandidate(source.Url))
+            {
+                continue;
+            }
+
+            if (TryBuildCredentialedVariant(source.Url, ResolvePreferredCredentials(device), out var credentialedUrl, out var credentialLabel))
+            {
+                candidates.Add(new NvrSourceCandidate(credentialedUrl, $"{source.Kind} ({credentialLabel})"));
+            }
+
+            candidates.Add(new NvrSourceCandidate(source.Url, source.Kind.ToString()));
+        }
+
+        return candidates
+            .GroupBy(static item => item.Url, StringComparer.OrdinalIgnoreCase)
+            .Select(static group => group.First());
+    }
+
+    private static bool IsDirectDecodeCandidate(string source)
+        => source.StartsWith("rtsp://", StringComparison.OrdinalIgnoreCase)
+            || source.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            || source.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+            || source.StartsWith("rtmp://", StringComparison.OrdinalIgnoreCase);
+
+    private static (string Username, string Password, string Label) ResolvePreferredCredentials(DeviceIdentity device)
+    {
+        if (!string.IsNullOrWhiteSpace(device.LoginName))
+        {
+            return (device.LoginName!, device.Password ?? string.Empty, "device credentials");
+        }
+
+        return ("admin", string.Empty, "default admin");
+    }
+
+    private static bool TryBuildCredentialedVariant(string source, (string Username, string Password, string Label) credentials, out string credentialedSource, out string credentialLabel)
+    {
+        credentialedSource = string.Empty;
+        credentialLabel = credentials.Label;
+        if (!Uri.TryCreate(source, UriKind.Absolute, out var uri) || !string.IsNullOrWhiteSpace(uri.UserInfo))
+        {
+            return false;
+        }
+
+        var authority = uri.IsDefaultPort ? uri.Host : $"{uri.Host}:{uri.Port}";
+        var user = Uri.EscapeDataString(credentials.Username);
+        var password = Uri.EscapeDataString(credentials.Password ?? string.Empty);
+        credentialedSource = $"{uri.Scheme}://{user}:{password}@{authority}{uri.PathAndQuery}{uri.Fragment}";
+        return true;
+    }
+
+    private sealed record NvrSourceCandidate(string Url, string Label);
 }

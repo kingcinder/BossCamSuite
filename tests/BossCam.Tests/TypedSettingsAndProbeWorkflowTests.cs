@@ -116,6 +116,94 @@ public sealed class TypedSettingsAndProbeWorkflowTests : IDisposable
     }
 
     [Fact]
+    public async Task Allows_Grouped_Writable_Image_Field_Write_Without_Expert_Override()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync(CancellationToken.None);
+
+        var device = new DeviceIdentity { IpAddress = "10.0.0.29", Name = "cam-image", DeviceType = "5523-w", HardwareModel = "5523", FirmwareVersion = "1.0.0" };
+        await store.UpsertDevicesAsync([device], CancellationToken.None);
+        await store.SaveEndpointValidationResultsAsync(
+        [
+            new EndpointValidationResult
+            {
+                DeviceId = device.Id,
+                AdapterName = "Stateful",
+                Endpoint = "/NetSDK/Video/input/channel/1",
+                Method = "PUT",
+                ReadVerified = true,
+                WriteVerified = true
+            }
+        ], CancellationToken.None);
+        await store.SaveNormalizedSettingFieldsAsync(
+        [
+            new NormalizedSettingField
+            {
+                DeviceId = device.Id,
+                GroupKind = TypedSettingGroupKind.VideoImage,
+                GroupName = "Video / Image",
+                FieldKey = "brightness",
+                DisplayName = "Brightness",
+                AdapterName = "Stateful",
+                SourceEndpoint = "/NetSDK/Video/input/channel/1",
+                RawSourcePath = "$.brightnessLevel",
+                ContractKey = "video.input.channel.0",
+                TypedValue = JsonValue.Create(50),
+                ReadVerified = true,
+                WriteVerified = false,
+                SupportState = ContractSupportState.Supported,
+                Validity = FieldValidityState.Proven
+            }
+        ], CancellationToken.None);
+        await store.SaveGroupedRetestResultsAsync(
+        [
+            new GroupedUnsupportedRetestResult
+            {
+                DeviceId = device.Id,
+                FirmwareFingerprint = "5523|1.0.0|ipc",
+                IpAddress = device.IpAddress ?? string.Empty,
+                GroupKind = GroupedConfigKind.ImageConfig,
+                ContractKey = "video.input.channel.0",
+                FieldKey = "brightness",
+                SourceEndpoint = "/NetSDK/Video/input/channel/1",
+                SourcePath = "$.brightnessLevel",
+                Classification = ForcedFieldClassification.Writable,
+                Behavior = GroupedApplyBehavior.ImmediateApplied,
+                BaselineFieldPresent = true
+            }
+        ], CancellationToken.None);
+        await store.SaveSettingsSnapshotAsync(new SettingsSnapshot
+        {
+            DeviceId = device.Id,
+            AdapterName = "Stateful",
+            Groups =
+            [
+                new SettingGroup
+                {
+                    Name = "Video",
+                    DisplayName = "Video",
+                    Values = new Dictionary<string, SettingValue>
+                    {
+                        ["/NetSDK/Video/input/channel/1"] = new()
+                        {
+                            SourceEndpoint = "/NetSDK/Video/input/channel/1",
+                            Value = JsonNode.Parse("{\"id\":1,\"enabled\":true,\"brightnessLevel\":50,\"contrastLevel\":50,\"saturationLevel\":50,\"sharpnessLevel\":50,\"hueLevel\":50}")
+                        }
+                    }
+                }
+            ]
+        }, CancellationToken.None);
+
+        var adapter = new StatefulTestAdapter();
+        var settingsService = BuildSettingsService(store, [adapter]);
+        var typed = new TypedSettingsService(store, settingsService, new PersistenceVerificationService([adapter], store, NullLogger<PersistenceVerificationService>.Instance), new SemanticTrustService(store, BuildContractCatalog(store), settingsService, NullLogger<SemanticTrustService>.Instance), BuildContractCatalog(store), NullLogger<TypedSettingsService>.Instance);
+        var result = await typed.ApplyTypedFieldAsync(device.Id, "brightness", JsonValue.Create(61), expertOverride: false, CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.True(result!.Success, result?.Message);
+    }
+
+    [Fact]
     public async Task Persists_Persistence_Verification_Result()
     {
         var store = CreateStore();
