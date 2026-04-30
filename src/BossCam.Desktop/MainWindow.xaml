@@ -419,6 +419,11 @@
                         <TabItem Header="Image">
                             <ScrollViewer VerticalScrollBarVisibility="Auto">
                                 <StackPanel Margin="8">
+                                    <WrapPanel Margin="0,0,0,12">
+                                        <Button Width="150" Margin="0,0,8,8" Click="ApplyIrControls_Click">Apply IR First</Button>
+                                        <Button Width="220" Margin="0,0,8,8" Click="ApplyPrimaryImage_Click">Apply Brightness/Contrast/Hue</Button>
+                                        <Button Width="190" Margin="0,0,8,8" Click="ApplyRemainingImage_Click">Apply Rest Of Image</Button>
+                                    </WrapPanel>
                                     <Grid Margin="0,0,0,10" Visibility="{Binding ImageBrightnessVisibility}">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="140"/>
@@ -1174,6 +1179,9 @@
                                             <Button Width="42" Margin="0,0,14,8" Tag="9" Click="NvrLayout_Click">9</Button>
                                             <Button Width="140" Margin="0,0,8,8" Click="AssignSelectedCameraToNvr_Click">Bind Camera</Button>
                                             <Button Width="120" Margin="0,0,8,8" Click="StartNvrLive_Click">Start Live</Button>
+                                            <Button Width="170" Margin="0,0,8,8" Click="StartAll5523WLive_Click">Start 3x 5523-W</Button>
+                                            <Button Width="120" Margin="0,0,8,8" Click="StartSelectedNvrAudio_Click">Start Audio</Button>
+                                            <Button Width="120" Margin="0,0,8,8" Click="StopSelectedNvrAudio_Click">Stop Audio</Button>
                                             <Button Width="120" Margin="0,0,8,8" Click="StopSelectedNvrTile_Click">Stop Tile</Button>
                                             <Button Width="130" Margin="0,0,8,8" Click="RefreshNvrSources_Click">Sources</Button>
                                         </WrapPanel>

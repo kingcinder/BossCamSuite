@@ -72,6 +72,27 @@ public sealed class OperatorRuntimeRepairTests
         Assert.Contains("FFmpeg exited before the first frame.", session, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void MainWindow_Wires_5523w_Live_Audio_And_Priority_Image_Controls()
+    {
+        var xaml = ReadRepoFile("src", "BossCam.Desktop", "MainWindow.xaml");
+        var nvr = ReadRepoFile("src", "BossCam.Desktop", "MainWindow.Nvr.cs");
+        var code = ReadRepoFile("src", "BossCam.Desktop", "MainWindow.xaml.cs");
+        var session = ReadRepoFile("src", "BossCam.Desktop", "NvrFrameDecodeSession.cs");
+
+        Assert.Contains("Start 3x 5523-W", xaml, StringComparison.Ordinal);
+        Assert.Contains("StartSelectedNvrAudio_Click", xaml, StringComparison.Ordinal);
+        Assert.Contains("StartAll5523WLiveAsync", nvr, StringComparison.Ordinal);
+        Assert.Contains("NvrAudioPlaybackSession", session, StringComparison.Ordinal);
+        Assert.Contains("ffplay not found", session, StringComparison.Ordinal);
+        Assert.Contains("Apply IR First", xaml, StringComparison.Ordinal);
+        Assert.Contains("Apply Brightness/Contrast/Hue", xaml, StringComparison.Ordinal);
+        Assert.Contains("Apply Rest Of Image", xaml, StringComparison.Ordinal);
+        Assert.Contains("ApplySpecificFieldsAsync(\"IR controls\"", code, StringComparison.Ordinal);
+        Assert.Contains("ApplySpecificFieldsAsync(\"brightness/contrast/hue\"", code, StringComparison.Ordinal);
+        Assert.Contains("ApplySpecificFieldsAsync(\"remaining image settings\"", code, StringComparison.Ordinal);
+    }
+
     private static string ReadRepoFile(params string[] segments)
         => File.ReadAllText(Path.Combine(FindRepoRoot(), Path.Combine(segments)));
 

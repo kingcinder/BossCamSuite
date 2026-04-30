@@ -3,9 +3,11 @@ param(
     [string]$Username = "admin",
     [AllowEmptyString()]
     [string]$Password = "",
+    [string[]]$KnownIps = @("10.0.0.4", "10.0.0.29", "10.0.0.227"),
     [int]$HttpPort = 80,
     [int]$RtspPort = 8554,
     [int]$ApiPort = 1984,
+    [string]$LegacyAliasIp = "10.0.0.227",
     [switch]$StopExisting,
     [switch]$NoDownload
 )
@@ -21,13 +23,38 @@ $pidFile = Join-Path $artifactRoot "go2rtc.pid"
 $stdout = Join-Path $artifactRoot "go2rtc.stdout.log"
 $stderr = Join-Path $artifactRoot "go2rtc.stderr.log"
 
+function Get-StreamPrefix([string]$Value) {
+    "cam_" + ($Value -replace "[^0-9A-Za-z]+", "_")
+}
+
 function Stop-ExistingRelay {
     if (Test-Path -LiteralPath $pidFile) {
         $pidText = Get-Content -Raw -LiteralPath $pidFile
         $processId = 0
         if ([int]::TryParse($pidText.Trim(), [ref]$processId)) {
             Stop-Process -Id $processId -ErrorAction SilentlyContinue
+            for ($attempt = 0; $attempt -lt 20; $attempt++) {
+                if (-not (Get-Process -Id $processId -ErrorAction SilentlyContinue)) {
+                    break
+                }
+
+                Start-Sleep -Milliseconds 250
+            }
         }
+    }
+
+    foreach ($process in Get-Process go2rtc -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $go2rtc }) {
+        Stop-Process -Id $process.Id -ErrorAction SilentlyContinue
+    }
+
+    for ($attempt = 0; $attempt -lt 20; $attempt++) {
+        $apiListener = Get-NetTCPConnection -LocalPort $ApiPort -State Listen -ErrorAction SilentlyContinue
+        $rtspListener = Get-NetTCPConnection -LocalPort $RtspPort -State Listen -ErrorAction SilentlyContinue
+        if (-not $apiListener -and -not $rtspListener) {
+            break
+        }
+
+        Start-Sleep -Milliseconds 250
     }
 }
 
@@ -53,6 +80,15 @@ if (-not (Test-Path -LiteralPath $go2rtc)) {
 
 $main = "bubble://$Username`:$Password@$Ip`:$HttpPort/bubble/live?ch=0&stream=0"
 $sub = "bubble://$Username`:$Password@$Ip`:$HttpPort/bubble/live?ch=0&stream=1"
+$prefix = Get-StreamPrefix $Ip
+$allIps = @($KnownIps + $Ip + $LegacyAliasIp) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
+$streamLines = foreach ($candidateIp in $allIps) {
+    $candidatePrefix = Get-StreamPrefix $candidateIp
+    "  ${candidatePrefix}_main: bubble://$Username`:$Password@$candidateIp`:$HttpPort/bubble/live?ch=0&stream=0"
+    "  ${candidatePrefix}_sub: bubble://$Username`:$Password@$candidateIp`:$HttpPort/bubble/live?ch=0&stream=1"
+}
+$streamLines += "  5523w_main: bubble://$Username`:$Password@$LegacyAliasIp`:$HttpPort/bubble/live?ch=0&stream=0"
+$streamLines += "  5523w_sub: bubble://$Username`:$Password@$LegacyAliasIp`:$HttpPort/bubble/live?ch=0&stream=1"
 
 @"
 api:
@@ -60,28 +96,72 @@ api:
 rtsp:
   listen: 127.0.0.1:$RtspPort
 streams:
-  5523w_main: $main
-  5523w_sub: $sub
+$($streamLines -join "`n")
 log:
   level: debug
 "@.TrimEnd() | Set-Content -LiteralPath $config -Encoding UTF8
 
 $existing = Get-Process go2rtc -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $go2rtc }
-if (-not $existing) {
-    $process = Start-Process -FilePath $go2rtc -ArgumentList @("-config", $config) -WorkingDirectory $artifactRoot -RedirectStandardOutput $stdout -RedirectStandardError $stderr -WindowStyle Hidden -PassThru
-    $process.Id | Set-Content -LiteralPath $pidFile -Encoding ASCII
-    Start-Sleep -Seconds 3
+if ($existing) {
+    Stop-ExistingRelay
 }
 
-$mainOut = Join-Path $artifactRoot "5523w_main.ffprobe.json"
-$mainErr = Join-Path $artifactRoot "5523w_main.ffprobe.err.txt"
-$subOut = Join-Path $artifactRoot "5523w_sub.ffprobe.json"
-$subErr = Join-Path $artifactRoot "5523w_sub.ffprobe.err.txt"
+if (-not (Get-Process go2rtc -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $go2rtc })) {
+    $process = Start-Process -FilePath $go2rtc -ArgumentList @("-config", $config) -WorkingDirectory $artifactRoot -RedirectStandardOutput $stdout -RedirectStandardError $stderr -WindowStyle Hidden -PassThru
+    $process.Id | Set-Content -LiteralPath $pidFile -Encoding ASCII
+}
 
-& ffprobe -v error -rtsp_transport tcp -timeout 10000000 -analyzeduration 10000000 -probesize 10000000 -show_entries stream=codec_name,width,height,avg_frame_rate -of json "rtsp://127.0.0.1:$RtspPort/5523w_main" > $mainOut 2> $mainErr
-$mainExit = $LASTEXITCODE
-& ffprobe -v error -rtsp_transport tcp -timeout 10000000 -analyzeduration 10000000 -probesize 10000000 -show_entries stream=codec_name,width,height,avg_frame_rate -of json "rtsp://127.0.0.1:$RtspPort/5523w_sub" > $subOut 2> $subErr
-$subExit = $LASTEXITCODE
+$listening = $false
+for ($attempt = 0; $attempt -lt 20; $attempt++) {
+    Start-Sleep -Milliseconds 500
+    $client = [Net.Sockets.TcpClient]::new()
+    try {
+        $connect = $client.ConnectAsync("127.0.0.1", $ApiPort)
+        if ($connect.Wait(1000) -and $client.Connected) {
+            $rtspClient = [Net.Sockets.TcpClient]::new()
+            try {
+                $rtspConnect = $rtspClient.ConnectAsync("127.0.0.1", $RtspPort)
+                if ($rtspConnect.Wait(1000) -and $rtspClient.Connected) {
+                    $listening = $true
+                    break
+                }
+            }
+            finally {
+                $rtspClient.Dispose()
+            }
+        }
+    }
+    finally {
+        $client.Dispose()
+    }
+}
+
+if (-not $listening) {
+    $logTail = Get-Content -LiteralPath $stdout -Tail 80 -ErrorAction SilentlyContinue
+    $errTail = Get-Content -LiteralPath $stderr -Tail 80 -ErrorAction SilentlyContinue
+    throw "go2rtc did not become ready on API port $ApiPort.`nSTDOUT:`n$logTail`nSTDERR:`n$errTail"
+}
+
+$mainOut = Join-Path $artifactRoot "$prefix-main.ffprobe.json"
+$mainErr = Join-Path $artifactRoot "$prefix-main.ffprobe.err.txt"
+$subOut = Join-Path $artifactRoot "$prefix-sub.ffprobe.json"
+$subErr = Join-Path $artifactRoot "$prefix-sub.ffprobe.err.txt"
+
+for ($attempt = 0; $attempt -lt 3; $attempt++) {
+    & ffprobe -v error -rtsp_transport tcp -timeout 10000000 -analyzeduration 10000000 -probesize 10000000 -show_entries stream=codec_name,width,height,avg_frame_rate -of json "rtsp://127.0.0.1:$RtspPort/${prefix}_main" > $mainOut 2> $mainErr
+    $mainExit = $LASTEXITCODE
+    $mainRaw = Get-Content -Raw -LiteralPath $mainOut -ErrorAction SilentlyContinue
+    if ($mainExit -eq 0 -and $mainRaw -match "codec_name") { break }
+    Start-Sleep -Seconds 2
+}
+
+for ($attempt = 0; $attempt -lt 3; $attempt++) {
+    & ffprobe -v error -rtsp_transport tcp -timeout 10000000 -analyzeduration 10000000 -probesize 10000000 -show_entries stream=codec_name,width,height,avg_frame_rate -of json "rtsp://127.0.0.1:$RtspPort/${prefix}_sub" > $subOut 2> $subErr
+    $subExit = $LASTEXITCODE
+    $subRaw = Get-Content -Raw -LiteralPath $subOut -ErrorAction SilentlyContinue
+    if ($subExit -eq 0 -and $subRaw -match "codec_name") { break }
+    Start-Sleep -Seconds 2
+}
 
 $mainJson = Get-Content -Raw -LiteralPath $mainOut | ConvertFrom-Json
 $subJson = Get-Content -Raw -LiteralPath $subOut | ConvertFrom-Json
@@ -94,8 +174,9 @@ $summary = [ordered]@{
     ip = $Ip
     upstreamMain = $main
     upstreamSub = $sub
-    rtspMain = "rtsp://127.0.0.1:$RtspPort/5523w_main"
-    rtspSub = "rtsp://127.0.0.1:$RtspPort/5523w_sub"
+    streamPrefix = $prefix
+    rtspMain = "rtsp://127.0.0.1:$RtspPort/${prefix}_main"
+    rtspSub = "rtsp://127.0.0.1:$RtspPort/${prefix}_sub"
     mainCodec = $mainStream.codec_name
     mainWidth = $mainStream.width
     mainHeight = $mainStream.height
@@ -106,6 +187,7 @@ $summary = [ordered]@{
     subFps = $subStream.avg_frame_rate
     artifactRoot = $artifactRoot
 }
+$summary | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $artifactRoot "bubble-relay-summary-$prefix.json") -Encoding UTF8
 $summary | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $artifactRoot "bubble-relay-summary.json") -Encoding UTF8
 $summary | ConvertTo-Json -Depth 8
 

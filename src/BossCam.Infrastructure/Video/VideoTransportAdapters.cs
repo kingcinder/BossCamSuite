@@ -92,9 +92,13 @@ public sealed class StreamDescriptorAdapter(IOptions<BossCamRuntimeOptions> opti
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(options.Value.HttpTimeoutSeconds) };
         await AddNetSdkEncodeChannelTruthAsync(device, sources, client, cancellationToken);
 
-        if (device.IpAddress == "10.0.0.227")
+        if (IsLiveVerified5523WBubbleRelayIp(device.IpAddress))
         {
             AddKnown5523WBubbleRelayTruth(device, sources);
+        }
+
+        if (device.IpAddress == "10.0.0.227")
+        {
             AddKnown5523WEmptyPasswordAuthTruth(device, sources);
         }
 
@@ -169,20 +173,22 @@ public sealed class StreamDescriptorAdapter(IOptions<BossCamRuntimeOptions> opti
 
     private static void AddKnown5523WBubbleRelayTruth(DeviceIdentity device, List<VideoSourceDescriptor> sources)
     {
-        const string upstreamMain = "bubble://admin:@10.0.0.227:80/bubble/live?ch=0&stream=0";
-        const string upstreamSub = "bubble://admin:@10.0.0.227:80/bubble/live?ch=0&stream=1";
+        var streamPrefix = GetVerified5523WRelayPrefix(device.IpAddress!);
+        var truth = GetVerified5523WRelayTruth(device.IpAddress!);
+        var upstreamMain = $"bubble://admin:@{device.IpAddress}:80/bubble/live?ch=0&stream=0";
+        var upstreamSub = $"bubble://admin:@{device.IpAddress}:80/bubble/live?ch=0&stream=1";
 
         sources.Add(new VideoSourceDescriptor
         {
             Kind = TransportKind.Rtsp,
-            Url = "rtsp://127.0.0.1:8554/5523w_main",
+            Url = GetVerified5523WRelayUrl(device.IpAddress!, streamPrefix, "main"),
             Rank = 0,
             DisplayName = "Main high-res go2rtc bubble relay",
-            ExpectedWidth = 2560,
-            ExpectedHeight = 1920,
-            ExpectedCodec = "h264",
-            ExpectedFrameRate = "15/1",
-            SourceOfTruth = "Live verified go2rtc bubble relay for 10.0.0.227",
+            ExpectedWidth = truth.MainWidth,
+            ExpectedHeight = truth.MainHeight,
+            ExpectedCodec = truth.MainCodec,
+            ExpectedFrameRate = truth.MainFps,
+            SourceOfTruth = $"Live verified go2rtc bubble relay for {device.IpAddress}",
             AuthState = "HTTP Basic admin: empty password accepted by upstream bubble transport",
             ChannelId = "101",
             StreamRole = "main-relay",
@@ -192,9 +198,12 @@ public sealed class StreamDescriptorAdapter(IOptions<BossCamRuntimeOptions> opti
             {
                 ["source"] = "live verified go2rtc bubble relay",
                 ["upstream"] = upstreamMain,
-                ["probedCodec"] = "h264",
-                ["probedResolution"] = "2560x1920",
-                ["probedFps"] = "15/1",
+                ["probedCodec"] = truth.MainCodec,
+                ["probedResolution"] = $"{truth.MainWidth}x{truth.MainHeight}",
+                ["probedFps"] = truth.MainFps,
+                ["audioCodec"] = "pcm_alaw",
+                ["audioSampleRate"] = "8000",
+                ["audioChannels"] = "1",
                 ["relayRequired"] = "go2rtc"
             }
         });
@@ -202,14 +211,14 @@ public sealed class StreamDescriptorAdapter(IOptions<BossCamRuntimeOptions> opti
         sources.Add(new VideoSourceDescriptor
         {
             Kind = TransportKind.Rtsp,
-            Url = "rtsp://127.0.0.1:8554/5523w_sub",
+            Url = GetVerified5523WRelayUrl(device.IpAddress!, streamPrefix, "sub"),
             Rank = 1,
             DisplayName = "Sub go2rtc bubble relay",
-            ExpectedWidth = 704,
-            ExpectedHeight = 480,
-            ExpectedCodec = "h264",
-            ExpectedFrameRate = "15/1",
-            SourceOfTruth = "Live verified go2rtc bubble relay for 10.0.0.227",
+            ExpectedWidth = truth.SubWidth,
+            ExpectedHeight = truth.SubHeight,
+            ExpectedCodec = truth.SubCodec,
+            ExpectedFrameRate = truth.SubFps,
+            SourceOfTruth = $"Live verified go2rtc bubble relay for {device.IpAddress}",
             AuthState = "HTTP Basic admin: empty password accepted by upstream bubble transport",
             ChannelId = "102",
             StreamRole = "sub-relay",
@@ -219,13 +228,35 @@ public sealed class StreamDescriptorAdapter(IOptions<BossCamRuntimeOptions> opti
             {
                 ["source"] = "live verified go2rtc bubble relay",
                 ["upstream"] = upstreamSub,
-                ["probedCodec"] = "h264",
-                ["probedResolution"] = "704x480",
-                ["probedFps"] = "15/1",
+                ["probedCodec"] = truth.SubCodec,
+                ["probedResolution"] = $"{truth.SubWidth}x{truth.SubHeight}",
+                ["probedFps"] = truth.SubFps,
+                ["audioCodec"] = "pcm_alaw",
+                ["audioSampleRate"] = "8000",
+                ["audioChannels"] = "1",
                 ["relayRequired"] = "go2rtc"
             }
         });
     }
+
+    private static bool IsLiveVerified5523WBubbleRelayIp(string? ip)
+        => ip is "10.0.0.4" or "10.0.0.29" or "10.0.0.227";
+
+    private static string GetVerified5523WRelayPrefix(string ip)
+        => "cam_" + ip.Replace('.', '_');
+
+    private static string GetVerified5523WRelayUrl(string ip, string streamPrefix, string role)
+        => ip == "10.0.0.227"
+            ? $"rtsp://127.0.0.1:8554/5523w_{role}"
+            : $"rtsp://127.0.0.1:8554/{streamPrefix}_{role}";
+
+    private static (string MainCodec, int MainWidth, int MainHeight, string MainFps, string SubCodec, int SubWidth, int SubHeight, string SubFps) GetVerified5523WRelayTruth(string ip)
+        => ip switch
+        {
+            "10.0.0.4" => ("h264", 2560, 1920, "15/1", "h264", 704, 480, "13/1"),
+            "10.0.0.29" => ("h264", 2560, 1920, "15/1", "hevc", 704, 480, "15/1"),
+            _ => ("h264", 2560, 1920, "15/1", "h264", 704, 480, "15/1")
+        };
 
     private static VideoSourceDescriptor BuildRtspCandidate(DeviceIdentity device, string role, string channelId, string url, int rank, int? width, int? height, string? codec, string? frameRate, string sourceOfTruth)
         => new()
@@ -387,6 +418,9 @@ public sealed class BubbleFlvAdapter : IVideoTransportAdapter
             return Task.FromResult<IReadOnlyCollection<VideoSourceDescriptor>>([]);
         }
 
+        var isVerified = IsLiveVerified5523WBubbleRelayIp(device.IpAddress);
+        var truth = GetVerified5523WRelayTruth(device.IpAddress);
+        var streamPrefix = GetVerified5523WRelayPrefix(device.IpAddress);
         IReadOnlyCollection<VideoSourceDescriptor> sources =
         [
             new VideoSourceDescriptor
@@ -395,20 +429,20 @@ public sealed class BubbleFlvAdapter : IVideoTransportAdapter
                 Url = $"bubble://admin:@{device.IpAddress}:80/bubble/live?ch=0&stream=0",
                 Rank = 40,
                 DisplayName = "Vendor bubble main stream",
-                ExpectedWidth = device.IpAddress == "10.0.0.227" ? 2560 : null,
-                ExpectedHeight = device.IpAddress == "10.0.0.227" ? 1920 : null,
-                ExpectedCodec = device.IpAddress == "10.0.0.227" ? "h264" : null,
-                ExpectedFrameRate = device.IpAddress == "10.0.0.227" ? "15/1" : null,
-                SourceOfTruth = device.IpAddress == "10.0.0.227" ? "Live verified go2rtc bubble upstream" : "Vendor bubble candidate",
-                ChannelId = device.IpAddress == "10.0.0.227" ? "101" : null,
+                ExpectedWidth = isVerified ? truth.MainWidth : null,
+                ExpectedHeight = isVerified ? truth.MainHeight : null,
+                ExpectedCodec = isVerified ? truth.MainCodec : null,
+                ExpectedFrameRate = isVerified ? truth.MainFps : null,
+                SourceOfTruth = isVerified ? "Live verified go2rtc bubble upstream" : "Vendor bubble candidate",
+                ChannelId = isVerified ? "101" : null,
                 StreamRole = "main-bubble-upstream",
                 CredentialState = CredentialState.UsernameOnlyEmptyPassword,
-                SourceTruthOutcome = device.IpAddress == "10.0.0.227" ? SourceTruthOutcome.PASS_CAPTURED_PRIVATE_TRANSPORT : SourceTruthOutcome.FAIL_NO_SOURCE,
+                SourceTruthOutcome = isVerified ? SourceTruthOutcome.PASS_CAPTURED_PRIVATE_TRANSPORT : SourceTruthOutcome.FAIL_NO_SOURCE,
                 Metadata = new Dictionary<string, string>
                 {
                     ["path"] = "/bubble/live?ch=0&stream=0",
                     ["relay"] = "go2rtc",
-                    ["relayUrl"] = "rtsp://127.0.0.1:8554/5523w_main"
+                    ["relayUrl"] = GetVerified5523WRelayUrl(device.IpAddress, streamPrefix, "main")
                 }
             },
             new VideoSourceDescriptor
@@ -417,25 +451,44 @@ public sealed class BubbleFlvAdapter : IVideoTransportAdapter
                 Url = $"bubble://admin:@{device.IpAddress}:80/bubble/live?ch=0&stream=1",
                 Rank = 41,
                 DisplayName = "Vendor bubble sub stream",
-                ExpectedWidth = device.IpAddress == "10.0.0.227" ? 704 : null,
-                ExpectedHeight = device.IpAddress == "10.0.0.227" ? 480 : null,
-                ExpectedCodec = device.IpAddress == "10.0.0.227" ? "h264" : null,
-                ExpectedFrameRate = device.IpAddress == "10.0.0.227" ? "15/1" : null,
-                SourceOfTruth = device.IpAddress == "10.0.0.227" ? "Live verified go2rtc bubble upstream" : "Vendor bubble candidate",
-                ChannelId = device.IpAddress == "10.0.0.227" ? "102" : null,
+                ExpectedWidth = isVerified ? truth.SubWidth : null,
+                ExpectedHeight = isVerified ? truth.SubHeight : null,
+                ExpectedCodec = isVerified ? truth.SubCodec : null,
+                ExpectedFrameRate = isVerified ? truth.SubFps : null,
+                SourceOfTruth = isVerified ? "Live verified go2rtc bubble upstream" : "Vendor bubble candidate",
+                ChannelId = isVerified ? "102" : null,
                 StreamRole = "sub-bubble-upstream",
                 CredentialState = CredentialState.UsernameOnlyEmptyPassword,
-                SourceTruthOutcome = device.IpAddress == "10.0.0.227" ? SourceTruthOutcome.PASS_CAPTURED_PRIVATE_TRANSPORT : SourceTruthOutcome.FAIL_NO_SOURCE,
+                SourceTruthOutcome = isVerified ? SourceTruthOutcome.PASS_CAPTURED_PRIVATE_TRANSPORT : SourceTruthOutcome.FAIL_NO_SOURCE,
                 Metadata = new Dictionary<string, string>
                 {
                     ["path"] = "/bubble/live?ch=0&stream=1",
                     ["relay"] = "go2rtc",
-                    ["relayUrl"] = "rtsp://127.0.0.1:8554/5523w_sub"
+                    ["relayUrl"] = GetVerified5523WRelayUrl(device.IpAddress, streamPrefix, "sub")
                 }
             }
         ];
         return Task.FromResult(sources);
     }
+
+    private static bool IsLiveVerified5523WBubbleRelayIp(string? ip)
+        => ip is "10.0.0.4" or "10.0.0.29" or "10.0.0.227";
+
+    private static string GetVerified5523WRelayPrefix(string ip)
+        => "cam_" + ip.Replace('.', '_');
+
+    private static string GetVerified5523WRelayUrl(string ip, string streamPrefix, string role)
+        => ip == "10.0.0.227"
+            ? $"rtsp://127.0.0.1:8554/5523w_{role}"
+            : $"rtsp://127.0.0.1:8554/{streamPrefix}_{role}";
+
+    private static (string MainCodec, int MainWidth, int MainHeight, string MainFps, string SubCodec, int SubWidth, int SubHeight, string SubFps) GetVerified5523WRelayTruth(string ip)
+        => ip switch
+        {
+            "10.0.0.4" => ("h264", 2560, 1920, "15/1", "h264", 704, 480, "13/1"),
+            "10.0.0.29" => ("h264", 2560, 1920, "15/1", "hevc", 704, 480, "15/1"),
+            _ => ("h264", 2560, 1920, "15/1", "h264", 704, 480, "15/1")
+        };
 }
 
 public sealed class EseeJuanP2PAdapter(IOptions<BossCamRuntimeOptions> options) : IVideoTransportAdapter

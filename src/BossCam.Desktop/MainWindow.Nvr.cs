@@ -311,6 +311,14 @@ public partial class MainWindow
     private async void StartNvrLive_Click(object sender, RoutedEventArgs e) => await RunAsync(StartSelectedNvrLiveAsync);
     private async void StopSelectedNvrTile_Click(object sender, RoutedEventArgs e) => await RunAsync(StopSelectedNvrTileAsync);
     private async void RefreshNvrSources_Click(object sender, RoutedEventArgs e) => await RunAsync(RefreshNvrSourcesAsync);
+    private async void StartAll5523WLive_Click(object sender, RoutedEventArgs e) => await RunAsync(StartAll5523WLiveAsync);
+    private async void StartSelectedNvrAudio_Click(object sender, RoutedEventArgs e) => await RunAsync(StartSelectedNvrAudioAsync);
+    private void StopSelectedNvrAudio_Click(object sender, RoutedEventArgs e)
+    {
+        EnsureNvrTile().StopAudio();
+        NvrDiagnostics = "Selected NVR tile audio stopped.";
+    }
+
     private async void NvrFindPlayback_Click(object sender, RoutedEventArgs e) => await RunAsync(FindNvrPlaybackAsync);
     private async void NvrPlayPlayback_Click(object sender, RoutedEventArgs e) => await RunAsync(StartSelectedNvrPlaybackAsync);
     private async void RefreshNvrIndex_Click(object sender, RoutedEventArgs e) => await RunAsync(RefreshNvrIndexAsync);
@@ -330,6 +338,17 @@ public partial class MainWindow
             }
 
             tile.Device = SelectedDevice;
+        }
+
+        await StartNvrTileLiveAsync(tile);
+    }
+
+    private async Task StartNvrTileLiveAsync(NvrTileViewModel tile)
+    {
+        if (tile.Device is null)
+        {
+            NvrDiagnostics = "Select or bind a camera before starting live.";
+            return;
         }
 
         NvrMode = NvrStreamMode.Live;
@@ -370,6 +389,96 @@ public partial class MainWindow
         tile.Status = NvrStreamStatus.Failed;
         tile.Message = BuildLiveFailureSummary(tile.Device, failures);
         NvrDiagnostics = string.Join($"{Environment.NewLine}{Environment.NewLine}", failures);
+    }
+
+    private async Task StartAll5523WLiveAsync()
+    {
+        await EnsureKnown5523WDevicesAsync();
+        var targets = new[] { "10.0.0.4", "10.0.0.29", "10.0.0.227" }
+            .Select(ip => Devices.FirstOrDefault(device => string.Equals(device.IpAddress, ip, StringComparison.OrdinalIgnoreCase)))
+            .Where(static device => device is not null)
+            .Cast<DeviceIdentity>()
+            .ToList();
+
+        if (targets.Count != 3)
+        {
+            NvrDiagnostics = $"Expected 3 verified 5523-W devices, found {targets.Count}. Load/import devices and retry.";
+            return;
+        }
+
+        SelectedNvrLayout = 3;
+        var diagnostics = new List<string>();
+        for (var i = 0; i < targets.Count; i++)
+        {
+            var tile = NvrTiles[i];
+            tile.Stop();
+            tile.Device = targets[i];
+            SelectedNvrTile = tile;
+            await StartNvrTileLiveAsync(tile);
+            diagnostics.Add($"{targets[i].IpAddress}: {tile.Status} {tile.Message} {SensitiveValueRedactor.RedactUrl(tile.Source)}");
+        }
+
+        NvrDiagnostics = "Started verified 5523-W live relay set." + Environment.NewLine + string.Join(Environment.NewLine, diagnostics);
+    }
+
+    private async Task EnsureKnown5523WDevicesAsync()
+    {
+        await LoadDevicesAsync();
+        foreach (var ip in new[] { "10.0.0.4", "10.0.0.29", "10.0.0.227" })
+        {
+            if (Devices.Any(device => string.Equals(device.IpAddress, ip, StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            _ = await PostAsync<DeviceIdentity>("/api/devices", new DeviceIdentity
+            {
+                Name = $"5523-W {ip}",
+                IpAddress = ip,
+                Port = 80,
+                DeviceType = "IPC",
+                HardwareModel = "5523-W",
+                LoginName = "admin",
+                Password = string.Empty,
+                Metadata = new Dictionary<string, string>
+                {
+                    ["credentialState"] = "UsernameOnlyEmptyPassword",
+                    ["relay"] = "go2rtc-bubble"
+                }
+            });
+        }
+
+        await LoadDevicesAsync();
+    }
+
+    private async Task StartSelectedNvrAudioAsync()
+    {
+        var tile = EnsureNvrTile();
+        if (string.IsNullOrWhiteSpace(tile.Source))
+        {
+            await StartSelectedNvrLiveAsync();
+        }
+
+        if (string.IsNullOrWhiteSpace(tile.Source))
+        {
+            NvrDiagnostics = "Start live video before starting audio; no selected tile source is available.";
+            return;
+        }
+
+        var session = new NvrAudioPlaybackSession();
+        tile.StopAudio();
+        tile.AudioSession = session;
+        try
+        {
+            await session.StartAsync(tile.Source, _nvrShutdown.Token);
+            NvrDiagnostics = $"Audio playing for tile {tile.TileId + 1}.{Environment.NewLine}source={SensitiveValueRedactor.RedactUrl(tile.Source)}{Environment.NewLine}ffplayArgs={SensitiveValueRedactor.RedactText(session.FfplayArguments)}";
+        }
+        catch (Exception ex)
+        {
+            tile.AudioSession = null;
+            session.Dispose();
+            NvrDiagnostics = $"Audio failed for tile {tile.TileId + 1}: {ex.GetBaseException().Message}";
+        }
     }
 
     private async Task StartSelectedNvrPlaybackAsync()

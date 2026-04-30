@@ -131,6 +131,24 @@ public sealed class CameraEndpointTruthTests : IDisposable
     }
 
     [Fact]
+    public async Task Live_Verified_Bubble_Relay_Source_Truth_Covers_All_Three_5523w_Cameras()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync(CancellationToken.None);
+        var adapter = new StreamDescriptorAdapter(Options.Create(new BossCamRuntimeOptions { HttpTimeoutSeconds = 1 }), store);
+
+        var cam4 = await adapter.GetSourcesAsync(new DeviceIdentity { Id = Guid.NewGuid(), IpAddress = "10.0.0.4", LoginName = "admin", Password = "", HardwareModel = "5523-W" }, CancellationToken.None);
+        var cam29 = await adapter.GetSourcesAsync(new DeviceIdentity { Id = Guid.NewGuid(), IpAddress = "10.0.0.29", LoginName = "admin", Password = "", HardwareModel = "5523-W" }, CancellationToken.None);
+        var cam227 = await adapter.GetSourcesAsync(new DeviceIdentity { Id = Guid.NewGuid(), IpAddress = "10.0.0.227", LoginName = "admin", Password = "", HardwareModel = "5523-W" }, CancellationToken.None);
+
+        Assert.Contains(cam4, source => source.Url == "rtsp://127.0.0.1:8554/cam_10_0_0_4_main" && source.Metadata["probedResolution"] == "2560x1920");
+        Assert.Contains(cam4, source => source.Url == "rtsp://127.0.0.1:8554/cam_10_0_0_4_sub" && source.Metadata["probedCodec"] == "h264" && source.Metadata["probedFps"] == "13/1");
+        Assert.Contains(cam29, source => source.Url == "rtsp://127.0.0.1:8554/cam_10_0_0_29_sub" && source.Metadata["probedCodec"] == "hevc");
+        Assert.Contains(cam227, source => source.Url == "rtsp://127.0.0.1:8554/5523w_main" && source.Metadata["upstream"] == "bubble://admin:@10.0.0.227:80/bubble/live?ch=0&stream=0");
+        Assert.Contains(cam227, source => source.Url == "rtsp://127.0.0.1:8554/5523w_sub" && source.Metadata["audioCodec"] == "pcm_alaw");
+    }
+
+    [Fact]
     public async Task Guard_Prevents_Weaker_Candidate_And_Declared_Codec_From_Overwriting_Proof()
     {
         var store = CreateStore();

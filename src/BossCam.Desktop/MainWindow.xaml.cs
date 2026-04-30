@@ -1311,6 +1311,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private async void NativeAssessment_Click(object sender, RoutedEventArgs e) => await RunAsync(LoadNativeAssessmentAsync);
     private async void ApplyValidated_Click(object sender, RoutedEventArgs e) => await RunAsync(() => ApplyPendingEditsAsync(expertOverride: false));
     private async void ApplyExpert_Click(object sender, RoutedEventArgs e) => await RunAsync(() => ApplyPendingEditsAsync(expertOverride: true));
+    private async void ApplyIrControls_Click(object sender, RoutedEventArgs e) => await RunAsync(() => ApplySpecificFieldsAsync("IR controls", false, "dayNight", "irMode", "irCut", "irCutMethod", "whiteLight", "infrared", "lowlight"));
+    private async void ApplyPrimaryImage_Click(object sender, RoutedEventArgs e) => await RunAsync(() => ApplySpecificFieldsAsync("brightness/contrast/hue", false, "brightness", "contrast", "hue"));
+    private async void ApplyRemainingImage_Click(object sender, RoutedEventArgs e) => await RunAsync(() => ApplySpecificFieldsAsync("remaining image settings", false, "saturation", "sharpness", "manualSharpness", "gamma", "denoise", "wdr", "wdrStrength", "mirror", "flip", "sceneMode", "exposure", "awb", "osd", "osdChannelNameEnabled", "osdChannelNameText", "osdDateTimeEnabled", "osdDateFormat", "osdTimeFormat", "osdDisplayWeek"));
     private async void VerifyPersistence_Click(object sender, RoutedEventArgs e) => await RunAsync(VerifyPersistenceAsync);
     private async void RebootCamera_Click(object sender, RoutedEventArgs e) => await RunAsync(() => ExecuteMaintenanceAsync("Reboot"));
     private async void FactoryDefault_Click(object sender, RoutedEventArgs e) => await RunAsync(() => ExecuteMaintenanceAsync("FactoryReset"));
@@ -2311,6 +2314,52 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 SetValue(fieldKey, failedValue);
             }
         }
+    }
+
+    private async Task ApplySpecificFieldsAsync(string label, bool expertOverride, params string[] fieldKeys)
+    {
+        if (SelectedDevice is null)
+        {
+            DiagnosticsText = "Select a device first.";
+            return;
+        }
+
+        var allowed = new HashSet<string>(fieldKeys, StringComparer.OrdinalIgnoreCase);
+        var changes = _fieldByKey.Values
+            .Where(field => allowed.Contains(field.FieldKey))
+            .Where(field => !string.Equals(field.EditableValue, field.OriginalValue, StringComparison.Ordinal))
+            .Where(field => expertOverride
+                ? field.SupportState != nameof(ContractSupportState.Unsupported)
+                : IsOperatorWritableField(field))
+            .Select(field => new TypedFieldChange(field.FieldKey, ParseNode(field.EditableValue)))
+            .ToList();
+
+        if (changes.Count == 0)
+        {
+            DiagnosticsText = $"No proven writable {label} changes to apply.";
+            ShowToast($"No {label} changes.", success: false);
+            return;
+        }
+
+        var applied = await PostAsync<List<WriteResult>>($"/api/devices/{SelectedDevice.Id}/settings/typed/apply-batch",
+            new TypedSettingBatchApplyRequest(changes, expertOverride)) ?? [];
+        var fieldOutcomes = BuildFieldApplyOutcomes(applied, changes.Select(static change => change.FieldKey));
+        var failedFields = fieldOutcomes.Where(static item => !item.Value).Select(static item => item.Key).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var successfulFields = fieldOutcomes.Where(static item => item.Value).Select(static item => item.Key).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        DiagnosticsText = JsonSerializer.Serialize(applied.Select(result => new
+        {
+            result.Success,
+            result.SemanticStatus,
+            result.Message,
+            result.ContractKey,
+            result.ContractViolations
+        }), SerializerOptions);
+        ShowToast(
+            failedFields.Count == 0
+                ? $"Saved {label}: {string.Join(", ", successfulFields)}"
+                : $"Failed {label}: {string.Join(", ", failedFields)}",
+            success: failedFields.Count == 0);
+        await LoadTypedAsync();
     }
 
     private void ResetSelectedEndpointPayload()

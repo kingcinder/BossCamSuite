@@ -7,14 +7,14 @@
     ],
     "streams": [
         {
+            "codec_name": "pcm_alaw",
+            "avg_frame_rate": "0/0"
+        },
+        {
             "codec_name": "h264",
             "width": 704,
             "height": 480,
-            "avg_frame_rate": "15/1"
-        },
-        {
-            "codec_name": "pcm_alaw",
-            "avg_frame_rate": "0/0"
+            "avg_frame_rate": "13/1"
         }
     ]
 }
