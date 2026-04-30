@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Text.Json;
@@ -349,6 +350,13 @@ public partial class MainWindow
         var failures = new List<string>();
         foreach (var candidate in candidates)
         {
+            var readinessFailure = await EnsureLiveCandidateReadyAsync(tile.Device, candidate);
+            if (readinessFailure is not null)
+            {
+                failures.Add(readinessFailure);
+                continue;
+            }
+
             var failure = await TryStartTileDecodeAsync(tile, candidate.Url, NvrStreamMode.Live, candidate.Label);
             if (failure is null)
             {
@@ -702,15 +710,18 @@ public partial class MainWindow
                 continue;
             }
 
-            if (TryBuildCredentialedVariants(source.Url, ResolvePreferredCredentials(device), out var credentialedVariants))
+            var requiresRelay = source.Metadata.TryGetValue("relayRequired", out var relayRequired) && relayRequired.Equals("go2rtc", StringComparison.OrdinalIgnoreCase);
+            var relayUpstream = source.Metadata.GetValueOrDefault("upstream");
+
+            if (!requiresRelay && TryBuildCredentialedVariants(source.Url, ResolvePreferredCredentials(device), out var credentialedVariants))
             {
                 foreach (var variant in credentialedVariants)
                 {
-                    candidates.Add(new NvrSourceCandidate(variant.Url, $"{source.Kind} ({variant.Label})"));
+                    candidates.Add(new NvrSourceCandidate(variant.Url, $"{source.Kind} ({variant.Label})", false, null));
                 }
             }
 
-            candidates.Add(new NvrSourceCandidate(source.Url, source.Kind.ToString()));
+            candidates.Add(new NvrSourceCandidate(source.Url, source.Kind.ToString(), requiresRelay, relayUpstream));
         }
 
         return candidates
@@ -765,5 +776,119 @@ public partial class MainWindow
         return true;
     }
 
-    private sealed record NvrSourceCandidate(string Url, string Label);
+    private async Task<string?> EnsureLiveCandidateReadyAsync(DeviceIdentity? device, NvrSourceCandidate candidate)
+    {
+        if (!candidate.RequiresGo2RtcRelay)
+        {
+            return null;
+        }
+
+        if (device is null)
+        {
+            return "go2rtc relay required, but no device is assigned.";
+        }
+
+        if (string.IsNullOrWhiteSpace(device.IpAddress))
+        {
+            return "go2rtc relay required, but the device has no IP address.";
+        }
+
+        var script = FindToolScript("Start-5523W-BubbleRelay.ps1");
+        if (script is null)
+        {
+            return "go2rtc relay required, but tools\\Start-5523W-BubbleRelay.ps1 was not found.";
+        }
+
+        var pwsh = ResolvePwshPath();
+        if (pwsh is null)
+        {
+            return "go2rtc relay required, but PowerShell 7 (pwsh.exe) was not found.";
+        }
+
+        var username = string.IsNullOrWhiteSpace(device.LoginName) ? "admin" : device.LoginName!;
+        var password = device.Password ?? string.Empty;
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = pwsh,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+        startInfo.ArgumentList.Add("-NoProfile");
+        startInfo.ArgumentList.Add("-ExecutionPolicy");
+        startInfo.ArgumentList.Add("Bypass");
+        startInfo.ArgumentList.Add("-File");
+        startInfo.ArgumentList.Add(script);
+        startInfo.ArgumentList.Add("-Ip");
+        startInfo.ArgumentList.Add(device.IpAddress);
+        startInfo.ArgumentList.Add("-Username");
+        startInfo.ArgumentList.Add(username);
+        startInfo.ArgumentList.Add("-Password");
+        startInfo.ArgumentList.Add(password);
+
+        using var process = Process.Start(startInfo);
+        if (process is null)
+        {
+            return "go2rtc relay process could not be started.";
+        }
+
+        var waitTask = process.WaitForExitAsync(_nvrShutdown.Token);
+        var timeoutTask = Task.Delay(TimeSpan.FromSeconds(90), _nvrShutdown.Token);
+        var completed = await Task.WhenAny(waitTask, timeoutTask);
+        if (completed == timeoutTask)
+        {
+            try { process.Kill(entireProcessTree: true); } catch { }
+            return "go2rtc relay startup timed out after 90 seconds.";
+        }
+
+        var stdout = await process.StandardOutput.ReadToEndAsync(_nvrShutdown.Token);
+        var stderr = await process.StandardError.ReadToEndAsync(_nvrShutdown.Token);
+        if (process.ExitCode != 0)
+        {
+            return $"go2rtc relay startup failed for {device.IpAddress}.{Environment.NewLine}{stdout}{Environment.NewLine}{stderr}".Trim();
+        }
+
+        NvrDiagnostics = $"go2rtc relay ready for {device.IpAddress}.{Environment.NewLine}{stdout.Trim()}";
+        return null;
+    }
+
+    private static string? FindToolScript(string fileName)
+    {
+        foreach (var start in new[] { AppContext.BaseDirectory, Environment.CurrentDirectory })
+        {
+            var current = new DirectoryInfo(start);
+            while (current is not null)
+            {
+                var candidate = Path.Combine(current.FullName, "tools", fileName);
+                if (File.Exists(candidate))
+                {
+                    return candidate;
+                }
+
+                current = current.Parent;
+            }
+        }
+
+        return null;
+    }
+
+    private static string? ResolvePwshPath()
+    {
+        var path = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+        foreach (var segment in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var candidate = Path.Combine(segment.Trim(), "pwsh.exe");
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+        var defaultPath = Path.Combine(programFiles, "PowerShell", "7", "pwsh.exe");
+        return File.Exists(defaultPath) ? defaultPath : null;
+    }
+
+    private sealed record NvrSourceCandidate(string Url, string Label, bool RequiresGo2RtcRelay, string? RelayUpstream);
 }
