@@ -1,16 +1,11 @@
 # EXTRACTION OR RELAY TRUTH
 
-Result: PRIVATE_TRANSPORT_RELAY_BLOCKED_SDK_MAPPING
+Result: PASS_SDK_RELAY_IMPLEMENTED
 
 What was proven:
-- IPCamSuite has a private NetSdk.dll path with CNetClient/OpenStreamEx/GetStreamDes clues.
-- The NVR SDK exposes callback APIs, but the exact IPCamSuite NetSdk.dll ABI and channel mapping are not yet proven.
-- The converted capture contains private port-80 payload clues, but no directly reusable standard high-res URL.
-
-Missing for relay:
-- Concrete CNetClient construction/initialization ABI or a validated HISI_DVR_Login/RealPlayEx proof against 10.0.0.227.
-- Mapping from NetSDK encode channel 101/102 to SDK preview channel/stream parameters.
-- Frame callback payload format or TCP-reassembled FLV/HDP body extraction proving H.264 elementary stream boundaries.
-
-Next material strategy:
-- Build a tiny native SDK harness that calls HISI_DVR_Init/Login with admin and an explicit empty password, then tests RealPlayEx stream values while saving callback bytes. This is a different strategy than URL probing.
+- go2rtc consumed the private bubble upstream and exposed standard local RTSP.
+- Upstream main: bubble://admin:@10.0.0.227:80/bubble/live?ch=0&stream=0
+- Relay main: rtsp://127.0.0.1:8554/5523w_main
+- Main probe: h264 2560x1920 15/1
+- Relay sub: rtsp://127.0.0.1:8554/5523w_sub
+- Sub probe: h264 704x480 15/1

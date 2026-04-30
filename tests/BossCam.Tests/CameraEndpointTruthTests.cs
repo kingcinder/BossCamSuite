@@ -107,6 +107,13 @@ public sealed class CameraEndpointTruthTests : IDisposable
 
         var sources = await adapter.GetSourcesAsync(device, CancellationToken.None);
 
+        var relayMain = Assert.Single(sources, source => source.StreamRole == "main-relay" && source.ChannelId == "101");
+        Assert.Equal("rtsp://127.0.0.1:8554/5523w_main", relayMain.Url);
+        Assert.Equal(SourceTruthOutcome.PASS_HIGHRES_RTSP, relayMain.SourceTruthOutcome);
+        Assert.Equal("bubble://admin:@10.0.0.227:80/bubble/live?ch=0&stream=0", relayMain.Metadata["upstream"]);
+        Assert.Equal("h264", relayMain.Metadata["probedCodec"]);
+        Assert.Equal("2560x1920", relayMain.Metadata["probedResolution"]);
+
         var main = Assert.Single(sources, source => source.StreamRole == "main" && source.ChannelId == "101");
         Assert.Equal("rtsp://admin:@10.0.0.227:554/ch0_0.264", main.Url);
         Assert.Equal(CredentialState.UsernameOnlyEmptyPassword, main.CredentialState);

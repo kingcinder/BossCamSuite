@@ -5,7 +5,7 @@
   "captureResult": "CAPTURE_PAYLOAD_SUFFICIENT",
   "sdkClassification": "SDK_CALLBACK_PATH_FOUND",
   "payloadClassification": "PAYLOAD_UNKNOWN_CONTAINER",
-  "extractionResult": "PRIVATE_TRANSPORT_RELAY_BLOCKED_SDK_MAPPING",
-  "circleState": "CIRCLE_CLOSED_BLOCKED_SDK_MAPPING",
+  "extractionResult": "PASS_SDK_RELAY_IMPLEMENTED",
+  "circleState": "CIRCLE_CLOSED_RELAY_IMPLEMENTED",
   "artifactRoot": "C:\\Users\\ceide\\Documents\\BossCamSuite\\artifacts\\private-transport"
 }

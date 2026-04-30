@@ -1,0 +1,9 @@
+api:
+  listen: 127.0.0.1:1984
+rtsp:
+  listen: 127.0.0.1:8554
+streams:
+  5523w_main: bubble://admin:@10.0.0.227:80/bubble/live?ch=0&stream=0
+  5523w_sub: bubble://admin:@10.0.0.227:80/bubble/live?ch=0&stream=1
+log:
+  level: debug

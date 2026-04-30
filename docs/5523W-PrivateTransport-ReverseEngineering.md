@@ -35,11 +35,42 @@ The script writes:
 - `artifacts/private-transport/CIRCLE_CLOSURE.md`
 - `artifacts/private-transport/private-transport-summary.json`
 
+## Proven Relay Path
+
+The high-resolution stream is available through go2rtc's `bubble://` protocol handler:
+
+```text
+Upstream main: bubble://admin:@10.0.0.227:80/bubble/live?ch=0&stream=0
+Upstream sub:  bubble://admin:@10.0.0.227:80/bubble/live?ch=0&stream=1
+Relay main:    rtsp://127.0.0.1:8554/5523w_main
+Relay sub:     rtsp://127.0.0.1:8554/5523w_sub
+```
+
+Run:
+
+```powershell
+pwsh -ExecutionPolicy Bypass -File .\tools\Start-5523W-BubbleRelay.ps1 -Ip 10.0.0.227 -Username admin -Password "" -StopExisting
+```
+
+The script downloads go2rtc if needed, starts the relay, and runs `ffprobe` against both local RTSP outputs. A passing run writes `artifacts/private-transport/go2rtc/bubble-relay-summary.json`.
+
 ## Current Interpretation
 
 The expected current result is not a Blue Iris URL. Evidence points at IPCamSuite using a private port-80 transport through `NetSdk.dll` / `CNetClient` with `bubble/live`, `livestream`, FLV-like, and `text/HDP` payload clues.
 
-No Blue Iris high-resolution settings should be printed until a direct standard stream or local relay is proven. `/snapshot.jpg` is low-resolution only and must not be treated as a completed high-resolution path.
+Blue Iris should consume the local relay, not the camera's failing native RTSP auth path:
+
+```text
+Address: 127.0.0.1
+Port: 8554
+Path main: /5523w_main
+Path sub: /5523w_sub
+User: blank
+Password: blank
+Make/Model: Generic/ONVIF or VLC-compatible RTSP
+```
+
+`/snapshot.jpg` remains low-resolution only and must not be treated as a completed high-resolution path.
 
 ## Next Material Recovery Step
 

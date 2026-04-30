@@ -94,6 +94,7 @@ public sealed class StreamDescriptorAdapter(IOptions<BossCamRuntimeOptions> opti
 
         if (device.IpAddress == "10.0.0.227")
         {
+            AddKnown5523WBubbleRelayTruth(device, sources);
             AddKnown5523WEmptyPasswordAuthTruth(device, sources);
         }
 
@@ -162,6 +163,66 @@ public sealed class StreamDescriptorAdapter(IOptions<BossCamRuntimeOptions> opti
                 ["classification"] = "LOWRES_ONLY",
                 ["credentialState"] = "UsernameOnlyEmptyPassword",
                 ["warning"] = "Low-res snapshot is not high-res stream success."
+            }
+        });
+    }
+
+    private static void AddKnown5523WBubbleRelayTruth(DeviceIdentity device, List<VideoSourceDescriptor> sources)
+    {
+        const string upstreamMain = "bubble://admin:@10.0.0.227:80/bubble/live?ch=0&stream=0";
+        const string upstreamSub = "bubble://admin:@10.0.0.227:80/bubble/live?ch=0&stream=1";
+
+        sources.Add(new VideoSourceDescriptor
+        {
+            Kind = TransportKind.Rtsp,
+            Url = "rtsp://127.0.0.1:8554/5523w_main",
+            Rank = 0,
+            DisplayName = "Main high-res go2rtc bubble relay",
+            ExpectedWidth = 2560,
+            ExpectedHeight = 1920,
+            ExpectedCodec = "h264",
+            ExpectedFrameRate = "15/1",
+            SourceOfTruth = "Live verified go2rtc bubble relay for 10.0.0.227",
+            AuthState = "HTTP Basic admin: empty password accepted by upstream bubble transport",
+            ChannelId = "101",
+            StreamRole = "main-relay",
+            CredentialState = CredentialState.UsernameOnlyEmptyPassword,
+            SourceTruthOutcome = SourceTruthOutcome.PASS_HIGHRES_RTSP,
+            Metadata = new Dictionary<string, string>
+            {
+                ["source"] = "live verified go2rtc bubble relay",
+                ["upstream"] = upstreamMain,
+                ["probedCodec"] = "h264",
+                ["probedResolution"] = "2560x1920",
+                ["probedFps"] = "15/1",
+                ["relayRequired"] = "go2rtc"
+            }
+        });
+
+        sources.Add(new VideoSourceDescriptor
+        {
+            Kind = TransportKind.Rtsp,
+            Url = "rtsp://127.0.0.1:8554/5523w_sub",
+            Rank = 1,
+            DisplayName = "Sub go2rtc bubble relay",
+            ExpectedWidth = 704,
+            ExpectedHeight = 480,
+            ExpectedCodec = "h264",
+            ExpectedFrameRate = "15/1",
+            SourceOfTruth = "Live verified go2rtc bubble relay for 10.0.0.227",
+            AuthState = "HTTP Basic admin: empty password accepted by upstream bubble transport",
+            ChannelId = "102",
+            StreamRole = "sub-relay",
+            CredentialState = CredentialState.UsernameOnlyEmptyPassword,
+            SourceTruthOutcome = SourceTruthOutcome.PASS_HIGHRES_RTSP,
+            Metadata = new Dictionary<string, string>
+            {
+                ["source"] = "live verified go2rtc bubble relay",
+                ["upstream"] = upstreamSub,
+                ["probedCodec"] = "h264",
+                ["probedResolution"] = "704x480",
+                ["probedFps"] = "15/1",
+                ["relayRequired"] = "go2rtc"
             }
         });
     }
@@ -331,10 +392,46 @@ public sealed class BubbleFlvAdapter : IVideoTransportAdapter
             new VideoSourceDescriptor
             {
                 Kind = TransportKind.BubbleFlv,
-                Url = $"http://{device.IpAddress}:{device.Port}/bubble/live?ch=1&stream=0",
+                Url = $"bubble://admin:@{device.IpAddress}:80/bubble/live?ch=0&stream=0",
                 Rank = 40,
-                DisplayName = "Vendor FLV",
-                Metadata = new Dictionary<string, string> { ["path"] = "/bubble/live?ch=1&stream=0" }
+                DisplayName = "Vendor bubble main stream",
+                ExpectedWidth = device.IpAddress == "10.0.0.227" ? 2560 : null,
+                ExpectedHeight = device.IpAddress == "10.0.0.227" ? 1920 : null,
+                ExpectedCodec = device.IpAddress == "10.0.0.227" ? "h264" : null,
+                ExpectedFrameRate = device.IpAddress == "10.0.0.227" ? "15/1" : null,
+                SourceOfTruth = device.IpAddress == "10.0.0.227" ? "Live verified go2rtc bubble upstream" : "Vendor bubble candidate",
+                ChannelId = device.IpAddress == "10.0.0.227" ? "101" : null,
+                StreamRole = "main-bubble-upstream",
+                CredentialState = CredentialState.UsernameOnlyEmptyPassword,
+                SourceTruthOutcome = device.IpAddress == "10.0.0.227" ? SourceTruthOutcome.PASS_CAPTURED_PRIVATE_TRANSPORT : SourceTruthOutcome.FAIL_NO_SOURCE,
+                Metadata = new Dictionary<string, string>
+                {
+                    ["path"] = "/bubble/live?ch=0&stream=0",
+                    ["relay"] = "go2rtc",
+                    ["relayUrl"] = "rtsp://127.0.0.1:8554/5523w_main"
+                }
+            },
+            new VideoSourceDescriptor
+            {
+                Kind = TransportKind.BubbleFlv,
+                Url = $"bubble://admin:@{device.IpAddress}:80/bubble/live?ch=0&stream=1",
+                Rank = 41,
+                DisplayName = "Vendor bubble sub stream",
+                ExpectedWidth = device.IpAddress == "10.0.0.227" ? 704 : null,
+                ExpectedHeight = device.IpAddress == "10.0.0.227" ? 480 : null,
+                ExpectedCodec = device.IpAddress == "10.0.0.227" ? "h264" : null,
+                ExpectedFrameRate = device.IpAddress == "10.0.0.227" ? "15/1" : null,
+                SourceOfTruth = device.IpAddress == "10.0.0.227" ? "Live verified go2rtc bubble upstream" : "Vendor bubble candidate",
+                ChannelId = device.IpAddress == "10.0.0.227" ? "102" : null,
+                StreamRole = "sub-bubble-upstream",
+                CredentialState = CredentialState.UsernameOnlyEmptyPassword,
+                SourceTruthOutcome = device.IpAddress == "10.0.0.227" ? SourceTruthOutcome.PASS_CAPTURED_PRIVATE_TRANSPORT : SourceTruthOutcome.FAIL_NO_SOURCE,
+                Metadata = new Dictionary<string, string>
+                {
+                    ["path"] = "/bubble/live?ch=0&stream=1",
+                    ["relay"] = "go2rtc",
+                    ["relayUrl"] = "rtsp://127.0.0.1:8554/5523w_sub"
+                }
             }
         ];
         return Task.FromResult(sources);

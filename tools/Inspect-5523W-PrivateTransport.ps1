@@ -304,29 +304,46 @@ Append-Line $payloadMd "- Raw NAL extraction is not proven because TCP stream re
 Save-Text "PRIVATE_PAYLOAD_TRUTH.md" $payloadMd.ToString()
 
 Write-Step "Loop 5: extraction/relay truth"
-$extractionResult = switch ($payloadClassification) {
+$relaySummaryPath = Join-Path $ArtifactRoot "go2rtc\bubble-relay-summary.json"
+$relaySummary = if (Test-Path -LiteralPath $relaySummaryPath) { Get-Content -Raw -LiteralPath $relaySummaryPath | ConvertFrom-Json } else { $null }
+$relayPass = $relaySummary -and $relaySummary.result -eq "PASS_HIGHRES_BUBBLE_RELAY"
+$extractionResult = if ($relayPass) {
+    "PASS_SDK_RELAY_IMPLEMENTED"
+} else {
+    switch ($payloadClassification) {
     "PAYLOAD_CAPTURE_INSUFFICIENT" { "PRIVATE_TRANSPORT_RELAY_BLOCKED_INSUFFICIENT_CAPTURE" }
     "PAYLOAD_RAW_EXTRACTABLE" { "PASS_RAW_STREAM_EXTRACTED" }
     "PAYLOAD_ENCRYPTED_OR_COMPRESSED" { "PRIVATE_TRANSPORT_RELAY_BLOCKED_ENCRYPTED" }
     default { "PRIVATE_TRANSPORT_RELAY_BLOCKED_SDK_MAPPING" }
+    }
 }
 $extractionMd = [System.Text.StringBuilder]::new()
 Append-Line $extractionMd "# EXTRACTION OR RELAY TRUTH"
 Append-Line $extractionMd ""
 Append-Line $extractionMd "Result: $extractionResult"
 Append-Line $extractionMd ""
-Append-Line $extractionMd "What was proven:"
-Append-Line $extractionMd "- IPCamSuite has a private NetSdk.dll path with CNetClient/OpenStreamEx/GetStreamDes clues."
-Append-Line $extractionMd "- The NVR SDK exposes callback APIs, but the exact IPCamSuite NetSdk.dll ABI and channel mapping are not yet proven."
-Append-Line $extractionMd "- The converted capture contains private port-80 payload clues, but no directly reusable standard high-res URL."
-Append-Line $extractionMd ""
-Append-Line $extractionMd "Missing for relay:"
-Append-Line $extractionMd "- Concrete CNetClient construction/initialization ABI or a validated HISI_DVR_Login/RealPlayEx proof against 10.0.0.227."
-Append-Line $extractionMd "- Mapping from NetSDK encode channel 101/102 to SDK preview channel/stream parameters."
-Append-Line $extractionMd "- Frame callback payload format or TCP-reassembled FLV/HDP body extraction proving H.264 elementary stream boundaries."
-Append-Line $extractionMd ""
-Append-Line $extractionMd "Next material strategy:"
-Append-Line $extractionMd "- Build a tiny native SDK harness that calls HISI_DVR_Init/Login with admin and an explicit empty password, then tests RealPlayEx stream values while saving callback bytes. This is a different strategy than URL probing."
+if ($relayPass) {
+    Append-Line $extractionMd "What was proven:"
+    Append-Line $extractionMd "- go2rtc consumed the private bubble upstream and exposed standard local RTSP."
+    Append-Line $extractionMd "- Upstream main: $($relaySummary.upstreamMain)"
+    Append-Line $extractionMd "- Relay main: $($relaySummary.rtspMain)"
+    Append-Line $extractionMd "- Main probe: $($relaySummary.mainCodec) $($relaySummary.mainWidth)x$($relaySummary.mainHeight) $($relaySummary.mainFps)"
+    Append-Line $extractionMd "- Relay sub: $($relaySummary.rtspSub)"
+    Append-Line $extractionMd "- Sub probe: $($relaySummary.subCodec) $($relaySummary.subWidth)x$($relaySummary.subHeight) $($relaySummary.subFps)"
+} else {
+    Append-Line $extractionMd "What was proven:"
+    Append-Line $extractionMd "- IPCamSuite has a private NetSdk.dll path with CNetClient/OpenStreamEx/GetStreamDes clues."
+    Append-Line $extractionMd "- The NVR SDK exposes callback APIs, but the exact IPCamSuite NetSdk.dll ABI and channel mapping are not yet proven."
+    Append-Line $extractionMd "- The converted capture contains private port-80 payload clues, but no directly reusable standard high-res URL."
+    Append-Line $extractionMd ""
+    Append-Line $extractionMd "Missing for relay:"
+    Append-Line $extractionMd "- Concrete CNetClient construction/initialization ABI or a validated HISI_DVR_Login/RealPlayEx proof against 10.0.0.227."
+    Append-Line $extractionMd "- Mapping from NetSDK encode channel 101/102 to SDK preview channel/stream parameters."
+    Append-Line $extractionMd "- Frame callback payload format or TCP-reassembled FLV/HDP body extraction proving H.264 elementary stream boundaries."
+    Append-Line $extractionMd ""
+    Append-Line $extractionMd "Next material strategy:"
+    Append-Line $extractionMd "- Build a tiny native SDK harness that calls HISI_DVR_Init/Login with admin and an explicit empty password, then tests RealPlayEx stream values while saving callback bytes. This is a different strategy than URL probing."
+}
 Save-Text "EXTRACTION_RELAY_TRUTH.md" $extractionMd.ToString()
 
 Write-Step "Loop 6: Blue Iris surface truth"
@@ -334,7 +351,14 @@ $blueMd = [System.Text.StringBuilder]::new()
 Append-Line $blueMd "# BLUE IRIS SURFACE TRUTH"
 Append-Line $blueMd ""
 if ($extractionResult -match "^PASS_") {
-    Append-Line $blueMd "Blue Iris settings: available after relay/direct stream proof."
+    Append-Line $blueMd "Blue Iris high-resolution settings:"
+    Append-Line $blueMd "- Address: 127.0.0.1"
+    Append-Line $blueMd "- Port: 8554"
+    Append-Line $blueMd "- Path main: /5523w_main"
+    Append-Line $blueMd "- Path sub: /5523w_sub"
+    Append-Line $blueMd "- User: blank"
+    Append-Line $blueMd "- Password: blank"
+    Append-Line $blueMd "- Make/Model: Generic/ONVIF or VLC-compatible RTSP"
 } else {
     Append-Line $blueMd "No Blue Iris high-resolution settings are emitted."
     Append-Line $blueMd ""
@@ -367,8 +391,8 @@ Append-Line $closureMd "| Did we inspect IPCamSuite binaries/config/logs? | Yes:
 Append-Line $closureMd "| Did we inspect IPC SDK and NVR SDK? | Yes: $($existingSdkRoots -join '; ') |"
 Append-Line $closureMd "| Did we identify the live-stream call chain? | Partially: NetSdk CNetClient plus HISI callback path found; exact IPC ABI still missing. |"
 Append-Line $closureMd "| Did we classify the private payload? | Yes: $payloadClassification |"
-Append-Line $closureMd "| Did we extract raw stream, implement SDK relay, or identify exact blocker? | Exact blocker: $extractionResult |"
-Append-Line $closureMd "| If relay exists, did we print exact Blue Iris settings? | No relay exists; settings intentionally withheld. |"
+Append-Line $closureMd "| Did we extract raw stream, implement SDK relay, or identify exact blocker? | $extractionResult |"
+Append-Line $closureMd "| If relay exists, did we print exact Blue Iris settings? | $(if ($relayPass) { 'Yes: local RTSP relay settings emitted.' } else { 'No relay exists; settings intentionally withheld.' }) |"
 Append-Line $closureMd "| Did build/test pass? | Pending Loop 7 command execution. |"
 Save-Text "CIRCLE_CLOSURE.md" $closureMd.ToString()
 
