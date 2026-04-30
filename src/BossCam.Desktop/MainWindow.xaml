@@ -634,6 +634,42 @@
                         <TabItem Header="Stream">
                             <ScrollViewer VerticalScrollBarVisibility="Auto">
                                 <StackPanel Margin="8">
+                                    <Border Padding="10" Margin="0,0,0,10" CornerRadius="8" Background="#20313E">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding CredentialStatusText}" Foreground="#FFF3D7C7" TextWrapping="Wrap"/>
+                                            <TextBlock Text="{Binding EndpointDriftWarning}" Foreground="#FFFFC36A" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                            <TextBlock Text="{Binding PtzServiceText}" Foreground="#C4D4E5" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                            <WrapPanel Margin="0,8,0,0">
+                                                <Button Content="Refresh Endpoint Truth" Click="RefreshEndpointTruth_Click" Margin="0,0,8,0"/>
+                                                <Button Content="Open Live Feed" Click="OpenLiveFeed_Click" Margin="0,0,8,0"/>
+                                                <CheckBox Content="Advanced PTZ hardware mode" IsChecked="{Binding AdvancedPtzHardwareMode}" IsEnabled="False"
+                                                          ToolTip="Movement remains disabled until a user explicitly validates installed PTZ hardware."/>
+                                            </WrapPanel>
+                                        </StackPanel>
+                                    </Border>
+                                    <TextBlock Text="Per-Camera Streams" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                    <DataGrid Height="130" ItemsSource="{Binding StreamTruthRows}" AutoGenerateColumns="False" Background="#0E171E" BorderThickness="0" Margin="0,0,0,10">
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="Profile" Binding="{Binding Profile}" Width="0.8*" IsReadOnly="True"/>
+                                            <DataGridTextColumn Header="Declared Codec" Binding="{Binding DeclaredCodec}" Width="1*" IsReadOnly="True"/>
+                                            <DataGridTextColumn Header="Probed Codec" Binding="{Binding ProbedCodec}" Width="1*" IsReadOnly="True"/>
+                                            <DataGridTextColumn Header="Declared Res" Binding="{Binding DeclaredResolution}" Width="1*" IsReadOnly="True"/>
+                                            <DataGridTextColumn Header="Probed Res" Binding="{Binding ProbedResolution}" Width="1*" IsReadOnly="True"/>
+                                            <DataGridTextColumn Header="FPS" Binding="{Binding ProbedFps}" Width="0.7*" IsReadOnly="True"/>
+                                            <DataGridTextColumn Header="RTSP" Binding="{Binding RtspUri}" Width="2.4*" IsReadOnly="True"/>
+                                            <DataGridTextColumn Header="Warning" Binding="{Binding MismatchWarning}" Width="2*" IsReadOnly="True"/>
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                    <TextBlock Text="Endpoint Verification" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                    <DataGrid Height="150" ItemsSource="{Binding EndpointTruthRows}" AutoGenerateColumns="False" Background="#0E171E" BorderThickness="0" Margin="0,0,0,10">
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="Capability" Binding="{Binding Capability}" Width="1*" IsReadOnly="True"/>
+                                            <DataGridTextColumn Header="State" Binding="{Binding State}" Width="1*" IsReadOnly="True"/>
+                                            <DataGridTextColumn Header="Endpoint" Binding="{Binding Endpoint}" Width="2.4*" IsReadOnly="True"/>
+                                            <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="1*" IsReadOnly="True"/>
+                                            <DataGridTextColumn Header="Evidence" Binding="{Binding Evidence}" Width="2.2*" IsReadOnly="True"/>
+                                        </DataGrid.Columns>
+                                    </DataGrid>
                                     <WrapPanel Margin="0,0,0,8" Visibility="{Binding StreamResolutionVisibility}">
                                         <TextBlock Width="140" Text="Resolution" VerticalAlignment="Center"/>
                                         <ComboBox Width="220" ItemsSource="{Binding VideoResolutionOptions}" SelectedItem="{Binding VideoResolution}" IsEnabled="{Binding CanEditVideoResolution}"/>

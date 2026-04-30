@@ -360,7 +360,7 @@ public partial class MainWindow
         }
 
         tile.Status = NvrStreamStatus.Failed;
-        tile.Message = BuildLiveFailureSummary(failures);
+        tile.Message = BuildLiveFailureSummary(tile.Device, failures);
         NvrDiagnostics = string.Join($"{Environment.NewLine}{Environment.NewLine}", failures);
     }
 
@@ -622,7 +622,7 @@ public partial class MainWindow
         builder.AppendLine($"tile={tile.TileId + 1}");
         builder.AppendLine($"mode={tile.Mode}");
         builder.AppendLine($"attempt={label}");
-        builder.AppendLine($"source={source}");
+        builder.AppendLine($"source={SensitiveValueRedactor.RedactUrl(source)}");
         builder.AppendLine($"error={ex.GetBaseException().Message}");
         builder.AppendLine(BuildNvrSessionDiagnostics(tile, label, session));
         return builder.ToString().Trim();
@@ -641,8 +641,9 @@ public partial class MainWindow
         builder.AppendLine($"message={tile.Message}");
         if (session is not null)
         {
-            builder.AppendLine($"source={session.Source}");
-            builder.AppendLine($"ffmpegArgs={session.FfmpegArguments}");
+            builder.AppendLine($"source={SensitiveValueRedactor.RedactUrl(session.Source)}");
+            builder.AppendLine($"ffmpegArgs={SensitiveValueRedactor.RedactText(session.FfmpegArguments)}");
+            builder.AppendLine($"previewResolution={NvrFrameDecodeSession.FrameWidth}x{NvrFrameDecodeSession.FrameHeight}");
             builder.AppendLine($"exitCode={(session.ExitCode?.ToString() ?? "running")}");
             builder.AppendLine($"framesDecoded={session.FramesDecoded}");
             builder.AppendLine($"lastFrameTimestamp={(session.LastFrameTimestamp?.ToString("O") ?? "none")}");
@@ -661,15 +662,20 @@ public partial class MainWindow
 
         var listed = string.Join(
             Environment.NewLine,
-            sources.OrderBy(static item => item.Rank).Select(static item => $"{item.Kind} rank={item.Rank} url={item.Url}"));
+            sources.OrderBy(static item => item.Rank).Select(static item => $"{item.Kind} rank={item.Rank} url={SensitiveValueRedactor.RedactUrl(item.Url)} expected={item.ExpectedWidth}x{item.ExpectedHeight} codec={item.ExpectedCodec} auth={item.AuthState} outcome={item.SourceTruthOutcome} lowResOnly={item.LowResOnly}"));
         return $"No FFmpeg-decodable live source was available for {device.DisplayName}.{Environment.NewLine}{listed}";
     }
 
-    private static string BuildLiveFailureSummary(IReadOnlyCollection<string> failures)
+    private static string BuildLiveFailureSummary(DeviceIdentity? device, IReadOnlyCollection<string> failures)
     {
         var combined = string.Join(" ", failures);
         if (combined.Contains("401", StringComparison.OrdinalIgnoreCase) || combined.Contains("Unauthorized", StringComparison.OrdinalIgnoreCase))
         {
+            if (device?.IpAddress == "10.0.0.227")
+            {
+                return "FAIL_RTSP_EMPTY_PASSWORD_AUTH_NEGOTIATION";
+            }
+
             return "Authentication failed for RTSP source (401 Unauthorized).";
         }
 
@@ -752,7 +758,7 @@ public partial class MainWindow
 
         if (uri.Scheme.Equals("rtsp", StringComparison.OrdinalIgnoreCase))
         {
-            list.Add(($"{uri.Scheme}://{user}@{authority}{path}{uri.Fragment}", $"{credentials.Label}:user-only"));
+            // Do not collapse explicit empty password into user-only RTSP auth.
         }
 
         variants = list;

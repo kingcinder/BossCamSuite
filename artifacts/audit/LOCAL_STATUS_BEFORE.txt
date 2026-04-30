@@ -1,0 +1,27 @@
+ M README.md
+ M src/BossCam.Contracts/Models/DeviceContracts.cs
+ M src/BossCam.Core/Abstractions/Interfaces.cs
+ M src/BossCam.Core/BossCamRuntimeOptions.cs
+ M src/BossCam.Core/CoreServiceCollectionExtensions.cs
+ M src/BossCam.Desktop/MainWindow.xaml
+ M src/BossCam.Desktop/MainWindow.xaml.cs
+ M src/BossCam.Infrastructure/Persistence/SqliteApplicationStore.cs
+ M src/BossCam.Infrastructure/Video/VideoTransportAdapters.cs
+ M src/BossCam.Service/Program.cs
+?? .codex/
+?? .github/
+?? AGENT_HANDOFF_SERPENT_CIRCLE.md
+?? CODEX_SERPENT_CIRCLE_PROMPT.md
+?? CONTRIBUTING.md
+?? SERPENT_CIRCLE.md
+?? docs/5523W-HighRes-Recovery.md
+?? docs/live-feed-smoke.md
+?? docs/serpent-circle-endpoint-truth.md
+?? scripts/smoke-live-camera-feed.ps1
+?? scripts/validate-serpent-circle.ps1
+?? src/BossCam.Core/Services/CameraEndpointTruthService.cs
+?? src/BossCam.Core/Services/EndpointTruthIntegrityGuard.cs
+?? src/BossCam.Core/Services/EndpointTruthLiveBuilder.cs
+?? src/BossCam.Service/fixtures/5523w/__IPC/
+?? tests/BossCam.Tests/CameraEndpointTruthTests.cs
+?? tools/

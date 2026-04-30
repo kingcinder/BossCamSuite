@@ -506,63 +506,63 @@ public sealed class ProtocolValidationService(
             {
                 var writeMethods = BuildWriteMethodCandidates(writeMethod, writeEndpoint);
                 foreach (var candidateMethod in writeMethods)
-                foreach (var variant in payloadVariants)
-                {
-                    var writeProbe = await SendDeepProbeAsync(device, writeEndpoint, candidateMethod, variant.Payload, variant.ContentType, context, cancellationToken);
-                    var writeSuccess = IsRawSemanticSuccess(writeProbe.StatusCode, writeProbe.RawContent, writeProbe.ParsedResponse);
-                    transcripts.Add(ToTranscript(
-                        device,
-                        adapterName,
-                        writeProbe.EffectiveEndpoint ?? writeEndpoint,
-                        candidateMethod,
-                        variant.Payload?.ToJsonString(),
-                        new WriteResult
-                        {
-                            Success = writeSuccess,
-                            StatusCode = (int?)writeProbe.StatusCode,
-                            Message = writeProbe.RawContent,
-                            Response = writeProbe.ParsedResponse
-                        },
-                        BuildFirmwareFingerprint(device),
-                        $"deep-write auth={context.Mode} method={candidateMethod} content={variant.ContentType}",
-                        beforeValue: deepPre));
-
-                    if (!writeSuccess)
+                    foreach (var variant in payloadVariants)
                     {
-                        continue;
-                    }
+                        var writeProbe = await SendDeepProbeAsync(device, writeEndpoint, candidateMethod, variant.Payload, variant.ContentType, context, cancellationToken);
+                        var writeSuccess = IsRawSemanticSuccess(writeProbe.StatusCode, writeProbe.RawContent, writeProbe.ParsedResponse);
+                        transcripts.Add(ToTranscript(
+                            device,
+                            adapterName,
+                            writeProbe.EffectiveEndpoint ?? writeEndpoint,
+                            candidateMethod,
+                            variant.Payload?.ToJsonString(),
+                            new WriteResult
+                            {
+                                Success = writeSuccess,
+                                StatusCode = (int?)writeProbe.StatusCode,
+                                Message = writeProbe.RawContent,
+                                Response = writeProbe.ParsedResponse
+                            },
+                            BuildFirmwareFingerprint(device),
+                            $"deep-write auth={context.Mode} method={candidateMethod} content={variant.ContentType}",
+                            beforeValue: deepPre));
 
-                    var verifyRead = await SendDeepProbeAsync(device, successfulRead.EffectiveEndpoint ?? endpoint, readMethod, null, "application/json", context, cancellationToken);
-                    deepPost = verifyRead.ParsedResponse?.DeepClone();
-                    var actualValue = TryGetPathValue(verifyRead.ParsedResponse, mutationPath);
-                    semanticChanged = actualValue is not null && !JsonNode.DeepEquals(actualValue, originalValue);
-                    var matchedIntended = actualValue is not null && JsonNode.DeepEquals(actualValue, mutatedValue);
-                    deepWriteVerified = IsRawSemanticSuccess(verifyRead.StatusCode, verifyRead.RawContent, verifyRead.ParsedResponse) && (semanticChanged || matchedIntended);
-
-                    transcripts.Add(ToTranscript(
-                        device,
-                        adapterName,
-                        verifyRead.EffectiveEndpoint ?? (successfulRead.EffectiveEndpoint ?? endpoint),
-                        readMethod,
-                        null,
-                        new WriteResult
+                        if (!writeSuccess)
                         {
-                            Success = deepWriteVerified,
-                            StatusCode = (int?)verifyRead.StatusCode,
-                            Message = verifyRead.RawContent,
-                            Response = verifyRead.ParsedResponse
-                        },
-                        BuildFirmwareFingerprint(device),
-                        $"deep-post-read auth={context.Mode} mutationPath={mutationPath}",
-                        beforeValue: deepPre,
-                        afterValue: deepPost));
+                            continue;
+                        }
 
-                    if (deepWriteVerified)
-                    {
-                        notes = AppendNote(notes, $"Deep write verified via {context.Mode} at {mutationPath}.");
-                        break;
+                        var verifyRead = await SendDeepProbeAsync(device, successfulRead.EffectiveEndpoint ?? endpoint, readMethod, null, "application/json", context, cancellationToken);
+                        deepPost = verifyRead.ParsedResponse?.DeepClone();
+                        var actualValue = TryGetPathValue(verifyRead.ParsedResponse, mutationPath);
+                        semanticChanged = actualValue is not null && !JsonNode.DeepEquals(actualValue, originalValue);
+                        var matchedIntended = actualValue is not null && JsonNode.DeepEquals(actualValue, mutatedValue);
+                        deepWriteVerified = IsRawSemanticSuccess(verifyRead.StatusCode, verifyRead.RawContent, verifyRead.ParsedResponse) && (semanticChanged || matchedIntended);
+
+                        transcripts.Add(ToTranscript(
+                            device,
+                            adapterName,
+                            verifyRead.EffectiveEndpoint ?? (successfulRead.EffectiveEndpoint ?? endpoint),
+                            readMethod,
+                            null,
+                            new WriteResult
+                            {
+                                Success = deepWriteVerified,
+                                StatusCode = (int?)verifyRead.StatusCode,
+                                Message = verifyRead.RawContent,
+                                Response = verifyRead.ParsedResponse
+                            },
+                            BuildFirmwareFingerprint(device),
+                            $"deep-post-read auth={context.Mode} mutationPath={mutationPath}",
+                            beforeValue: deepPre,
+                            afterValue: deepPost));
+
+                        if (deepWriteVerified)
+                        {
+                            notes = AppendNote(notes, $"Deep write verified via {context.Mode} at {mutationPath}.");
+                            break;
+                        }
                     }
-                }
 
                 if (deepWriteVerified)
                 {
@@ -635,9 +635,6 @@ public sealed class ProtocolValidationService(
 
         candidates.Add(new NetworkCredential("admin", device.Password ?? string.Empty));
         candidates.Add(new NetworkCredential("admin", string.Empty));
-        candidates.Add(new NetworkCredential("admin", "admin"));
-        candidates.Add(new NetworkCredential("admin", "123456"));
-        candidates.Add(new NetworkCredential("root", "12345"));
 
         return candidates
             .GroupBy(candidate => $"{candidate.UserName}:{candidate.Password}", StringComparer.OrdinalIgnoreCase)

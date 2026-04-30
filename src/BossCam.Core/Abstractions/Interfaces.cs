@@ -113,4 +113,7 @@ public interface IApplicationStore
     Task<IReadOnlyCollection<GroupedApplyProfile>> GetGroupedApplyProfilesAsync(Guid? deviceId, string? firmwareFingerprint, CancellationToken cancellationToken);
     Task SaveGroupedRetestResultsAsync(IEnumerable<GroupedUnsupportedRetestResult> results, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<GroupedUnsupportedRetestResult>> GetGroupedRetestResultsAsync(Guid deviceId, int limit, CancellationToken cancellationToken);
+    Task SaveCameraEndpointTruthProfileAsync(CameraEndpointTruthProfile profile, CancellationToken cancellationToken);
+    Task<CameraEndpointTruthProfile?> GetCameraEndpointTruthProfileAsync(Guid deviceId, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<CameraEndpointTruthProfile>> GetCameraEndpointTruthProfilesAsync(CancellationToken cancellationToken);
 }

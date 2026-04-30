@@ -14,4 +14,5 @@ public sealed class BossCamRuntimeOptions
     public string LocalApiBaseUrl { get; set; } = "http://127.0.0.1:5317";
     public int RecordingHousekeepingMinutes { get; set; } = 15;
     public int RecordingStartupReconcileDelaySeconds { get; set; } = 8;
+    public string FfprobePath { get; set; } = "ffprobe";
 }

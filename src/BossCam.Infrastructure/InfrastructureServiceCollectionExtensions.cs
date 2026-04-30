@@ -23,6 +23,12 @@ public static class InfrastructureServiceCollectionExtensions
                 options.ProtocolAssetsPath = string.IsNullOrWhiteSpace(options.ProtocolAssetsPath) ? Path.Combine(baseDirectory, "assets", "protocols") : options.ProtocolAssetsPath;
                 options.DatabasePath = string.IsNullOrWhiteSpace(options.DatabasePath) ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BossCamSuite", "bosscam.db") : options.DatabasePath;
                 options.FirmwareArtifactDirectory = string.IsNullOrWhiteSpace(options.FirmwareArtifactDirectory) ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BossCamSuite", "firmware") : options.FirmwareArtifactDirectory;
+                options.ProtocolAssetsPath = NormalizePath(options.ProtocolAssetsPath);
+                options.DatabasePath = NormalizePath(options.DatabasePath);
+                options.IpcamSuiteDirectory = NormalizePath(options.IpcamSuiteDirectory);
+                options.EseeCloudDirectory = NormalizePath(options.EseeCloudDirectory);
+                options.EseeCloudDataDirectory = NormalizePath(options.EseeCloudDataDirectory);
+                options.FirmwareArtifactDirectory = NormalizePath(options.FirmwareArtifactDirectory);
                 Directory.CreateDirectory(Path.GetDirectoryName(options.DatabasePath)!);
                 Directory.CreateDirectory(options.FirmwareArtifactDirectory);
             });
@@ -51,4 +57,9 @@ public static class InfrastructureServiceCollectionExtensions
 
         return services;
     }
+
+    private static string NormalizePath(string path)
+        => string.IsNullOrWhiteSpace(path)
+            ? path
+            : Path.GetFullPath(Environment.ExpandEnvironmentVariables(path));
 }

@@ -26,6 +26,10 @@ public static class CoreServiceCollectionExtensions
         services.AddSingleton<RecordingService>();
         services.AddSingleton<NvrPlaybackService>();
         services.AddSingleton<FirmwareCatalogService>();
+        services.AddSingleton<CameraEndpointTruthService>();
+        services.AddSingleton<EndpointTruthLiveBuilder>();
+        services.AddSingleton<IEndpointTruthLiveProbeClient, HttpOnvifLiveProbeClient>();
+        services.AddSingleton<IFfprobePlaybackProbe, FfprobePlaybackProbe>();
         return services;
     }
 }

@@ -90,7 +90,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         ["privacyMaskWidth"] = ControlPointWidgetKind.TextInput,
         ["privacyMaskHeight"] = ControlPointWidgetKind.TextInput
     };
-    private readonly HttpClient _httpClient = new() { BaseAddress = new Uri("http://127.0.0.1:5317") };
+    private readonly HttpClient _httpClient = new() { BaseAddress = new Uri(ResolveLocalApiBaseUrl()) };
     private readonly Dictionary<string, TypedFieldRow> _fieldByKey = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, EditorHint> _editorHintByKey = new(StringComparer.OrdinalIgnoreCase);
     private readonly string _operatorStorageSettingsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BossCamSuite", "operator-storage.json");
@@ -170,6 +170,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public ObservableCollection<ImageControlInventoryItem> ImageInventoryRows { get; } = [];
     public ObservableCollection<ControlPointInventoryItem> ControlPointInventoryRows { get; } = [];
     public ObservableCollection<EndpointSurfaceRow> EndpointSurfaceRows { get; } = [];
+    public ObservableCollection<EndpointTruthRow> EndpointTruthRows { get; } = [];
+    public ObservableCollection<StreamTruthRow> StreamTruthRows { get; } = [];
     public ObservableCollection<CompositePermutationCoverageRow> CompositeCoverageRows { get; } = [];
     public ObservableCollection<MotionGridCellRow> MotionGridCells { get; } = [];
     public ObservableCollection<ImageBehaviorRow> ImageBehaviorRows { get; } = [];
@@ -197,6 +199,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public ObservableCollection<string> WirelessApModeOptions { get; } = [];
     public ObservableCollection<string> MotionTypeOptions { get; } = [];
     public ObservableCollection<string> VideoResolutionOptions { get; } = [];
+    public string EndpointDriftWarning { get; private set; } = "Endpoint drift: no per-camera ONVIF/RTSP truth loaded.";
+    public string CredentialStatusText { get; private set; } = "Credentials: unknown";
+    public string PtzServiceText { get; private set; } = "PTZ service: unknown";
+    public bool AdvancedPtzHardwareMode { get; set; }
 
     public DeviceIdentity? SelectedDevice
     {
@@ -1334,6 +1340,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private async void StopPlaybackSave_Click(object sender, RoutedEventArgs e) => await RunAsync(StopPlaybackSaveAsync);
     private async void RunNetworkRecovery_Click(object sender, RoutedEventArgs e) => await RunAsync(RunNetworkRecoveryAsync);
     private async void RefreshSelected_Click(object sender, RoutedEventArgs e) => await RunAsync(RefreshSelectedAsync);
+    private async void RefreshEndpointTruth_Click(object sender, RoutedEventArgs e) => await RunAsync(RefreshEndpointTruthAsync);
+    private async void OpenLiveFeed_Click(object sender, RoutedEventArgs e) => await RunAsync(OpenLiveFeedAsync);
     private async void RefreshEndpointSurface_Click(object sender, RoutedEventArgs e) => await RunAsync(LoadEndpointSurfaceAsync);
     private void ResetEndpointPayload_Click(object sender, RoutedEventArgs e) => ResetSelectedEndpointPayload();
     private async void ExecuteEndpointSurface_Click(object sender, RoutedEventArgs e) => await RunAsync(ExecuteSelectedEndpointAsync);
@@ -1344,6 +1352,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         try
         {
+            if (!await EnsureServiceHealthAsync())
+            {
+                return;
+            }
+
             await action();
         }
         catch (Exception ex)
@@ -1362,6 +1375,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         await LoadTypedAsync();
         await LoadValidationAsync();
+        await LoadEndpointTruthAsync();
         await LoadTranscriptsAsync();
         await LoadRecordingStorageForSelectedDeviceAsync();
     }
@@ -1399,6 +1413,35 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         await LoadSelectedDeviceStateAsync();
         ShowToast("Camera refreshed.", success: true);
+    }
+
+    private async Task RefreshEndpointTruthAsync()
+    {
+        if (SelectedDevice is null)
+        {
+            return;
+        }
+
+        _ = await PostAsync<CameraEndpointTruthProfile>($"/api/devices/{SelectedDevice.Id}/endpoint-truth/refresh", null);
+        await LoadEndpointTruthAsync();
+        ShowToast("Endpoint truth refreshed.", success: true);
+    }
+
+    private async Task OpenLiveFeedAsync()
+    {
+        if (SelectedDevice is null)
+        {
+            ShowToast("Select a camera first.", success: false);
+            return;
+        }
+
+        SelectedNvrTile ??= NvrTiles.FirstOrDefault();
+        if (SelectedNvrTile is not null)
+        {
+            SelectedNvrTile.Device = SelectedDevice;
+        }
+
+        await StartSelectedNvrLiveAsync();
     }
 
     private void SelectFirmwareFile()
@@ -1968,6 +2011,44 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         var validations = await GetAsync<List<EndpointValidationResult>>($"/api/devices/{SelectedDevice.Id}/validation") ?? [];
         ReplaceCollection(ValidationMatrix, validations);
+    }
+
+    private async Task LoadEndpointTruthAsync()
+    {
+        if (SelectedDevice is null)
+        {
+            return;
+        }
+
+        var summary = await GetAsync<CameraEndpointTruthSummary>($"/api/devices/{SelectedDevice.Id}/endpoint-truth");
+        if (summary?.Profile is null)
+        {
+            ReplaceCollection(EndpointTruthRows, []);
+            ReplaceCollection(StreamTruthRows, []);
+            EndpointDriftWarning = "Endpoint drift: no per-camera ONVIF/RTSP truth loaded.";
+            CredentialStatusText = "Credentials: unknown";
+            PtzServiceText = "PTZ service: unknown";
+            NotifyEndpointTruthProperties();
+            return;
+        }
+
+        var declared = summary.Profile.OnvifDeclaredStreams.ToDictionary(stream => stream.ProfileToken, StringComparer.OrdinalIgnoreCase);
+        ReplaceCollection(EndpointTruthRows, summary.Profile.Endpoints.Select(EndpointTruthRow.FromObservation));
+        ReplaceCollection(StreamTruthRows, summary.Profile.RtspPlaybackStreams
+            .Where(static stream => !stream.ProfileToken.Equals("ADMIN_NEGATIVE", StringComparison.OrdinalIgnoreCase))
+            .Select(stream => StreamTruthRow.FromProbe(stream, declared.GetValueOrDefault(stream.ProfileToken))));
+        EndpointDriftWarning = summary.EndpointDriftDetected ? $"Endpoint drift: {string.Join(" ", summary.DriftNotes)}" : "Endpoint drift: none among stored same-model profiles.";
+        CredentialStatusText = $"Credentials: {summary.Profile.CredentialState}";
+        PtzServiceText = summary.Profile.Ptz.OperatorMessage ?? $"PTZ service: {summary.Profile.Ptz.ServiceState}; mechanical PTZ: {summary.Profile.Ptz.MechanicalCapability}; movement enabled: {summary.Profile.Ptz.MovementControlsEnabled && AdvancedPtzHardwareMode}";
+        NotifyEndpointTruthProperties();
+    }
+
+    private void NotifyEndpointTruthProperties()
+    {
+        OnPropertyChanged(nameof(EndpointDriftWarning));
+        OnPropertyChanged(nameof(CredentialStatusText));
+        OnPropertyChanged(nameof(PtzServiceText));
+        OnPropertyChanged(nameof(AdvancedPtzHardwareMode));
     }
 
     private async Task LoadSemanticTrustAsync()
@@ -3712,6 +3793,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             nameof(ImageBrightnessReadOnlyTooltip), nameof(ImageContrastReadOnlyTooltip), nameof(ImageSaturationReadOnlyTooltip), nameof(ImageSharpnessReadOnlyTooltip), nameof(ImageManualSharpnessReadOnlyTooltip), nameof(ImageHueReadOnlyTooltip),
             nameof(ImageMirrorReadOnlyTooltip), nameof(ImageFlipReadOnlyTooltip), nameof(ImageDayNightReadOnlyTooltip), nameof(ImageIrModeReadOnlyTooltip), nameof(ImageIrCutReadOnlyTooltip),
             nameof(HasPendingChanges), nameof(DirtyStateText), nameof(LastSyncText), nameof(GroupedApplyIndicator), nameof(SelectedPersistenceField), nameof(LastReachableUrl)
+            , nameof(EndpointDriftWarning), nameof(CredentialStatusText), nameof(PtzServiceText), nameof(AdvancedPtzHardwareMode)
         })
         {
             OnPropertyChanged(name);
@@ -4004,6 +4086,34 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         return JsonSerializer.Deserialize<T>(raw, SerializerOptions);
     }
 
+    private async Task<bool> EnsureServiceHealthAsync()
+    {
+        try
+        {
+            using var response = await _httpClient.GetAsync("/api/health");
+            if (response.IsSuccessStatusCode)
+            {
+                HealthBadgeText = $"Service: running at {_httpClient.BaseAddress}";
+                return true;
+            }
+
+            DiagnosticsText = $"BossCam.Service is not running at {_httpClient.BaseAddress} (/api/health returned {(int)response.StatusCode}).";
+            ShowToast("BossCam.Service health check failed.", success: false);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            DiagnosticsText = $"BossCam.Service is not running at {_httpClient.BaseAddress}{Environment.NewLine}{ex.Message}";
+            ShowToast("BossCam.Service is not running.", success: false);
+            return false;
+        }
+    }
+
+    private static string ResolveLocalApiBaseUrl()
+        => Environment.GetEnvironmentVariable("BOSSCAM_LOCAL_API_BASE_URL") is { Length: > 0 } value
+            ? value
+            : "http://127.0.0.1:5317";
+
     private static void ReplaceCollection<T>(ObservableCollection<T> target, IEnumerable<T> source)
     {
         target.Clear();
@@ -4206,6 +4316,58 @@ public sealed class EndpointSurfaceRow
             CurrentPayload = current,
             SuggestedPayload = suggested,
             EditablePayload = item.CurrentPayloadAvailable ? current : suggested
+        };
+    }
+}
+
+public sealed class EndpointTruthRow
+{
+    public string Capability { get; init; } = string.Empty;
+    public string Endpoint { get; init; } = string.Empty;
+    public string State { get; init; } = string.Empty;
+    public string Source { get; init; } = string.Empty;
+    public string Evidence { get; init; } = string.Empty;
+
+    public static EndpointTruthRow FromObservation(CameraEndpointObservation observation)
+        => new()
+        {
+            Capability = observation.Capability,
+            Endpoint = observation.Endpoint,
+            State = observation.State.ToString(),
+            Source = observation.Source,
+            Evidence = observation.Evidence ?? string.Empty
+        };
+}
+
+public sealed class StreamTruthRow
+{
+    public string Profile { get; init; } = string.Empty;
+    public string RtspUri { get; init; } = string.Empty;
+    public string DeclaredCodec { get; init; } = string.Empty;
+    public string ProbedCodec { get; init; } = string.Empty;
+    public string DeclaredResolution { get; init; } = string.Empty;
+    public string ProbedResolution { get; init; } = string.Empty;
+    public string DeclaredFps { get; init; } = string.Empty;
+    public string ProbedFps { get; init; } = string.Empty;
+    public string MismatchWarning { get; init; } = string.Empty;
+
+    public static StreamTruthRow FromProbe(RtspPlaybackProbeMetadata probe, OnvifDeclaredStreamMetadata? declared)
+    {
+        var declaredCodec = declared?.Encoding ?? string.Empty;
+        var probedCodec = probe.Codec ?? string.Empty;
+        return new()
+        {
+            Profile = probe.ProfileToken,
+            RtspUri = probe.Uri,
+            DeclaredCodec = declaredCodec,
+            ProbedCodec = probedCodec,
+            DeclaredResolution = declared?.Width is int width && declared.Height is int height ? $"{width}x{height}" : string.Empty,
+            ProbedResolution = probe.Width is int pWidth && probe.Height is int pHeight ? $"{pWidth}x{pHeight}" : string.Empty,
+            DeclaredFps = declared?.Fps?.ToString() ?? string.Empty,
+            ProbedFps = probe.Fps ?? string.Empty,
+            MismatchWarning = !string.IsNullOrWhiteSpace(declaredCodec) && !string.IsNullOrWhiteSpace(probedCodec) && !declaredCodec.Contains(probedCodec, StringComparison.OrdinalIgnoreCase)
+                ? $"Declared {declaredCodec}; playback proves {probedCodec}. Decoder must trust probe."
+                : string.Empty
         };
     }
 }

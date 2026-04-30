@@ -48,7 +48,8 @@ public sealed class SqliteApplicationStore(IOptions<BossCamRuntimeOptions> optio
                 "CREATE TABLE IF NOT EXISTS image_behavior_maps (behavior_key TEXT PRIMARY KEY, device_id TEXT NOT NULL, firmware_fingerprint TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL)",
                 "CREATE TABLE IF NOT EXISTS image_writable_test_sets (device_id TEXT PRIMARY KEY, firmware_fingerprint TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL)",
                 "CREATE TABLE IF NOT EXISTS grouped_apply_profiles (profile_key TEXT PRIMARY KEY, device_id TEXT NOT NULL, firmware_fingerprint TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL)",
-                "CREATE TABLE IF NOT EXISTS grouped_retest_results (result_key TEXT PRIMARY KEY, device_id TEXT NOT NULL, firmware_fingerprint TEXT NOT NULL, payload TEXT NOT NULL, captured_at TEXT NOT NULL)"
+                "CREATE TABLE IF NOT EXISTS grouped_retest_results (result_key TEXT PRIMARY KEY, device_id TEXT NOT NULL, firmware_fingerprint TEXT NOT NULL, payload TEXT NOT NULL, captured_at TEXT NOT NULL)",
+                "CREATE TABLE IF NOT EXISTS camera_endpoint_truth_profiles (device_id TEXT PRIMARY KEY, model_key TEXT NOT NULL, firmware_key TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL)"
             };
 
             foreach (var text in commands)
@@ -681,6 +682,34 @@ public sealed class SqliteApplicationStore(IOptions<BossCamRuntimeOptions> optio
             $"SELECT payload FROM grouped_retest_results WHERE device_id = $id ORDER BY captured_at DESC LIMIT {Math.Max(1, limit)}",
             parameters => parameters.AddWithValue("$id", deviceId.ToString()),
             cancellationToken);
+
+    public async Task SaveCameraEndpointTruthProfileAsync(CameraEndpointTruthProfile profile, CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            await using var connection = OpenConnection();
+            await connection.OpenAsync(cancellationToken);
+            await using var command = connection.CreateCommand();
+            command.CommandText = "INSERT INTO camera_endpoint_truth_profiles (device_id, model_key, firmware_key, payload, updated_at) VALUES ($id, $model, $firmware, $payload, $updated) ON CONFLICT(device_id) DO UPDATE SET model_key = excluded.model_key, firmware_key = excluded.firmware_key, payload = excluded.payload, updated_at = excluded.updated_at";
+            command.Parameters.AddWithValue("$id", profile.DeviceId.ToString());
+            command.Parameters.AddWithValue("$model", profile.HardwareModel ?? string.Empty);
+            command.Parameters.AddWithValue("$firmware", profile.FirmwareVersion ?? string.Empty);
+            command.Parameters.AddWithValue("$payload", JsonSerializer.Serialize(profile, _serializerOptions));
+            command.Parameters.AddWithValue("$updated", profile.CapturedAt.ToString("O"));
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public Task<CameraEndpointTruthProfile?> GetCameraEndpointTruthProfileAsync(Guid deviceId, CancellationToken cancellationToken)
+        => QuerySinglePayloadAsync<CameraEndpointTruthProfile>("SELECT payload FROM camera_endpoint_truth_profiles WHERE device_id = $id", parameters => parameters.AddWithValue("$id", deviceId.ToString()), cancellationToken);
+
+    public Task<IReadOnlyCollection<CameraEndpointTruthProfile>> GetCameraEndpointTruthProfilesAsync(CancellationToken cancellationToken)
+        => QueryPayloadListAsync<CameraEndpointTruthProfile>("SELECT payload FROM camera_endpoint_truth_profiles ORDER BY updated_at DESC", null, cancellationToken);
 
     private async Task UpsertPayloadAsync<T>(string tableName, string keyColumn, string key, T payload, DateTimeOffset timestamp, CancellationToken cancellationToken, string? deviceId = null)
     {
