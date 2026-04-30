@@ -78,6 +78,12 @@ public sealed class SqliteApplicationStore(IOptions<BossCamRuntimeOptions> optio
                 var payload = JsonSerializer.Serialize(device, _serializerOptions);
                 var updated = DateTimeOffset.UtcNow.ToString("O");
 
+                await using var removeDuplicateKey = connection.CreateCommand();
+                removeDuplicateKey.CommandText = "DELETE FROM devices WHERE dedupe_key = $key AND id <> $id";
+                removeDuplicateKey.Parameters.AddWithValue("$id", device.Id.ToString());
+                removeDuplicateKey.Parameters.AddWithValue("$key", key);
+                await removeDuplicateKey.ExecuteNonQueryAsync(cancellationToken);
+
                 await using var updateById = connection.CreateCommand();
                 updateById.CommandText = "UPDATE devices SET dedupe_key = $key, payload = $payload, updated_at = $updated WHERE id = $id";
                 updateById.Parameters.AddWithValue("$id", device.Id.ToString());

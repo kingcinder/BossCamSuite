@@ -426,29 +426,40 @@ public partial class MainWindow
         await LoadDevicesAsync();
         foreach (var ip in new[] { "10.0.0.4", "10.0.0.29", "10.0.0.227" })
         {
-            if (Devices.Any(device => string.Equals(device.IpAddress, ip, StringComparison.OrdinalIgnoreCase)))
-            {
-                continue;
-            }
+            var existing = Devices.FirstOrDefault(device => string.Equals(device.IpAddress, ip, StringComparison.OrdinalIgnoreCase));
 
             _ = await PostAsync<DeviceIdentity>("/api/devices", new DeviceIdentity
             {
-                Name = $"5523-W {ip}",
+                Id = existing?.Id ?? Guid.NewGuid(),
+                DeviceId = existing?.DeviceId,
+                EseeId = existing?.EseeId,
+                Name = string.IsNullOrWhiteSpace(existing?.Name) ? $"5523-W {ip}" : existing!.Name,
                 IpAddress = ip,
-                Port = 80,
-                DeviceType = "IPC",
-                HardwareModel = "5523-W",
+                Port = existing?.Port > 0 ? existing.Port : 80,
+                MacAddress = existing?.MacAddress,
+                WirelessMacAddress = existing?.WirelessMacAddress,
+                FirmwareVersion = existing?.FirmwareVersion,
+                HardwareModel = string.IsNullOrWhiteSpace(existing?.HardwareModel) ? "5523-W" : existing!.HardwareModel,
+                DeviceType = string.IsNullOrWhiteSpace(existing?.DeviceType) ? "IPC" : existing!.DeviceType,
                 LoginName = "admin",
                 Password = string.Empty,
-                Metadata = new Dictionary<string, string>
-                {
-                    ["credentialState"] = "UsernameOnlyEmptyPassword",
-                    ["relay"] = "go2rtc-bubble"
-                }
+                ChannelMap = existing?.ChannelMap ?? [],
+                TransportProfiles = existing?.TransportProfiles ?? [],
+                Metadata = MergeKnown5523WMetadata(existing?.Metadata)
             });
         }
 
         await LoadDevicesAsync();
+    }
+
+    private static Dictionary<string, string> MergeKnown5523WMetadata(Dictionary<string, string>? existing)
+    {
+        var metadata = existing is null
+            ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, string>(existing, StringComparer.OrdinalIgnoreCase);
+        metadata["credentialState"] = "UsernameOnlyEmptyPassword";
+        metadata["relay"] = "go2rtc-bubble";
+        return metadata;
     }
 
     private async Task StartSelectedNvrAudioAsync()

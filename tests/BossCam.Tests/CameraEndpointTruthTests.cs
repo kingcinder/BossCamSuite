@@ -209,6 +209,24 @@ public sealed class CameraEndpointTruthTests : IDisposable
         Assert.False(refreshed.Ptz.MovementControlsEnabled);
     }
 
+    [Fact]
+    public async Task Device_Upsert_Can_Repair_Existing_Dedupe_Key_With_Empty_Password_Credentials()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync(CancellationToken.None);
+        var first = new DeviceIdentity { Id = Guid.NewGuid(), DeviceId = "old-5523w", IpAddress = "10.0.0.4", DeviceType = "IPC" };
+        var duplicate = new DeviceIdentity { Id = Guid.NewGuid(), DeviceId = "new-5523w", IpAddress = "10.0.0.4", DeviceType = "IPC", LoginName = "admin", Password = "" };
+
+        await store.UpsertDevicesAsync([first], CancellationToken.None);
+        await store.UpsertDevicesAsync([duplicate], CancellationToken.None);
+
+        var devices = await store.GetDevicesAsync(CancellationToken.None);
+        var repaired = Assert.Single(devices.Where(device => device.IpAddress == "10.0.0.4"));
+        Assert.Equal(duplicate.Id, repaired.Id);
+        Assert.Equal("admin", repaired.LoginName);
+        Assert.Equal(string.Empty, repaired.Password);
+    }
+
     public void Dispose()
     {
         try { Directory.Delete(_tempDirectory, true); } catch { }
