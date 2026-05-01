@@ -1,5 +1,11 @@
 # BossCamSuite
 
+## Serpent Circle
+
+This repo follows [SERPENT_CIRCLE.md](SERPENT_CIRCLE.md): observe live evidence, verify claims, adapt to endpoint/model drift, persist per-camera truth, project only proven truth, and re-verify with build/tests.
+
+Templates seed candidates only. Live per-camera proof wins. Never infer codec from `.264`/`.h264`, never treat ONVIF declared encoding as playback truth, never treat PTZ service as mechanical PTZ, and never fail a whole import because one endpoint failed.
+
 Windows-first control suite and VMS scaffold for the 5523-w camera family.
 
 Implemented surfaces in this repository:

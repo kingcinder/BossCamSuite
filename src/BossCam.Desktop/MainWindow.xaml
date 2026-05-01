@@ -214,15 +214,51 @@
 
         <Style TargetType="TabItem">
             <Setter Property="Foreground" Value="#FFE0C9C0"/>
-            <Setter Property="Background" Value="#660A0809"/>
+            <Setter Property="Background" Value="#FF120A09"/>
             <Setter Property="BorderBrush" Value="#33FF5A1F"/>
             <Setter Property="Padding" Value="16,8"/>
             <Setter Property="Margin" Value="0,0,6,0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="TabBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="6,6,0,0"
+                                Padding="{TemplateBinding Padding}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter x:Name="ContentSite"
+                                              ContentSource="Header"
+                                              RecognizesAccessKey="True"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="TabBorder" Property="Background" Value="#FF30110B"/>
+                                <Setter TargetName="TabBorder" Property="BorderBrush" Value="#CCFF8A33"/>
+                                <Setter Property="Foreground" Value="#FFFFF5EE"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="TabBorder" Property="Background" Value="#FFFFA33E"/>
+                                <Setter TargetName="TabBorder" Property="BorderBrush" Value="#FFFFF0C0"/>
+                                <Setter Property="Foreground" Value="#FF080808"/>
+                                <Setter Property="Panel.ZIndex" Value="1"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="TabBorder" Property="Opacity" Value="0.55"/>
+                                <Setter Property="Foreground" Value="#FF9E9089"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
             <Style.Triggers>
                 <Trigger Property="IsSelected" Value="True">
-                    <Setter Property="Foreground" Value="#FFFFF5EE"/>
-                    <Setter Property="Background" Value="#AA3B120B"/>
-                    <Setter Property="BorderBrush" Value="#FFFF6A1F"/>
+                    <Setter Property="Foreground" Value="#FF080808"/>
+                    <Setter Property="Background" Value="#FFFFA33E"/>
+                    <Setter Property="BorderBrush" Value="#FFFFF0C0"/>
                 </Trigger>
                 <Trigger Property="IsEnabled" Value="False">
                     <Setter Property="Foreground" Value="#FF9E9089"/>
@@ -419,6 +455,11 @@
                         <TabItem Header="Image">
                             <ScrollViewer VerticalScrollBarVisibility="Auto">
                                 <StackPanel Margin="8">
+                                    <WrapPanel Margin="0,0,0,12">
+                                        <Button Width="150" Margin="0,0,8,8" Click="ApplyIrControls_Click">Apply IR First</Button>
+                                        <Button Width="220" Margin="0,0,8,8" Click="ApplyPrimaryImage_Click">Apply Brightness/Contrast/Hue</Button>
+                                        <Button Width="190" Margin="0,0,8,8" Click="ApplyRemainingImage_Click">Apply Rest Of Image</Button>
+                                    </WrapPanel>
                                     <Grid Margin="0,0,0,10" Visibility="{Binding ImageBrightnessVisibility}">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="140"/>
@@ -634,6 +675,42 @@
                         <TabItem Header="Stream">
                             <ScrollViewer VerticalScrollBarVisibility="Auto">
                                 <StackPanel Margin="8">
+                                    <Border Padding="10" Margin="0,0,0,10" CornerRadius="8" Background="#20313E">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding CredentialStatusText}" Foreground="#FFF3D7C7" TextWrapping="Wrap"/>
+                                            <TextBlock Text="{Binding EndpointDriftWarning}" Foreground="#FFFFC36A" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                            <TextBlock Text="{Binding PtzServiceText}" Foreground="#C4D4E5" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                            <WrapPanel Margin="0,8,0,0">
+                                                <Button Content="Refresh Endpoint Truth" Click="RefreshEndpointTruth_Click" Margin="0,0,8,0"/>
+                                                <Button Content="Open Live Feed" Click="OpenLiveFeed_Click" Margin="0,0,8,0"/>
+                                                <CheckBox Content="Advanced PTZ hardware mode" IsChecked="{Binding AdvancedPtzHardwareMode}" IsEnabled="False"
+                                                          ToolTip="Movement remains disabled until a user explicitly validates installed PTZ hardware."/>
+                                            </WrapPanel>
+                                        </StackPanel>
+                                    </Border>
+                                    <TextBlock Text="Per-Camera Streams" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                    <DataGrid Height="130" ItemsSource="{Binding StreamTruthRows}" AutoGenerateColumns="False" Background="#0E171E" BorderThickness="0" Margin="0,0,0,10">
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="Profile" Binding="{Binding Profile}" Width="0.8*" IsReadOnly="True"/>
+                                            <DataGridTextColumn Header="Declared Codec" Binding="{Binding DeclaredCodec}" Width="1*" IsReadOnly="True"/>
+                                            <DataGridTextColumn Header="Probed Codec" Binding="{Binding ProbedCodec}" Width="1*" IsReadOnly="True"/>
+                                            <DataGridTextColumn Header="Declared Res" Binding="{Binding DeclaredResolution}" Width="1*" IsReadOnly="True"/>
+                                            <DataGridTextColumn Header="Probed Res" Binding="{Binding ProbedResolution}" Width="1*" IsReadOnly="True"/>
+                                            <DataGridTextColumn Header="FPS" Binding="{Binding ProbedFps}" Width="0.7*" IsReadOnly="True"/>
+                                            <DataGridTextColumn Header="RTSP" Binding="{Binding RtspUri}" Width="2.4*" IsReadOnly="True"/>
+                                            <DataGridTextColumn Header="Warning" Binding="{Binding MismatchWarning}" Width="2*" IsReadOnly="True"/>
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                    <TextBlock Text="Endpoint Verification" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                    <DataGrid Height="150" ItemsSource="{Binding EndpointTruthRows}" AutoGenerateColumns="False" Background="#0E171E" BorderThickness="0" Margin="0,0,0,10">
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="Capability" Binding="{Binding Capability}" Width="1*" IsReadOnly="True"/>
+                                            <DataGridTextColumn Header="State" Binding="{Binding State}" Width="1*" IsReadOnly="True"/>
+                                            <DataGridTextColumn Header="Endpoint" Binding="{Binding Endpoint}" Width="2.4*" IsReadOnly="True"/>
+                                            <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="1*" IsReadOnly="True"/>
+                                            <DataGridTextColumn Header="Evidence" Binding="{Binding Evidence}" Width="2.2*" IsReadOnly="True"/>
+                                        </DataGrid.Columns>
+                                    </DataGrid>
                                     <WrapPanel Margin="0,0,0,8" Visibility="{Binding StreamResolutionVisibility}">
                                         <TextBlock Width="140" Text="Resolution" VerticalAlignment="Center"/>
                                         <ComboBox Width="220" ItemsSource="{Binding VideoResolutionOptions}" SelectedItem="{Binding VideoResolution}" IsEnabled="{Binding CanEditVideoResolution}"/>
@@ -1114,7 +1191,7 @@
                                     <RowDefinition Height="8"/>
                                     <RowDefinition Height="*"/>
                                     <RowDefinition Height="8"/>
-                                    <RowDefinition Height="190"/>
+                                    <RowDefinition Height="260"/>
                                 </Grid.RowDefinitions>
 
                                 <Border Grid.Row="0" Padding="10" CornerRadius="10" Background="#0E171E">
@@ -1138,6 +1215,9 @@
                                             <Button Width="42" Margin="0,0,14,8" Tag="9" Click="NvrLayout_Click">9</Button>
                                             <Button Width="140" Margin="0,0,8,8" Click="AssignSelectedCameraToNvr_Click">Bind Camera</Button>
                                             <Button Width="120" Margin="0,0,8,8" Click="StartNvrLive_Click">Start Live</Button>
+                                            <Button Width="170" Margin="0,0,8,8" Click="StartAll5523WLive_Click">Start 3x 5523-W</Button>
+                                            <Button Width="120" Margin="0,0,8,8" Click="StartSelectedNvrAudio_Click">Start Audio</Button>
+                                            <Button Width="120" Margin="0,0,8,8" Click="StopSelectedNvrAudio_Click">Stop Audio</Button>
                                             <Button Width="120" Margin="0,0,8,8" Click="StopSelectedNvrTile_Click">Stop Tile</Button>
                                             <Button Width="130" Margin="0,0,8,8" Click="RefreshNvrSources_Click">Sources</Button>
                                         </WrapPanel>
@@ -1148,7 +1228,7 @@
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="10"/>
-                                        <ColumnDefinition Width="330"/>
+                                        <ColumnDefinition Width="520"/>
                                     </Grid.ColumnDefinitions>
 
                                     <Grid x:Name="NvrTileGrid" Background="#071018"/>
@@ -1169,7 +1249,7 @@
                                             </WrapPanel>
 
                                             <TextBlock Text="Network Sources" FontWeight="SemiBold" Margin="0,0,0,8"/>
-                                            <DataGrid Height="150" ItemsSource="{Binding NvrSources}" AutoGenerateColumns="False" Background="#050A0F" BorderThickness="0">
+                                            <DataGrid Height="190" ItemsSource="{Binding NvrSources}" AutoGenerateColumns="False" Background="#050A0F" BorderThickness="0">
                                                 <DataGrid.Columns>
                                                     <DataGridTextColumn Header="Kind" Binding="{Binding Kind}" Width="80" IsReadOnly="True"/>
                                                     <DataGridTextColumn Header="Rank" Binding="{Binding Rank}" Width="50" IsReadOnly="True"/>
@@ -1178,7 +1258,7 @@
                                             </DataGrid>
 
                                             <TextBlock Text="NVR Diagnostics" FontWeight="SemiBold" Margin="0,12,0,8"/>
-                                            <TextBox Height="120" Text="{Binding NvrDiagnostics}" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextWrapping="NoWrap" Background="#050A0F" BorderThickness="0" Foreground="#F2EAD3" FontFamily="Consolas"/>
+                                            <TextBox Height="240" Text="{Binding NvrDiagnostics}" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextWrapping="Wrap" Background="#050A0F" BorderThickness="0" Foreground="#F2EAD3" FontFamily="Consolas"/>
                                         </StackPanel>
                                     </Border>
                                 </Grid>

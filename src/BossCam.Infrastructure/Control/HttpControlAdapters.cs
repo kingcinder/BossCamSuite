@@ -19,8 +19,44 @@ public abstract class HttpControlAdapterBase(IOptions<BossCamRuntimeOptions> opt
     protected Uri BuildDeviceUri(DeviceIdentity device, string endpoint)
     {
         var cleaned = endpoint.Replace(" ", string.Empty, StringComparison.OrdinalIgnoreCase).Replace("/ID", "/0", StringComparison.OrdinalIgnoreCase);
-        return new Uri($"http://{device.IpAddress}:{device.Port}{cleaned}", UriKind.Absolute);
+        return new Uri($"http://{device.IpAddress}:{ResolveHttpPort(device, cleaned)}{cleaned}", UriKind.Absolute);
     }
+
+    private static int ResolveHttpPort(DeviceIdentity device, string endpoint)
+    {
+        if (device.Metadata.TryGetValue("httpPort", out var metadataPort)
+            && int.TryParse(metadataPort, out var parsedMetadataPort)
+            && parsedMetadataPort is > 0 and <= 65535)
+        {
+            return parsedMetadataPort;
+        }
+
+        var httpProfile = device.TransportProfiles.FirstOrDefault(profile =>
+            profile.Kind is TransportKind.LanRest or TransportKind.LanPrivateHttp or TransportKind.BubbleFlv
+            && Uri.TryCreate(profile.Address, UriKind.Absolute, out var uri)
+            && uri.Scheme.Equals("http", StringComparison.OrdinalIgnoreCase)
+            && uri.Port is > 0 and <= 65535);
+        if (httpProfile is not null && Uri.TryCreate(httpProfile.Address, UriKind.Absolute, out var httpUri))
+        {
+            return httpUri.Port;
+        }
+
+        if (device.Port is 80 or 8080)
+        {
+            return device.Port;
+        }
+
+        return IsVendorHttpEndpoint(endpoint) ? 80 : device.Port;
+    }
+
+    private static bool IsVendorHttpEndpoint(string endpoint)
+        => endpoint.StartsWith("/NetSDK/", StringComparison.OrdinalIgnoreCase)
+            || endpoint.StartsWith("/netsdk/", StringComparison.OrdinalIgnoreCase)
+            || endpoint.StartsWith("/cgi-bin/", StringComparison.OrdinalIgnoreCase)
+            || endpoint.StartsWith("/web/cgi-bin/", StringComparison.OrdinalIgnoreCase)
+            || endpoint.StartsWith("/snapshot", StringComparison.OrdinalIgnoreCase)
+            || endpoint.StartsWith("/tmpfs/", StringComparison.OrdinalIgnoreCase)
+            || endpoint.StartsWith("/bubble/", StringComparison.OrdinalIgnoreCase);
 
     protected async Task<HttpAdapterResponse?> SendAsync(DeviceIdentity device, string endpoint, string method, JsonObject? payload, CancellationToken cancellationToken, string? mediaType = null)
     {
@@ -32,7 +68,7 @@ public abstract class HttpControlAdapterBase(IOptions<BossCamRuntimeOptions> opt
         var uri = BuildDeviceUri(device, endpoint);
         var payloadRaw = payload?.ToJsonString();
         var basic = await SendOnceAsync(device, uri, endpoint, method, payloadRaw, mediaType, useBasicHeader: true, useCredentialCache: false, cancellationToken);
-        if (basic is not null && basic.StatusCode != HttpStatusCode.Unauthorized)
+        if (basic is null || basic.StatusCode != HttpStatusCode.Unauthorized)
         {
             return basic;
         }
@@ -258,8 +294,8 @@ public sealed class LanDirectNetSdkRestAdapter(
         ["Detection"] = ["/NetSDK/Video/motionDetection/channels", "/NetSDK/Video/motionDetection/channel/1", "/NetSDK/IO/alarmInput/channels", "/NetSDK/IO/alarmInput/channel/1", "/NetSDK/IO/alarmOutput/channels", "/NetSDK/IO/alarmOutput/channel/1"],
         ["PTZ"] = ["/NetSDK/PTZ/channels"],
         ["Stream"] = ["/NetSDK/Stream/channles", "/NetSDK/Stream/channel/ID"],
-        ["Image"] = ["/NetSDK/Image", "/NetSDK/Image/irCutFilter", "/NetSDK/Image/manualSharpness", "/NetSDK/Image/denoise3d", "/NetSDK/Image/wdr", "/NetSDK/Image/gamma", "/NetSDK/Image/AF", "/NetSDK/Factory?cmd=WhiteLightCtrl", "/NetSDK/Factory?cmd=InfraRedCtrl", "/NetSDK/Video/input/channel/1/privacyMask/1"],
-        ["Storage"] = ["/NetSDK/SDCard/status", "/NetSDK/SDCard/media/search", "/NetSDK/SDCard/media/playbackFLV", "/NetSDK/SDCard/format"]
+        ["Image"] = ["/NetSDK/Image", "/NetSDK/Image/irCutFilter", "/NetSDK/Image/manualSharpness", "/NetSDK/Image/denoise3d", "/NetSDK/Image/wdr", "/NetSDK/Image/gamma", "/NetSDK/Image/AF", "/NetSDK/Factory?cmd=WhiteLightCtrl", "/NetSDK/Factory?cmd=InfraRedCtrl"],
+        ["Storage"] = []
     };
 
     public string Name => nameof(LanDirectNetSdkRestAdapter);

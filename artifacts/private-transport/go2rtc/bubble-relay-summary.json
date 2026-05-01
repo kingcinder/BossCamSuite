@@ -1,0 +1,18 @@
+{
+  "result": "PASS_HIGHRES_BUBBLE_RELAY",
+  "ip": "10.0.0.227",
+  "upstreamMain": "bubble://admin:@10.0.0.227:80/bubble/live?ch=0&stream=0",
+  "upstreamSub": "bubble://admin:@10.0.0.227:80/bubble/live?ch=0&stream=1",
+  "streamPrefix": "cam_10_0_0_227",
+  "rtspMain": "rtsp://127.0.0.1:8554/cam_10_0_0_227_main",
+  "rtspSub": "rtsp://127.0.0.1:8554/cam_10_0_0_227_sub",
+  "mainCodec": "h264",
+  "mainWidth": 2560,
+  "mainHeight": 1920,
+  "mainFps": "15/1",
+  "subCodec": "h264",
+  "subWidth": 704,
+  "subHeight": 480,
+  "subFps": "15/1",
+  "artifactRoot": "C:\\Users\\ceide\\Documents\\BossCamSuite\\artifacts\\private-transport\\go2rtc"
+}

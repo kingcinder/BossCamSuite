@@ -27,7 +27,10 @@ public sealed class RecordingService(
         var sourceUrl = request.SourceUrl;
         if (string.IsNullOrWhiteSpace(sourceUrl))
         {
-            sourceUrl = (await transportBroker.GetSourcesAsync(device.Id, cancellationToken)).FirstOrDefault()?.Url;
+            var sources = (await transportBroker.GetSourcesAsync(device.Id, cancellationToken)).OrderBy(static source => source.Rank).ToList();
+            sourceUrl = !string.IsNullOrWhiteSpace(profile.SourceId)
+                ? sources.FirstOrDefault(source => source.Id.Equals(profile.SourceId, StringComparison.OrdinalIgnoreCase))?.Url
+                : sources.FirstOrDefault(static source => !source.LowResOnly)?.Url ?? sources.FirstOrDefault()?.Url;
         }
 
         if (string.IsNullOrWhiteSpace(sourceUrl))
@@ -43,14 +46,12 @@ public sealed class RecordingService(
 
         Directory.CreateDirectory(profile.OutputDirectory);
         var pattern = Path.Combine(profile.OutputDirectory, $"{device.Id:N}_%Y%m%d_%H%M%S.mp4");
-        var args = $"-hide_banner -loglevel warning -rtsp_transport tcp -i \"{sourceUrl}\" -c copy -f segment -segment_time {Math.Max(5, profile.SegmentSeconds)} -reset_timestamps 1 -strftime 1 \"{pattern}\"";
 
         var process = new Process
         {
             StartInfo = new ProcessStartInfo
             {
                 FileName = ffmpegPath,
-                Arguments = args,
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardError = true,
@@ -58,6 +59,7 @@ public sealed class RecordingService(
             },
             EnableRaisingEvents = true
         };
+        AddRecordingArguments(process.StartInfo, sourceUrl, pattern, profile.SegmentSeconds);
 
         process.Start();
 
@@ -414,5 +416,31 @@ public sealed class RecordingService(
         }
 
         return null;
+    }
+
+    private static void AddRecordingArguments(ProcessStartInfo startInfo, string sourceUrl, string pattern, int segmentSeconds)
+    {
+        startInfo.ArgumentList.Add("-hide_banner");
+        startInfo.ArgumentList.Add("-loglevel");
+        startInfo.ArgumentList.Add("warning");
+        if (sourceUrl.StartsWith("rtsp://", StringComparison.OrdinalIgnoreCase))
+        {
+            startInfo.ArgumentList.Add("-rtsp_transport");
+            startInfo.ArgumentList.Add("tcp");
+        }
+
+        startInfo.ArgumentList.Add("-i");
+        startInfo.ArgumentList.Add(sourceUrl);
+        startInfo.ArgumentList.Add("-c");
+        startInfo.ArgumentList.Add("copy");
+        startInfo.ArgumentList.Add("-f");
+        startInfo.ArgumentList.Add("segment");
+        startInfo.ArgumentList.Add("-segment_time");
+        startInfo.ArgumentList.Add(Math.Max(5, segmentSeconds).ToString(System.Globalization.CultureInfo.InvariantCulture));
+        startInfo.ArgumentList.Add("-reset_timestamps");
+        startInfo.ArgumentList.Add("1");
+        startInfo.ArgumentList.Add("-strftime");
+        startInfo.ArgumentList.Add("1");
+        startInfo.ArgumentList.Add(pattern);
     }
 }

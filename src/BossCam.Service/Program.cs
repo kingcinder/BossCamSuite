@@ -9,12 +9,20 @@ using Microsoft.Extensions.Options;
 var builder = WebApplication.CreateBuilder(args);
 
 var localApiBaseUrl = builder.Configuration["BossCam:LocalApiBaseUrl"] ?? "http://127.0.0.1:5317";
+if (Uri.TryCreate(localApiBaseUrl, UriKind.Absolute, out var localApiUri) && !IsLoopback(localApiUri) && !builder.Configuration.GetValue<bool>("BossCam:AllowLanApi"))
+{
+    throw new InvalidOperationException("BossCam LAN API binding requires BossCam:AllowLanApi=true.");
+}
+
 builder.WebHost.UseUrls(localApiBaseUrl);
 builder.Host.UseWindowsService();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
+builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
+    policy.SetIsOriginAllowed(origin => Uri.TryCreate(origin, UriKind.Absolute, out var uri) && IsLoopback(uri))
+        .AllowAnyHeader()
+        .AllowAnyMethod()));
 builder.Services.AddBossCamInfrastructure(builder.Configuration);
 builder.Services.AddBossCamCore();
 builder.Services.AddHostedService<BossCamBootstrapWorker>();
@@ -22,8 +30,17 @@ builder.Services.AddHostedService<RecordingLifecycleWorker>();
 
 var app = builder.Build();
 
-app.UseSwagger();
-app.UseSwaggerUI();
+if (app.Environment.IsDevelopment() || builder.Configuration.GetValue<bool>("BossCam:EnableSwagger"))
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+
+if (localApiUri is not null && !IsLoopback(localApiUri))
+{
+    app.Logger.LogWarning("BossCam LAN API enabled at {LocalApiBaseUrl}. Keep this network trusted.", localApiBaseUrl);
+}
+
 app.UseCors();
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "ok", timestamp = DateTimeOffset.UtcNow }));
@@ -44,9 +61,14 @@ app.MapGet("/api/devices", async (IApplicationStore store, CancellationToken ct)
             .First())
         .ToList();
     var withoutIp = devices.Where(static device => string.IsNullOrWhiteSpace(device.IpAddress)).ToList();
-    return Results.Ok(withIp.Concat(withoutIp).OrderByDescending(static device => device.DiscoveredAt).ToList());
+    return Results.Ok(withIp.Concat(withoutIp).OrderByDescending(static device => device.DiscoveredAt).Select(ToDeviceSummary).ToList());
 });
 app.MapPost("/api/devices/discover", async (DiscoveryCoordinator coordinator, CancellationToken ct) => Results.Ok(await coordinator.RunAsync(ct)));
+app.MapPost("/api/devices", async (DeviceIdentity device, IApplicationStore store, CancellationToken ct) =>
+{
+    await store.UpsertDevicesAsync([device], ct);
+    return Results.Ok(ToDeviceSummary(device));
+});
 app.MapPost("/api/devices/{id:guid}/probe", async (Guid id, CapabilityProbeService probeService, CancellationToken ct) =>
 {
     var result = await probeService.ProbeAsync(id, ct);
@@ -118,17 +140,32 @@ app.MapPost("/api/devices/{id:guid}/settings/typed/apply", async (Guid id, Typed
 });
 app.MapPost("/api/devices/{id:guid}/settings/typed/apply-batch", async (Guid id, TypedSettingBatchApplyRequest request, TypedSettingsService typedSettingsService, CancellationToken ct) =>
     Results.Ok(await typedSettingsService.ApplyTypedChangesAsync(id, request.Changes, request.ExpertOverride, ct)));
-app.MapPost("/api/devices/{id:guid}/maintenance/{operation}", async (Guid id, string operation, JsonObject? payload, SettingsService settingsService, CancellationToken ct) =>
+app.MapPost("/api/devices/{id:guid}/maintenance/{operation}", async (HttpContext http, Guid id, string operation, JsonObject? payload, SettingsService settingsService, CancellationToken ct) =>
 {
     if (!Enum.TryParse<MaintenanceOperation>(operation, true, out var parsed))
     {
         return Results.BadRequest(new { error = $"Unknown operation '{operation}'." });
     }
 
+    if (parsed is MaintenanceOperation.FactoryReset or MaintenanceOperation.FirmwareUpload or MaintenanceOperation.PasswordReset)
+    {
+        var confirmed = payload?["confirm"]?.GetValue<bool>() == true || payload?["confirmation"]?.GetValue<string>() == parsed.ToString();
+        if (!IsLoopbackIp(http.Connection.RemoteIpAddress) || !confirmed)
+        {
+            return Results.BadRequest(new { error = $"{parsed} requires loopback access and explicit confirmation payload." });
+        }
+    }
+
     var result = await settingsService.ExecuteMaintenanceAsync(id, parsed, payload, ct);
     return result is null ? Results.NotFound() : Results.Ok(result);
 });
 app.MapGet("/api/devices/{id:guid}/sources", async (Guid id, TransportBroker transportBroker, CancellationToken ct) => Results.Ok(await transportBroker.GetSourcesAsync(id, ct)));
+app.MapGet("/api/devices/{id:guid}/endpoint-truth", async (Guid id, CameraEndpointTruthService truthService, CancellationToken ct) =>
+    Results.Ok(await truthService.GetSummaryAsync(id, ct) ?? new CameraEndpointTruthSummary()));
+app.MapPost("/api/devices/{id:guid}/endpoint-truth/5523w-sample", async (Guid id, CameraEndpointTruthService truthService, CancellationToken ct) =>
+    Results.Ok(await truthService.SaveObservedProfileAsync(CameraEndpointTruthService.CreateVerified5523wSample(id), ct)));
+app.MapPost("/api/devices/{id:guid}/endpoint-truth/refresh", async (Guid id, CameraEndpointTruthService truthService, CancellationToken ct) =>
+    await truthService.RefreshAsync(id, ct) is { } profile ? Results.Ok(profile) : Results.NotFound());
 app.MapGet("/api/devices/{id:guid}/preview", async (Guid id, TransportBroker transportBroker, CancellationToken ct) =>
 {
     var result = await transportBroker.StartPreviewAsync(id, ct);
@@ -370,6 +407,39 @@ app.MapPost("/api/firmware/register", async (FirmwareRegisterRequest request, Fi
 app.MapGet("/api/firmware", async (FirmwareCatalogService service, CancellationToken ct) => Results.Ok(await service.GetAsync(ct)));
 
 app.Run();
+
+static DeviceSummaryDto ToDeviceSummary(DeviceIdentity device)
+    => new()
+    {
+        Id = device.Id,
+        DeviceId = device.DeviceId,
+        EseeId = device.EseeId,
+        Name = device.Name,
+        IpAddress = device.IpAddress,
+        Port = device.Port,
+        MacAddress = device.MacAddress,
+        WirelessMacAddress = device.WirelessMacAddress,
+        FirmwareVersion = device.FirmwareVersion,
+        HardwareModel = device.HardwareModel,
+        DeviceType = device.DeviceType,
+        LoginName = device.LoginName,
+        CredentialState = string.IsNullOrWhiteSpace(device.LoginName)
+            ? CredentialState.None
+            : device.Password is null
+                ? CredentialState.Unknown
+                : device.Password.Length == 0
+                    ? CredentialState.UsernameOnlyEmptyPassword
+                    : CredentialState.UsernamePassword,
+        DiscoveredAt = device.DiscoveredAt,
+        DisplayName = device.DisplayName
+    };
+
+static bool IsLoopback(Uri uri)
+    => uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+        || System.Net.IPAddress.TryParse(uri.Host, out var ip) && System.Net.IPAddress.IsLoopback(ip);
+
+static bool IsLoopbackIp(System.Net.IPAddress? ip)
+    => ip is not null && System.Net.IPAddress.IsLoopback(ip);
 
 public sealed record FirmwareRegisterRequest(string FilePath);
 public sealed record TypedSettingApplyRequest(string FieldKey, JsonNode? Value, bool ExpertOverride);

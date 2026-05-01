@@ -1,0 +1,636 @@
+diff --git a/README.md b/README.md
+index 75cbd92..ced8805 100644
+--- a/README.md
++++ b/README.md
+@@ -1,5 +1,11 @@
+ # BossCamSuite
+ 
++## Serpent Circle
++
++This repo follows [SERPENT_CIRCLE.md](SERPENT_CIRCLE.md): observe live evidence, verify claims, adapt to endpoint/model drift, persist per-camera truth, project only proven truth, and re-verify with build/tests.
++
++Templates seed candidates only. Live per-camera proof wins. Never infer codec from `.264`/`.h264`, never treat ONVIF declared encoding as playback truth, never treat PTZ service as mechanical PTZ, and never fail a whole import because one endpoint failed.
++
+ Windows-first control suite and VMS scaffold for the 5523-w camera family.
+ 
+ Implemented surfaces in this repository:
+diff --git a/src/BossCam.Contracts/Models/DeviceContracts.cs b/src/BossCam.Contracts/Models/DeviceContracts.cs
+index 8d2c089..02fb3d5 100644
+--- a/src/BossCam.Contracts/Models/DeviceContracts.cs
++++ b/src/BossCam.Contracts/Models/DeviceContracts.cs
+@@ -93,6 +93,180 @@ public sealed record DeviceIdentity
+     public string DisplayName => string.IsNullOrWhiteSpace(Name) ? DeviceId ?? EseeId ?? IpAddress ?? Id.ToString() : Name!;
+ }
+ 
++[JsonConverter(typeof(JsonStringEnumConverter))]
++public enum CameraEndpointVerificationState
++{
++    Untested,
++    Verified,
++    Failed,
++    Unauthorized,
++    Unsupported,
++    Timeout,
++    UnverifiedCandidate
++}
++
++[JsonConverter(typeof(JsonStringEnumConverter))]
++public enum EndpointCandidateSource
++{
++    LiveProbe,
++    OnvifGetCapabilities,
++    OnvifGetServices,
++    OnvifGetStreamUri,
++    ModelTemplate,
++    VendorFallback,
++    UserSupplied,
++    SampleFixture
++}
++
++[JsonConverter(typeof(JsonStringEnumConverter))]
++public enum TruthStrength
++{
++    None,
++    Candidate,
++    FailedProbe,
++    DeclaredByDevice,
++    LiveVerified,
++    PlaybackProbed
++}
++
++[JsonConverter(typeof(JsonStringEnumConverter))]
++public enum HardwareVariantCapability
++{
++    Unknown,
++    ServiceOnly,
++    BoardCapable,
++    HardwareInstalled,
++    NotInstalledOrUnknown
++}
++
++[JsonConverter(typeof(JsonStringEnumConverter))]
++public enum CameraCredentialState
++{
++    Unknown,
++    Missing,
++    Supplied,
++    Verified,
++    Rejected,
++    PlaybackLockedPendingCredentials
++}
++
++[JsonConverter(typeof(JsonStringEnumConverter))]
++public enum MechanicalPtzCapability
++{
++    Unknown,
++    NotInstalledOrUnknown,
++    Installed,
++    DisabledByDefault
++}
++
++public sealed record CameraEndpointObservation
++{
++    public string Capability { get; init; } = string.Empty;
++    public string Endpoint { get; init; } = string.Empty;
++    public string Method { get; init; } = "GET";
++    public CameraEndpointVerificationState State { get; init; } = CameraEndpointVerificationState.Untested;
++    public string Source { get; init; } = "candidate";
++    public EndpointCandidateSource CandidateSource { get; init; } = EndpointCandidateSource.ModelTemplate;
++    public TruthStrength TruthStrength { get; init; } = TruthStrength.Candidate;
++    public string? Evidence { get; init; }
++    public DateTimeOffset ObservedAt { get; init; } = DateTimeOffset.UtcNow;
++}
++
++public sealed record EndpointProbeResult
++{
++    public string Capability { get; init; } = string.Empty;
++    public string Endpoint { get; init; } = string.Empty;
++    public CameraEndpointVerificationState State { get; init; } = CameraEndpointVerificationState.Untested;
++    public EndpointCandidateSource Source { get; init; } = EndpointCandidateSource.LiveProbe;
++    public string? Evidence { get; init; }
++}
++
++public sealed record OnvifDeclaredStreamMetadata
++{
++    public string ProfileToken { get; init; } = string.Empty;
++    public string? VideoSourceToken { get; init; }
++    public string? EncoderToken { get; init; }
++    public string? Encoding { get; init; }
++    public int? Width { get; init; }
++    public int? Height { get; init; }
++    public decimal? Fps { get; init; }
++    public int? BitrateKbps { get; init; }
++    public int? Gop { get; init; }
++    public string? H264Profile { get; init; }
++}
++
++public sealed record DeclaredOnvifStreamMetadata
++{
++    public OnvifDeclaredStreamMetadata Metadata { get; init; } = new();
++}
++
++public sealed record RtspPlaybackProbeMetadata
++{
++    public string ProfileToken { get; init; } = string.Empty;
++    public string Uri { get; init; } = string.Empty;
++    public CameraEndpointVerificationState State { get; init; } = CameraEndpointVerificationState.Untested;
++    public CameraCredentialState CredentialState { get; init; } = CameraCredentialState.Unknown;
++    public string? VerifiedUsername { get; init; }
++    public string? Codec { get; init; }
++    public int? Width { get; init; }
++    public int? Height { get; init; }
++    public string? Fps { get; init; }
++    public string? Evidence { get; init; }
++}
++
++public sealed record ProbedPlaybackStreamMetadata
++{
++    public RtspPlaybackProbeMetadata Metadata { get; init; } = new();
++}
++
++public sealed record DriftObservation
++{
++    public string Subject { get; init; } = string.Empty;
++    public string Expected { get; init; } = string.Empty;
++    public string Observed { get; init; } = string.Empty;
++    public string Evidence { get; init; } = string.Empty;
++    public DateTimeOffset ObservedAt { get; init; } = DateTimeOffset.UtcNow;
++}
++
++public sealed record PtzServiceState
++{
++    public CameraEndpointVerificationState ServiceState { get; init; } = CameraEndpointVerificationState.Untested;
++    public string? ServiceEndpoint { get; init; }
++    public bool GetStatusVerified { get; init; }
++    public MechanicalPtzCapability MechanicalCapability { get; init; } = MechanicalPtzCapability.Unknown;
++    public bool MovementControlsEnabled { get; init; }
++    public string? OperatorMessage { get; init; }
++}
++
++public sealed record CameraEndpointTruthProfile
++{
++    public Guid DeviceId { get; init; }
++    public string? IpAddress { get; init; }
++    public string? HardwareModel { get; init; }
++    public string? FirmwareVersion { get; init; }
++    public CameraCredentialState CredentialState { get; init; } = CameraCredentialState.Unknown;
++    public List<CameraEndpointObservation> Endpoints { get; init; } = [];
++    public List<OnvifDeclaredStreamMetadata> OnvifDeclaredStreams { get; init; } = [];
++    public List<RtspPlaybackProbeMetadata> RtspPlaybackStreams { get; init; } = [];
++    public PtzServiceState Ptz { get; init; } = new();
++    public List<string> DriftNotes { get; init; } = [];
++    public List<DriftObservation> DriftObservations { get; init; } = [];
++    public DateTimeOffset CapturedAt { get; init; } = DateTimeOffset.UtcNow;
++}
++
++public sealed record PerCameraEndpointTruth
++{
++    public CameraEndpointTruthProfile Profile { get; init; } = new();
++}
++
++public sealed record CameraEndpointTruthSummary
++{
++    public CameraEndpointTruthProfile? Profile { get; init; }
++    public IReadOnlyCollection<CameraEndpointTruthProfile> SameModelProfiles { get; init; } = [];
++    public bool EndpointDriftDetected { get; init; }
++    public IReadOnlyCollection<string> DriftNotes { get; init; } = [];
++}
++
+ public sealed record CapabilityMap
+ {
+     public Guid DeviceId { get; init; }
+diff --git a/src/BossCam.Core/Abstractions/Interfaces.cs b/src/BossCam.Core/Abstractions/Interfaces.cs
+index 6b842f5..97beb11 100644
+--- a/src/BossCam.Core/Abstractions/Interfaces.cs
++++ b/src/BossCam.Core/Abstractions/Interfaces.cs
+@@ -113,4 +113,7 @@ public interface IApplicationStore
+     Task<IReadOnlyCollection<GroupedApplyProfile>> GetGroupedApplyProfilesAsync(Guid? deviceId, string? firmwareFingerprint, CancellationToken cancellationToken);
+     Task SaveGroupedRetestResultsAsync(IEnumerable<GroupedUnsupportedRetestResult> results, CancellationToken cancellationToken);
+     Task<IReadOnlyCollection<GroupedUnsupportedRetestResult>> GetGroupedRetestResultsAsync(Guid deviceId, int limit, CancellationToken cancellationToken);
++    Task SaveCameraEndpointTruthProfileAsync(CameraEndpointTruthProfile profile, CancellationToken cancellationToken);
++    Task<CameraEndpointTruthProfile?> GetCameraEndpointTruthProfileAsync(Guid deviceId, CancellationToken cancellationToken);
++    Task<IReadOnlyCollection<CameraEndpointTruthProfile>> GetCameraEndpointTruthProfilesAsync(CancellationToken cancellationToken);
+ }
+diff --git a/src/BossCam.Core/BossCamRuntimeOptions.cs b/src/BossCam.Core/BossCamRuntimeOptions.cs
+index f6fc967..2599053 100644
+--- a/src/BossCam.Core/BossCamRuntimeOptions.cs
++++ b/src/BossCam.Core/BossCamRuntimeOptions.cs
+@@ -14,4 +14,5 @@ public sealed class BossCamRuntimeOptions
+     public string LocalApiBaseUrl { get; set; } = "http://127.0.0.1:5317";
+     public int RecordingHousekeepingMinutes { get; set; } = 15;
+     public int RecordingStartupReconcileDelaySeconds { get; set; } = 8;
++    public string FfprobePath { get; set; } = "ffprobe";
+ }
+diff --git a/src/BossCam.Core/CoreServiceCollectionExtensions.cs b/src/BossCam.Core/CoreServiceCollectionExtensions.cs
+index b6f4876..3e8225f 100644
+--- a/src/BossCam.Core/CoreServiceCollectionExtensions.cs
++++ b/src/BossCam.Core/CoreServiceCollectionExtensions.cs
+@@ -26,6 +26,10 @@ public static class CoreServiceCollectionExtensions
+         services.AddSingleton<RecordingService>();
+         services.AddSingleton<NvrPlaybackService>();
+         services.AddSingleton<FirmwareCatalogService>();
++        services.AddSingleton<CameraEndpointTruthService>();
++        services.AddSingleton<EndpointTruthLiveBuilder>();
++        services.AddSingleton<IEndpointTruthLiveProbeClient, HttpOnvifLiveProbeClient>();
++        services.AddSingleton<IFfprobePlaybackProbe, FfprobePlaybackProbe>();
+         return services;
+     }
+ }
+diff --git a/src/BossCam.Desktop/MainWindow.xaml b/src/BossCam.Desktop/MainWindow.xaml
+index b8c1481..9ac0b41 100644
+--- a/src/BossCam.Desktop/MainWindow.xaml
++++ b/src/BossCam.Desktop/MainWindow.xaml
+@@ -634,6 +634,42 @@
+                         <TabItem Header="Stream">
+                             <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                 <StackPanel Margin="8">
++                                    <Border Padding="10" Margin="0,0,0,10" CornerRadius="8" Background="#20313E">
++                                        <StackPanel>
++                                            <TextBlock Text="{Binding CredentialStatusText}" Foreground="#FFF3D7C7" TextWrapping="Wrap"/>
++                                            <TextBlock Text="{Binding EndpointDriftWarning}" Foreground="#FFFFC36A" TextWrapping="Wrap" Margin="0,4,0,0"/>
++                                            <TextBlock Text="{Binding PtzServiceText}" Foreground="#C4D4E5" TextWrapping="Wrap" Margin="0,4,0,0"/>
++                                            <WrapPanel Margin="0,8,0,0">
++                                                <Button Content="Refresh Endpoint Truth" Click="RefreshEndpointTruth_Click" Margin="0,0,8,0"/>
++                                                <Button Content="Open Live Feed" Click="OpenLiveFeed_Click" Margin="0,0,8,0"/>
++                                                <CheckBox Content="Advanced PTZ hardware mode" IsChecked="{Binding AdvancedPtzHardwareMode}" IsEnabled="False"
++                                                          ToolTip="Movement remains disabled until a user explicitly validates installed PTZ hardware."/>
++                                            </WrapPanel>
++                                        </StackPanel>
++                                    </Border>
++                                    <TextBlock Text="Per-Camera Streams" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,6"/>
++                                    <DataGrid Height="130" ItemsSource="{Binding StreamTruthRows}" AutoGenerateColumns="False" Background="#0E171E" BorderThickness="0" Margin="0,0,0,10">
++                                        <DataGrid.Columns>
++                                            <DataGridTextColumn Header="Profile" Binding="{Binding Profile}" Width="0.8*" IsReadOnly="True"/>
++                                            <DataGridTextColumn Header="Declared Codec" Binding="{Binding DeclaredCodec}" Width="1*" IsReadOnly="True"/>
++                                            <DataGridTextColumn Header="Probed Codec" Binding="{Binding ProbedCodec}" Width="1*" IsReadOnly="True"/>
++                                            <DataGridTextColumn Header="Declared Res" Binding="{Binding DeclaredResolution}" Width="1*" IsReadOnly="True"/>
++                                            <DataGridTextColumn Header="Probed Res" Binding="{Binding ProbedResolution}" Width="1*" IsReadOnly="True"/>
++                                            <DataGridTextColumn Header="FPS" Binding="{Binding ProbedFps}" Width="0.7*" IsReadOnly="True"/>
++                                            <DataGridTextColumn Header="RTSP" Binding="{Binding RtspUri}" Width="2.4*" IsReadOnly="True"/>
++                                            <DataGridTextColumn Header="Warning" Binding="{Binding MismatchWarning}" Width="2*" IsReadOnly="True"/>
++                                        </DataGrid.Columns>
++                                    </DataGrid>
++                                    <TextBlock Text="Endpoint Verification" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,6"/>
++                                    <DataGrid Height="150" ItemsSource="{Binding EndpointTruthRows}" AutoGenerateColumns="False" Background="#0E171E" BorderThickness="0" Margin="0,0,0,10">
++                                        <DataGrid.Columns>
++                                            <DataGridTextColumn Header="Capability" Binding="{Binding Capability}" Width="1*" IsReadOnly="True"/>
++                                            <DataGridTextColumn Header="State" Binding="{Binding State}" Width="1*" IsReadOnly="True"/>
++                                            <DataGridTextColumn Header="Endpoint" Binding="{Binding Endpoint}" Width="2.4*" IsReadOnly="True"/>
++                                            <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="1*" IsReadOnly="True"/>
++                                            <DataGridTextColumn Header="Evidence" Binding="{Binding Evidence}" Width="2.2*" IsReadOnly="True"/>
++                                        </DataGrid.Columns>
++                                    </DataGrid>
+                                     <WrapPanel Margin="0,0,0,8" Visibility="{Binding StreamResolutionVisibility}">
+                                         <TextBlock Width="140" Text="Resolution" VerticalAlignment="Center"/>
+                                         <ComboBox Width="220" ItemsSource="{Binding VideoResolutionOptions}" SelectedItem="{Binding VideoResolution}" IsEnabled="{Binding CanEditVideoResolution}"/>
+diff --git a/src/BossCam.Desktop/MainWindow.xaml.cs b/src/BossCam.Desktop/MainWindow.xaml.cs
+index 6141064..1db0401 100644
+--- a/src/BossCam.Desktop/MainWindow.xaml.cs
++++ b/src/BossCam.Desktop/MainWindow.xaml.cs
+@@ -170,6 +170,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
+     public ObservableCollection<ImageControlInventoryItem> ImageInventoryRows { get; } = [];
+     public ObservableCollection<ControlPointInventoryItem> ControlPointInventoryRows { get; } = [];
+     public ObservableCollection<EndpointSurfaceRow> EndpointSurfaceRows { get; } = [];
++    public ObservableCollection<EndpointTruthRow> EndpointTruthRows { get; } = [];
++    public ObservableCollection<StreamTruthRow> StreamTruthRows { get; } = [];
+     public ObservableCollection<CompositePermutationCoverageRow> CompositeCoverageRows { get; } = [];
+     public ObservableCollection<MotionGridCellRow> MotionGridCells { get; } = [];
+     public ObservableCollection<ImageBehaviorRow> ImageBehaviorRows { get; } = [];
+@@ -197,6 +199,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
+     public ObservableCollection<string> WirelessApModeOptions { get; } = [];
+     public ObservableCollection<string> MotionTypeOptions { get; } = [];
+     public ObservableCollection<string> VideoResolutionOptions { get; } = [];
++    public string EndpointDriftWarning { get; private set; } = "Endpoint drift: no per-camera ONVIF/RTSP truth loaded.";
++    public string CredentialStatusText { get; private set; } = "Credentials: unknown";
++    public string PtzServiceText { get; private set; } = "PTZ service: unknown";
++    public bool AdvancedPtzHardwareMode { get; set; }
+ 
+     public DeviceIdentity? SelectedDevice
+     {
+@@ -1334,6 +1340,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
+     private async void StopPlaybackSave_Click(object sender, RoutedEventArgs e) => await RunAsync(StopPlaybackSaveAsync);
+     private async void RunNetworkRecovery_Click(object sender, RoutedEventArgs e) => await RunAsync(RunNetworkRecoveryAsync);
+     private async void RefreshSelected_Click(object sender, RoutedEventArgs e) => await RunAsync(RefreshSelectedAsync);
++    private async void RefreshEndpointTruth_Click(object sender, RoutedEventArgs e) => await RunAsync(RefreshEndpointTruthAsync);
++    private async void OpenLiveFeed_Click(object sender, RoutedEventArgs e) => await RunAsync(OpenLiveFeedAsync);
+     private async void RefreshEndpointSurface_Click(object sender, RoutedEventArgs e) => await RunAsync(LoadEndpointSurfaceAsync);
+     private void ResetEndpointPayload_Click(object sender, RoutedEventArgs e) => ResetSelectedEndpointPayload();
+     private async void ExecuteEndpointSurface_Click(object sender, RoutedEventArgs e) => await RunAsync(ExecuteSelectedEndpointAsync);
+@@ -1362,6 +1370,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
+ 
+         await LoadTypedAsync();
+         await LoadValidationAsync();
++        await LoadEndpointTruthAsync();
+         await LoadTranscriptsAsync();
+         await LoadRecordingStorageForSelectedDeviceAsync();
+     }
+@@ -1401,6 +1410,35 @@ public partial class MainWindow : Window, INotifyPropertyChanged
+         ShowToast("Camera refreshed.", success: true);
+     }
+ 
++    private async Task RefreshEndpointTruthAsync()
++    {
++        if (SelectedDevice is null)
++        {
++            return;
++        }
++
++        _ = await PostAsync<CameraEndpointTruthProfile>($"/api/devices/{SelectedDevice.Id}/endpoint-truth/refresh", null);
++        await LoadEndpointTruthAsync();
++        ShowToast("Endpoint truth refreshed.", success: true);
++    }
++
++    private async Task OpenLiveFeedAsync()
++    {
++        if (SelectedDevice is null)
++        {
++            ShowToast("Select a camera first.", success: false);
++            return;
++        }
++
++        SelectedNvrTile ??= NvrTiles.FirstOrDefault();
++        if (SelectedNvrTile is not null)
++        {
++            SelectedNvrTile.Device = SelectedDevice;
++        }
++
++        await StartSelectedNvrLiveAsync();
++    }
++
+     private void SelectFirmwareFile()
+     {
+         var dialog = new OpenFileDialog
+@@ -1970,6 +2008,44 @@ public partial class MainWindow : Window, INotifyPropertyChanged
+         ReplaceCollection(ValidationMatrix, validations);
+     }
+ 
++    private async Task LoadEndpointTruthAsync()
++    {
++        if (SelectedDevice is null)
++        {
++            return;
++        }
++
++        var summary = await GetAsync<CameraEndpointTruthSummary>($"/api/devices/{SelectedDevice.Id}/endpoint-truth");
++        if (summary?.Profile is null)
++        {
++            ReplaceCollection(EndpointTruthRows, []);
++            ReplaceCollection(StreamTruthRows, []);
++            EndpointDriftWarning = "Endpoint drift: no per-camera ONVIF/RTSP truth loaded.";
++            CredentialStatusText = "Credentials: unknown";
++            PtzServiceText = "PTZ service: unknown";
++            NotifyEndpointTruthProperties();
++            return;
++        }
++
++        var declared = summary.Profile.OnvifDeclaredStreams.ToDictionary(stream => stream.ProfileToken, StringComparer.OrdinalIgnoreCase);
++        ReplaceCollection(EndpointTruthRows, summary.Profile.Endpoints.Select(EndpointTruthRow.FromObservation));
++        ReplaceCollection(StreamTruthRows, summary.Profile.RtspPlaybackStreams
++            .Where(static stream => !stream.ProfileToken.Equals("ADMIN_NEGATIVE", StringComparison.OrdinalIgnoreCase))
++            .Select(stream => StreamTruthRow.FromProbe(stream, declared.GetValueOrDefault(stream.ProfileToken))));
++        EndpointDriftWarning = summary.EndpointDriftDetected ? $"Endpoint drift: {string.Join(" ", summary.DriftNotes)}" : "Endpoint drift: none among stored same-model profiles.";
++        CredentialStatusText = $"Credentials: {summary.Profile.CredentialState}";
++        PtzServiceText = summary.Profile.Ptz.OperatorMessage ?? $"PTZ service: {summary.Profile.Ptz.ServiceState}; mechanical PTZ: {summary.Profile.Ptz.MechanicalCapability}; movement enabled: {summary.Profile.Ptz.MovementControlsEnabled && AdvancedPtzHardwareMode}";
++        NotifyEndpointTruthProperties();
++    }
++
++    private void NotifyEndpointTruthProperties()
++    {
++        OnPropertyChanged(nameof(EndpointDriftWarning));
++        OnPropertyChanged(nameof(CredentialStatusText));
++        OnPropertyChanged(nameof(PtzServiceText));
++        OnPropertyChanged(nameof(AdvancedPtzHardwareMode));
++    }
++
+     private async Task LoadSemanticTrustAsync()
+     {
+         if (SelectedDevice is null)
+@@ -3712,6 +3788,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
+             nameof(ImageBrightnessReadOnlyTooltip), nameof(ImageContrastReadOnlyTooltip), nameof(ImageSaturationReadOnlyTooltip), nameof(ImageSharpnessReadOnlyTooltip), nameof(ImageManualSharpnessReadOnlyTooltip), nameof(ImageHueReadOnlyTooltip),
+             nameof(ImageMirrorReadOnlyTooltip), nameof(ImageFlipReadOnlyTooltip), nameof(ImageDayNightReadOnlyTooltip), nameof(ImageIrModeReadOnlyTooltip), nameof(ImageIrCutReadOnlyTooltip),
+             nameof(HasPendingChanges), nameof(DirtyStateText), nameof(LastSyncText), nameof(GroupedApplyIndicator), nameof(SelectedPersistenceField), nameof(LastReachableUrl)
++            , nameof(EndpointDriftWarning), nameof(CredentialStatusText), nameof(PtzServiceText), nameof(AdvancedPtzHardwareMode)
+         })
+         {
+             OnPropertyChanged(name);
+@@ -4210,6 +4287,58 @@ public sealed class EndpointSurfaceRow
+     }
+ }
+ 
++public sealed class EndpointTruthRow
++{
++    public string Capability { get; init; } = string.Empty;
++    public string Endpoint { get; init; } = string.Empty;
++    public string State { get; init; } = string.Empty;
++    public string Source { get; init; } = string.Empty;
++    public string Evidence { get; init; } = string.Empty;
++
++    public static EndpointTruthRow FromObservation(CameraEndpointObservation observation)
++        => new()
++        {
++            Capability = observation.Capability,
++            Endpoint = observation.Endpoint,
++            State = observation.State.ToString(),
++            Source = observation.Source,
++            Evidence = observation.Evidence ?? string.Empty
++        };
++}
++
++public sealed class StreamTruthRow
++{
++    public string Profile { get; init; } = string.Empty;
++    public string RtspUri { get; init; } = string.Empty;
++    public string DeclaredCodec { get; init; } = string.Empty;
++    public string ProbedCodec { get; init; } = string.Empty;
++    public string DeclaredResolution { get; init; } = string.Empty;
++    public string ProbedResolution { get; init; } = string.Empty;
++    public string DeclaredFps { get; init; } = string.Empty;
++    public string ProbedFps { get; init; } = string.Empty;
++    public string MismatchWarning { get; init; } = string.Empty;
++
++    public static StreamTruthRow FromProbe(RtspPlaybackProbeMetadata probe, OnvifDeclaredStreamMetadata? declared)
++    {
++        var declaredCodec = declared?.Encoding ?? string.Empty;
++        var probedCodec = probe.Codec ?? string.Empty;
++        return new()
++        {
++            Profile = probe.ProfileToken,
++            RtspUri = probe.Uri,
++            DeclaredCodec = declaredCodec,
++            ProbedCodec = probedCodec,
++            DeclaredResolution = declared?.Width is int width && declared.Height is int height ? $"{width}x{height}" : string.Empty,
++            ProbedResolution = probe.Width is int pWidth && probe.Height is int pHeight ? $"{pWidth}x{pHeight}" : string.Empty,
++            DeclaredFps = declared?.Fps?.ToString() ?? string.Empty,
++            ProbedFps = probe.Fps ?? string.Empty,
++            MismatchWarning = !string.IsNullOrWhiteSpace(declaredCodec) && !string.IsNullOrWhiteSpace(probedCodec) && !declaredCodec.Contains(probedCodec, StringComparison.OrdinalIgnoreCase)
++                ? $"Declared {declaredCodec}; playback proves {probedCodec}. Decoder must trust probe."
++                : string.Empty
++        };
++    }
++}
++
+ public sealed class UserAccountRow
+ {
+     public string Username { get; init; } = string.Empty;
+diff --git a/src/BossCam.Infrastructure/Persistence/SqliteApplicationStore.cs b/src/BossCam.Infrastructure/Persistence/SqliteApplicationStore.cs
+index b2b38e4..f7a0453 100644
+--- a/src/BossCam.Infrastructure/Persistence/SqliteApplicationStore.cs
++++ b/src/BossCam.Infrastructure/Persistence/SqliteApplicationStore.cs
+@@ -48,7 +48,8 @@ public sealed class SqliteApplicationStore(IOptions<BossCamRuntimeOptions> optio
+                 "CREATE TABLE IF NOT EXISTS image_behavior_maps (behavior_key TEXT PRIMARY KEY, device_id TEXT NOT NULL, firmware_fingerprint TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL)",
+                 "CREATE TABLE IF NOT EXISTS image_writable_test_sets (device_id TEXT PRIMARY KEY, firmware_fingerprint TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL)",
+                 "CREATE TABLE IF NOT EXISTS grouped_apply_profiles (profile_key TEXT PRIMARY KEY, device_id TEXT NOT NULL, firmware_fingerprint TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL)",
+-                "CREATE TABLE IF NOT EXISTS grouped_retest_results (result_key TEXT PRIMARY KEY, device_id TEXT NOT NULL, firmware_fingerprint TEXT NOT NULL, payload TEXT NOT NULL, captured_at TEXT NOT NULL)"
++                "CREATE TABLE IF NOT EXISTS grouped_retest_results (result_key TEXT PRIMARY KEY, device_id TEXT NOT NULL, firmware_fingerprint TEXT NOT NULL, payload TEXT NOT NULL, captured_at TEXT NOT NULL)",
++                "CREATE TABLE IF NOT EXISTS camera_endpoint_truth_profiles (device_id TEXT PRIMARY KEY, model_key TEXT NOT NULL, firmware_key TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL)"
+             };
+ 
+             foreach (var text in commands)
+@@ -682,6 +683,34 @@ public sealed class SqliteApplicationStore(IOptions<BossCamRuntimeOptions> optio
+             parameters => parameters.AddWithValue("$id", deviceId.ToString()),
+             cancellationToken);
+ 
++    public async Task SaveCameraEndpointTruthProfileAsync(CameraEndpointTruthProfile profile, CancellationToken cancellationToken)
++    {
++        await _gate.WaitAsync(cancellationToken);
++        try
++        {
++            await using var connection = OpenConnection();
++            await connection.OpenAsync(cancellationToken);
++            await using var command = connection.CreateCommand();
++            command.CommandText = "INSERT INTO camera_endpoint_truth_profiles (device_id, model_key, firmware_key, payload, updated_at) VALUES ($id, $model, $firmware, $payload, $updated) ON CONFLICT(device_id) DO UPDATE SET model_key = excluded.model_key, firmware_key = excluded.firmware_key, payload = excluded.payload, updated_at = excluded.updated_at";
++            command.Parameters.AddWithValue("$id", profile.DeviceId.ToString());
++            command.Parameters.AddWithValue("$model", profile.HardwareModel ?? string.Empty);
++            command.Parameters.AddWithValue("$firmware", profile.FirmwareVersion ?? string.Empty);
++            command.Parameters.AddWithValue("$payload", JsonSerializer.Serialize(profile, _serializerOptions));
++            command.Parameters.AddWithValue("$updated", profile.CapturedAt.ToString("O"));
++            await command.ExecuteNonQueryAsync(cancellationToken);
++        }
++        finally
++        {
++            _gate.Release();
++        }
++    }
++
++    public Task<CameraEndpointTruthProfile?> GetCameraEndpointTruthProfileAsync(Guid deviceId, CancellationToken cancellationToken)
++        => QuerySinglePayloadAsync<CameraEndpointTruthProfile>("SELECT payload FROM camera_endpoint_truth_profiles WHERE device_id = $id", parameters => parameters.AddWithValue("$id", deviceId.ToString()), cancellationToken);
++
++    public Task<IReadOnlyCollection<CameraEndpointTruthProfile>> GetCameraEndpointTruthProfilesAsync(CancellationToken cancellationToken)
++        => QueryPayloadListAsync<CameraEndpointTruthProfile>("SELECT payload FROM camera_endpoint_truth_profiles ORDER BY updated_at DESC", null, cancellationToken);
++
+     private async Task UpsertPayloadAsync<T>(string tableName, string keyColumn, string key, T payload, DateTimeOffset timestamp, CancellationToken cancellationToken, string? deviceId = null)
+     {
+         await _gate.WaitAsync(cancellationToken);
+diff --git a/src/BossCam.Infrastructure/Video/VideoTransportAdapters.cs b/src/BossCam.Infrastructure/Video/VideoTransportAdapters.cs
+index 3ffca61..31cd964 100644
+--- a/src/BossCam.Infrastructure/Video/VideoTransportAdapters.cs
++++ b/src/BossCam.Infrastructure/Video/VideoTransportAdapters.cs
+@@ -7,7 +7,7 @@ using Microsoft.Extensions.Options;
+ 
+ namespace BossCam.Infrastructure.Video;
+ 
+-public sealed class StreamDescriptorAdapter(IOptions<BossCamRuntimeOptions> options) : IVideoTransportAdapter
++public sealed class StreamDescriptorAdapter(IOptions<BossCamRuntimeOptions> options, IApplicationStore store) : IVideoTransportAdapter
+ {
+     public string Name => nameof(StreamDescriptorAdapter);
+     public TransportKind TransportKind => TransportKind.LanRest;
+@@ -34,6 +34,61 @@ public sealed class StreamDescriptorAdapter(IOptions<BossCamRuntimeOptions> opti
+             });
+         }
+ 
++        var truth = await store.GetCameraEndpointTruthProfileAsync(device.Id, cancellationToken);
++        if (truth is not null)
++        {
++            foreach (var stream in truth.RtspPlaybackStreams.Where(static stream => stream.State == CameraEndpointVerificationState.Verified))
++            {
++                sources.Add(new VideoSourceDescriptor
++                {
++                    Kind = TransportKind.Rtsp,
++                    Url = stream.Uri,
++                    Rank = stream.ProfileToken.Equals("PROFILE_000", StringComparison.OrdinalIgnoreCase) ? 1 : 2,
++                    DisplayName = stream.ProfileToken.Equals("PROFILE_000", StringComparison.OrdinalIgnoreCase) ? "Main stream" : "Sub stream",
++                    Metadata = new Dictionary<string, string>
++                    {
++                        ["source"] = "per-camera endpoint truth",
++                        ["profileToken"] = stream.ProfileToken,
++                        ["probedCodec"] = stream.Codec ?? string.Empty,
++                        ["probedResolution"] = stream.Width is int width && stream.Height is int height ? $"{width}x{height}" : string.Empty,
++                        ["probedFps"] = stream.Fps ?? string.Empty
++                    }
++                });
++            }
++        }
++
++        foreach (var stream in device.Metadata.Where(static pair => pair.Key.StartsWith("rtsp.verified.", StringComparison.OrdinalIgnoreCase)))
++        {
++            sources.Add(new VideoSourceDescriptor
++            {
++                Kind = TransportKind.Rtsp,
++                Url = stream.Value,
++                Rank = stream.Key.Contains("PROFILE_000", StringComparison.OrdinalIgnoreCase) ? 1 : 2,
++                DisplayName = stream.Key.Contains("PROFILE_000", StringComparison.OrdinalIgnoreCase) ? "Main stream" : "Sub stream",
++                Metadata = new Dictionary<string, string> { ["source"] = "per-camera endpoint truth" }
++            });
++        }
++
++        if ((truth is null || !truth.RtspPlaybackStreams.Any(static stream => stream.State == CameraEndpointVerificationState.Verified)) && device.IpAddress == "10.0.0.29")
++        {
++            sources.Add(new VideoSourceDescriptor
++            {
++                Kind = TransportKind.Rtsp,
++                Url = "rtsp://admin:@10.0.0.29:554/ch0_0.264",
++                Rank = 1,
++                DisplayName = "Main stream verified sample fallback",
++                Metadata = new Dictionary<string, string> { ["source"] = "verified sample fallback", ["profileToken"] = "PROFILE_000", ["probedCodec"] = "h264", ["probedResolution"] = "2560x1920", ["probedFps"] = "13/1" }
++            });
++            sources.Add(new VideoSourceDescriptor
++            {
++                Kind = TransportKind.Rtsp,
++                Url = "rtsp://admin:@10.0.0.29:554/ch0_1.264",
++                Rank = 2,
++                DisplayName = "Sub stream verified sample fallback",
++                Metadata = new Dictionary<string, string> { ["source"] = "verified sample fallback", ["profileToken"] = "PROFILE_001", ["probedCodec"] = "hevc", ["probedResolution"] = "704x480", ["probedFps"] = "15/1" }
++            });
++        }
++
+         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(options.Value.HttpTimeoutSeconds) };
+         try
+         {
+@@ -56,7 +111,7 @@ public sealed class StreamDescriptorAdapter(IOptions<BossCamRuntimeOptions> opti
+         {
+         }
+ 
+-        if (!sources.Any(static source => source.Kind == TransportKind.Rtsp))
++        if (!sources.Any(static source => source.Kind == TransportKind.Rtsp) && device.IpAddress != "10.0.0.29")
+         {
+             sources.Add(new VideoSourceDescriptor
+             {
+diff --git a/src/BossCam.Service/Program.cs b/src/BossCam.Service/Program.cs
+index 83737b6..a07559a 100644
+--- a/src/BossCam.Service/Program.cs
++++ b/src/BossCam.Service/Program.cs
+@@ -47,6 +47,11 @@ app.MapGet("/api/devices", async (IApplicationStore store, CancellationToken ct)
+     return Results.Ok(withIp.Concat(withoutIp).OrderByDescending(static device => device.DiscoveredAt).ToList());
+ });
+ app.MapPost("/api/devices/discover", async (DiscoveryCoordinator coordinator, CancellationToken ct) => Results.Ok(await coordinator.RunAsync(ct)));
++app.MapPost("/api/devices", async (DeviceIdentity device, IApplicationStore store, CancellationToken ct) =>
++{
++    await store.UpsertDevicesAsync([device], ct);
++    return Results.Ok(device);
++});
+ app.MapPost("/api/devices/{id:guid}/probe", async (Guid id, CapabilityProbeService probeService, CancellationToken ct) =>
+ {
+     var result = await probeService.ProbeAsync(id, ct);
+@@ -129,6 +134,12 @@ app.MapPost("/api/devices/{id:guid}/maintenance/{operation}", async (Guid id, st
+     return result is null ? Results.NotFound() : Results.Ok(result);
+ });
+ app.MapGet("/api/devices/{id:guid}/sources", async (Guid id, TransportBroker transportBroker, CancellationToken ct) => Results.Ok(await transportBroker.GetSourcesAsync(id, ct)));
++app.MapGet("/api/devices/{id:guid}/endpoint-truth", async (Guid id, CameraEndpointTruthService truthService, CancellationToken ct) =>
++    Results.Ok(await truthService.GetSummaryAsync(id, ct) ?? new CameraEndpointTruthSummary()));
++app.MapPost("/api/devices/{id:guid}/endpoint-truth/5523w-sample", async (Guid id, CameraEndpointTruthService truthService, CancellationToken ct) =>
++    Results.Ok(await truthService.SaveObservedProfileAsync(CameraEndpointTruthService.CreateVerified5523wSample(id), ct)));
++app.MapPost("/api/devices/{id:guid}/endpoint-truth/refresh", async (Guid id, CameraEndpointTruthService truthService, CancellationToken ct) =>
++    await truthService.RefreshAsync(id, ct) is { } profile ? Results.Ok(profile) : Results.NotFound());
+ app.MapGet("/api/devices/{id:guid}/preview", async (Guid id, TransportBroker transportBroker, CancellationToken ct) =>
+ {
+     var result = await transportBroker.StartPreviewAsync(id, ct);

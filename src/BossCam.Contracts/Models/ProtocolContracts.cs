@@ -68,6 +68,115 @@ public sealed record VideoSourceDescriptor
     public string? DisplayName { get; init; }
     public bool RequiresTunnel { get; init; }
     public Dictionary<string, string> Metadata { get; init; } = [];
+    public int? ExpectedWidth { get; init; }
+    public int? ExpectedHeight { get; init; }
+    public string? ExpectedCodec { get; init; }
+    public string? ExpectedFrameRate { get; init; }
+    public string? SourceOfTruth { get; init; }
+    public bool LowResOnly { get; init; }
+    public string? AuthState { get; init; }
+    public string? LastProbeError { get; init; }
+    public string? ChannelId { get; init; }
+    public string? StreamRole { get; init; }
+    public CredentialState CredentialState { get; init; } = CredentialState.Unknown;
+    public SourceTruthOutcome SourceTruthOutcome { get; init; } = SourceTruthOutcome.FAIL_NO_SOURCE;
+}
+
+public enum CredentialState
+{
+    None,
+    UsernameOnlyEmptyPassword,
+    UsernamePassword,
+    Unknown
+}
+
+public enum SourceTruthOutcome
+{
+    PASS_HIGHRES_RTSP,
+    PASS_HIGHRES_HTTP,
+    PASS_CAPTURED_PRIVATE_TRANSPORT,
+    PASS_LOWRES_ONLY,
+    FAIL_RTSP_EMPTY_PASSWORD_AUTH_NEGOTIATION,
+    FAIL_AUTH_HIGHRES_AVAILABLE,
+    FAIL_INSUFFICIENT_CAPTURE,
+    FAIL_NO_SOURCE
+}
+
+public enum SourceTruthState
+{
+    Candidate,
+    Verified,
+    Failed,
+    LowResOnly,
+    AuthNegotiationFailed
+}
+
+public sealed record SourceTruthCandidate
+{
+    public string Url { get; init; } = string.Empty;
+    public string StreamRole { get; init; } = string.Empty;
+    public SourceTruthState State { get; init; } = SourceTruthState.Candidate;
+    public SourceTruthOutcome Outcome { get; init; } = SourceTruthOutcome.FAIL_NO_SOURCE;
+    public string Evidence { get; init; } = string.Empty;
+}
+
+public sealed record SourceTruthResult
+{
+    public string DeviceIp { get; init; } = string.Empty;
+    public CredentialState CredentialState { get; init; } = CredentialState.Unknown;
+    public IReadOnlyCollection<SourceTruthCandidate> Candidates { get; init; } = [];
+    public SourceTruthOutcome FinalOutcome { get; init; } = SourceTruthOutcome.FAIL_NO_SOURCE;
+    public DateTimeOffset CapturedAt { get; init; } = DateTimeOffset.UtcNow;
+}
+
+public sealed record DeviceSummaryDto
+{
+    public Guid Id { get; init; }
+    public string? DeviceId { get; init; }
+    public string? EseeId { get; init; }
+    public string? Name { get; init; }
+    public string? IpAddress { get; init; }
+    public int Port { get; init; }
+    public string? MacAddress { get; init; }
+    public string? WirelessMacAddress { get; init; }
+    public string? FirmwareVersion { get; init; }
+    public string? HardwareModel { get; init; }
+    public string? DeviceType { get; init; }
+    public string? LoginName { get; init; }
+    public CredentialState CredentialState { get; init; } = CredentialState.Unknown;
+    public DateTimeOffset DiscoveredAt { get; init; }
+    public string DisplayName { get; init; } = string.Empty;
+}
+
+public static class SensitiveValueRedactor
+{
+    public static string RedactUrl(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || !Uri.TryCreate(value, UriKind.Absolute, out var uri) || string.IsNullOrEmpty(uri.UserInfo))
+        {
+            return value ?? string.Empty;
+        }
+
+        var user = uri.UserInfo.Split(':', 2)[0];
+        var authority = uri.IsDefaultPort ? uri.Host : $"{uri.Host}:{uri.Port}";
+        return $"{uri.Scheme}://{user}:***@{authority}{uri.PathAndQuery}{uri.Fragment}";
+    }
+
+    public static string RedactText(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return string.Empty;
+        }
+
+        var text = value;
+        foreach (System.Text.RegularExpressions.Match match in System.Text.RegularExpressions.Regex.Matches(text, @"\b[a-z][a-z0-9+.-]*://[^\s""']+", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+        {
+            text = text.Replace(match.Value, RedactUrl(match.Value), StringComparison.Ordinal);
+        }
+
+        return text.Replace("ssid_pwd", "ssid_pwd(redacted)", StringComparison.OrdinalIgnoreCase);
+    }
 }
 
 public sealed record PlaybackSourceDescriptor

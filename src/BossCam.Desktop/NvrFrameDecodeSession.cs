@@ -135,8 +135,14 @@ public sealed class NvrFrameDecodeSession : IDisposable
         info.ArgumentList.Add("-hide_banner");
         info.ArgumentList.Add("-loglevel");
         info.ArgumentList.Add("error");
-        info.ArgumentList.Add("-rw_timeout");
-        info.ArgumentList.Add("5000000");
+        info.ArgumentList.Add("-analyzeduration");
+        info.ArgumentList.Add("3000000");
+        info.ArgumentList.Add("-probesize");
+        info.ArgumentList.Add("3000000");
+        info.ArgumentList.Add("-fflags");
+        info.ArgumentList.Add("nobuffer");
+        info.ArgumentList.Add("-flags");
+        info.ArgumentList.Add("low_delay");
         if (source.StartsWith("rtsp://", StringComparison.OrdinalIgnoreCase))
         {
             info.ArgumentList.Add("-rtsp_transport");
@@ -160,7 +166,7 @@ public sealed class NvrFrameDecodeSession : IDisposable
     {
         var firstFrame = _firstFrameTcs ?? throw new InvalidOperationException("Decode session startup state was not initialized.");
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(TimeSpan.FromSeconds(6));
+        timeout.CancelAfter(TimeSpan.FromSeconds(ReadStartupTimeoutSeconds()));
         try
         {
             using var registration = timeout.Token.Register(() => firstFrame.TrySetResult(false));
@@ -286,7 +292,7 @@ public sealed class NvrFrameDecodeSession : IDisposable
     private string BuildFailureMessage(string prefix)
     {
         var exitText = ExitCode is null ? "running" : ExitCode.Value.ToString();
-        return $"{prefix} source={Source}; exitCode={exitText}; frames={FramesDecoded}; stderr={StderrTail}";
+        return $"{prefix} source={SensitiveValueRedactor.RedactUrl(Source)}; startupTimeoutSeconds={ReadStartupTimeoutSeconds()}; exitCode={exitText}; frames={FramesDecoded}; stderr={StderrTail}";
     }
 
     private void ResetState(string source)
@@ -343,6 +349,173 @@ public sealed class NvrFrameDecodeSession : IDisposable
 
         return null;
     }
+
+    private static int ReadStartupTimeoutSeconds()
+        => int.TryParse(Environment.GetEnvironmentVariable("BOSSCAM_NVR_STARTUP_TIMEOUT_SECONDS"), out var value)
+            ? Math.Clamp(value, 3, 120)
+            : 20;
+}
+
+public sealed class NvrAudioPlaybackSession : IDisposable
+{
+    private readonly StringBuilder _stderrTail = new();
+    private Process? _process;
+
+    public string Source { get; private set; } = string.Empty;
+    public string FfplayArguments { get; private set; } = string.Empty;
+    public int? ExitCode { get; private set; }
+    public bool IsRunning => _process is { HasExited: false };
+    public string StderrTail => _stderrTail.ToString();
+
+    public async Task StartAsync(string source, CancellationToken cancellationToken)
+    {
+        Stop();
+        Source = source;
+        ExitCode = null;
+        lock (_stderrTail)
+        {
+            _stderrTail.Clear();
+        }
+
+        var ffplayPath = ResolveFfplayPath() ?? throw new InvalidOperationException("ffplay not found. Set BOSSCAM_FFPLAY_PATH or add ffplay.exe to PATH.");
+        var startInfo = BuildStartInfo(ffplayPath, source);
+        FfplayArguments = string.Join(" ", startInfo.ArgumentList.Select(QuoteIfNeeded));
+        var process = new Process
+        {
+            StartInfo = startInfo,
+            EnableRaisingEvents = true
+        };
+        process.Exited += (_, _) => ExitCode = SafeGetExitCode(process);
+        if (!process.Start())
+        {
+            throw new InvalidOperationException("ffplay failed to start.");
+        }
+
+        _process = process;
+        _ = Task.Run(() => PumpStandardErrorAsync(process, cancellationToken), CancellationToken.None);
+        await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
+        if (process.HasExited)
+        {
+            throw new InvalidOperationException($"ffplay exited before audio stayed open. exitCode={SafeGetExitCode(process)} stderr={StderrTail}");
+        }
+    }
+
+    public void Stop()
+    {
+        var process = _process;
+        _process = null;
+        if (process is null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+                process.WaitForExit(1500);
+            }
+        }
+        catch
+        {
+        }
+        finally
+        {
+            process.Dispose();
+        }
+    }
+
+    public void Dispose() => Stop();
+
+    private static ProcessStartInfo BuildStartInfo(string ffplayPath, string source)
+    {
+        var info = new ProcessStartInfo
+        {
+            FileName = ffplayPath,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardError = true
+        };
+        info.ArgumentList.Add("-hide_banner");
+        info.ArgumentList.Add("-loglevel");
+        info.ArgumentList.Add("error");
+        info.ArgumentList.Add("-nodisp");
+        info.ArgumentList.Add("-vn");
+        if (source.StartsWith("rtsp://", StringComparison.OrdinalIgnoreCase))
+        {
+            info.ArgumentList.Add("-rtsp_transport");
+            info.ArgumentList.Add("tcp");
+        }
+
+        info.ArgumentList.Add("-i");
+        info.ArgumentList.Add(source);
+        return info;
+    }
+
+    private async Task PumpStandardErrorAsync(Process process, CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                var line = await process.StandardError.ReadLineAsync(cancellationToken);
+                if (line is null)
+                {
+                    break;
+                }
+
+                lock (_stderrTail)
+                {
+                    if (_stderrTail.Length > 4000)
+                    {
+                        _stderrTail.Remove(0, Math.Min(1000, _stderrTail.Length));
+                    }
+
+                    _stderrTail.AppendLine(line);
+                }
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    private static string? ResolveFfplayPath()
+    {
+        var configured = Environment.GetEnvironmentVariable("BOSSCAM_FFPLAY_PATH");
+        if (!string.IsNullOrWhiteSpace(configured) && File.Exists(configured))
+        {
+            return configured;
+        }
+
+        var path = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+        foreach (var segment in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var candidate = Path.Combine(segment, "ffplay.exe");
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private static int? SafeGetExitCode(Process process)
+    {
+        try
+        {
+            return process.ExitCode;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string QuoteIfNeeded(string argument)
+        => argument.Contains(' ', StringComparison.Ordinal) ? $"\"{argument}\"" : argument;
 }
 
 public sealed class NvrTileViewModel : System.ComponentModel.INotifyPropertyChanged
@@ -448,14 +621,22 @@ public sealed class NvrTileViewModel : System.ComponentModel.INotifyPropertyChan
     public string Title => Device is null ? $"Tile {TileId + 1}" : $"{Device.DisplayName} | {Mode}";
     public string StatusText => $"{Status}: {Message}";
     public NvrFrameDecodeSession? Session { get; set; }
+    public NvrAudioPlaybackSession? AudioSession { get; set; }
 
     public void Stop()
     {
         Session?.Dispose();
         Session = null;
+        StopAudio();
         Status = Device is null ? NvrStreamStatus.Empty : NvrStreamStatus.Stopped;
         Message = Device is null ? "No camera selected." : "Stopped";
         Source = string.Empty;
+    }
+
+    public void StopAudio()
+    {
+        AudioSession?.Dispose();
+        AudioSession = null;
     }
 
     public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;

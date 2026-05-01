@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Text.Json;
@@ -310,6 +311,14 @@ public partial class MainWindow
     private async void StartNvrLive_Click(object sender, RoutedEventArgs e) => await RunAsync(StartSelectedNvrLiveAsync);
     private async void StopSelectedNvrTile_Click(object sender, RoutedEventArgs e) => await RunAsync(StopSelectedNvrTileAsync);
     private async void RefreshNvrSources_Click(object sender, RoutedEventArgs e) => await RunAsync(RefreshNvrSourcesAsync);
+    private async void StartAll5523WLive_Click(object sender, RoutedEventArgs e) => await RunAsync(StartAll5523WLiveAsync);
+    private async void StartSelectedNvrAudio_Click(object sender, RoutedEventArgs e) => await RunAsync(StartSelectedNvrAudioAsync);
+    private void StopSelectedNvrAudio_Click(object sender, RoutedEventArgs e)
+    {
+        EnsureNvrTile().StopAudio();
+        NvrDiagnostics = "Selected NVR tile audio stopped.";
+    }
+
     private async void NvrFindPlayback_Click(object sender, RoutedEventArgs e) => await RunAsync(FindNvrPlaybackAsync);
     private async void NvrPlayPlayback_Click(object sender, RoutedEventArgs e) => await RunAsync(StartSelectedNvrPlaybackAsync);
     private async void RefreshNvrIndex_Click(object sender, RoutedEventArgs e) => await RunAsync(RefreshNvrIndexAsync);
@@ -331,6 +340,17 @@ public partial class MainWindow
             tile.Device = SelectedDevice;
         }
 
+        await StartNvrTileLiveAsync(tile);
+    }
+
+    private async Task StartNvrTileLiveAsync(NvrTileViewModel tile)
+    {
+        if (tile.Device is null)
+        {
+            NvrDiagnostics = "Select or bind a camera before starting live.";
+            return;
+        }
+
         NvrMode = NvrStreamMode.Live;
         tile.Mode = NvrStreamMode.Live;
         tile.Status = NvrStreamStatus.Resolving;
@@ -349,6 +369,13 @@ public partial class MainWindow
         var failures = new List<string>();
         foreach (var candidate in candidates)
         {
+            var readinessFailure = await EnsureLiveCandidateReadyAsync(tile.Device, candidate);
+            if (readinessFailure is not null)
+            {
+                failures.Add(readinessFailure);
+                continue;
+            }
+
             var failure = await TryStartTileDecodeAsync(tile, candidate.Url, NvrStreamMode.Live, candidate.Label);
             if (failure is null)
             {
@@ -360,8 +387,109 @@ public partial class MainWindow
         }
 
         tile.Status = NvrStreamStatus.Failed;
-        tile.Message = BuildLiveFailureSummary(failures);
+        tile.Message = BuildLiveFailureSummary(tile.Device, failures);
         NvrDiagnostics = string.Join($"{Environment.NewLine}{Environment.NewLine}", failures);
+    }
+
+    private async Task StartAll5523WLiveAsync()
+    {
+        await EnsureKnown5523WDevicesAsync();
+        var targets = new[] { "10.0.0.4", "10.0.0.29", "10.0.0.227" }
+            .Select(ip => Devices.FirstOrDefault(device => string.Equals(device.IpAddress, ip, StringComparison.OrdinalIgnoreCase)))
+            .Where(static device => device is not null)
+            .Cast<DeviceIdentity>()
+            .ToList();
+
+        if (targets.Count != 3)
+        {
+            NvrDiagnostics = $"Expected 3 verified 5523-W devices, found {targets.Count}. Load/import devices and retry.";
+            return;
+        }
+
+        SelectedNvrLayout = 3;
+        var diagnostics = new List<string>();
+        for (var i = 0; i < targets.Count; i++)
+        {
+            var tile = NvrTiles[i];
+            tile.Stop();
+            tile.Device = targets[i];
+            SelectedNvrTile = tile;
+            await StartNvrTileLiveAsync(tile);
+            diagnostics.Add($"{targets[i].IpAddress}: {tile.Status} {tile.Message} {SensitiveValueRedactor.RedactUrl(tile.Source)}");
+        }
+
+        NvrDiagnostics = "Started verified 5523-W live relay set." + Environment.NewLine + string.Join(Environment.NewLine, diagnostics);
+    }
+
+    private async Task EnsureKnown5523WDevicesAsync()
+    {
+        await LoadDevicesAsync();
+        foreach (var ip in new[] { "10.0.0.4", "10.0.0.29", "10.0.0.227" })
+        {
+            var existing = Devices.FirstOrDefault(device => string.Equals(device.IpAddress, ip, StringComparison.OrdinalIgnoreCase));
+
+            _ = await PostAsync<DeviceIdentity>("/api/devices", new DeviceIdentity
+            {
+                Id = existing?.Id ?? Guid.NewGuid(),
+                DeviceId = existing?.DeviceId,
+                EseeId = existing?.EseeId,
+                Name = string.IsNullOrWhiteSpace(existing?.Name) ? $"5523-W {ip}" : existing!.Name,
+                IpAddress = ip,
+                Port = existing?.Port > 0 ? existing.Port : 80,
+                MacAddress = existing?.MacAddress,
+                WirelessMacAddress = existing?.WirelessMacAddress,
+                FirmwareVersion = existing?.FirmwareVersion,
+                HardwareModel = string.IsNullOrWhiteSpace(existing?.HardwareModel) ? "5523-W" : existing!.HardwareModel,
+                DeviceType = string.IsNullOrWhiteSpace(existing?.DeviceType) ? "IPC" : existing!.DeviceType,
+                LoginName = "admin",
+                Password = string.Empty,
+                ChannelMap = existing?.ChannelMap ?? [],
+                TransportProfiles = existing?.TransportProfiles ?? [],
+                Metadata = MergeKnown5523WMetadata(existing?.Metadata)
+            });
+        }
+
+        await LoadDevicesAsync();
+    }
+
+    private static Dictionary<string, string> MergeKnown5523WMetadata(Dictionary<string, string>? existing)
+    {
+        var metadata = existing is null
+            ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, string>(existing, StringComparer.OrdinalIgnoreCase);
+        metadata["credentialState"] = "UsernameOnlyEmptyPassword";
+        metadata["relay"] = "go2rtc-bubble";
+        return metadata;
+    }
+
+    private async Task StartSelectedNvrAudioAsync()
+    {
+        var tile = EnsureNvrTile();
+        if (string.IsNullOrWhiteSpace(tile.Source))
+        {
+            await StartSelectedNvrLiveAsync();
+        }
+
+        if (string.IsNullOrWhiteSpace(tile.Source))
+        {
+            NvrDiagnostics = "Start live video before starting audio; no selected tile source is available.";
+            return;
+        }
+
+        var session = new NvrAudioPlaybackSession();
+        tile.StopAudio();
+        tile.AudioSession = session;
+        try
+        {
+            await session.StartAsync(tile.Source, _nvrShutdown.Token);
+            NvrDiagnostics = $"Audio playing for tile {tile.TileId + 1}.{Environment.NewLine}source={SensitiveValueRedactor.RedactUrl(tile.Source)}{Environment.NewLine}ffplayArgs={SensitiveValueRedactor.RedactText(session.FfplayArguments)}";
+        }
+        catch (Exception ex)
+        {
+            tile.AudioSession = null;
+            session.Dispose();
+            NvrDiagnostics = $"Audio failed for tile {tile.TileId + 1}: {ex.GetBaseException().Message}";
+        }
     }
 
     private async Task StartSelectedNvrPlaybackAsync()
@@ -622,7 +750,7 @@ public partial class MainWindow
         builder.AppendLine($"tile={tile.TileId + 1}");
         builder.AppendLine($"mode={tile.Mode}");
         builder.AppendLine($"attempt={label}");
-        builder.AppendLine($"source={source}");
+        builder.AppendLine($"source={SensitiveValueRedactor.RedactUrl(source)}");
         builder.AppendLine($"error={ex.GetBaseException().Message}");
         builder.AppendLine(BuildNvrSessionDiagnostics(tile, label, session));
         return builder.ToString().Trim();
@@ -641,8 +769,9 @@ public partial class MainWindow
         builder.AppendLine($"message={tile.Message}");
         if (session is not null)
         {
-            builder.AppendLine($"source={session.Source}");
-            builder.AppendLine($"ffmpegArgs={session.FfmpegArguments}");
+            builder.AppendLine($"source={SensitiveValueRedactor.RedactUrl(session.Source)}");
+            builder.AppendLine($"ffmpegArgs={SensitiveValueRedactor.RedactText(session.FfmpegArguments)}");
+            builder.AppendLine($"previewResolution={NvrFrameDecodeSession.FrameWidth}x{NvrFrameDecodeSession.FrameHeight}");
             builder.AppendLine($"exitCode={(session.ExitCode?.ToString() ?? "running")}");
             builder.AppendLine($"framesDecoded={session.FramesDecoded}");
             builder.AppendLine($"lastFrameTimestamp={(session.LastFrameTimestamp?.ToString("O") ?? "none")}");
@@ -661,15 +790,20 @@ public partial class MainWindow
 
         var listed = string.Join(
             Environment.NewLine,
-            sources.OrderBy(static item => item.Rank).Select(static item => $"{item.Kind} rank={item.Rank} url={item.Url}"));
+            sources.OrderBy(static item => item.Rank).Select(static item => $"{item.Kind} rank={item.Rank} url={SensitiveValueRedactor.RedactUrl(item.Url)} expected={item.ExpectedWidth}x{item.ExpectedHeight} codec={item.ExpectedCodec} auth={item.AuthState} outcome={item.SourceTruthOutcome} lowResOnly={item.LowResOnly}"));
         return $"No FFmpeg-decodable live source was available for {device.DisplayName}.{Environment.NewLine}{listed}";
     }
 
-    private static string BuildLiveFailureSummary(IReadOnlyCollection<string> failures)
+    private static string BuildLiveFailureSummary(DeviceIdentity? device, IReadOnlyCollection<string> failures)
     {
         var combined = string.Join(" ", failures);
         if (combined.Contains("401", StringComparison.OrdinalIgnoreCase) || combined.Contains("Unauthorized", StringComparison.OrdinalIgnoreCase))
         {
+            if (device?.IpAddress == "10.0.0.227")
+            {
+                return "FAIL_RTSP_EMPTY_PASSWORD_AUTH_NEGOTIATION";
+            }
+
             return "Authentication failed for RTSP source (401 Unauthorized).";
         }
 
@@ -696,15 +830,18 @@ public partial class MainWindow
                 continue;
             }
 
-            if (TryBuildCredentialedVariants(source.Url, ResolvePreferredCredentials(device), out var credentialedVariants))
+            var requiresRelay = source.Metadata.TryGetValue("relayRequired", out var relayRequired) && relayRequired.Equals("go2rtc", StringComparison.OrdinalIgnoreCase);
+            var relayUpstream = source.Metadata.GetValueOrDefault("upstream");
+
+            if (!requiresRelay && TryBuildCredentialedVariants(source.Url, ResolvePreferredCredentials(device), out var credentialedVariants))
             {
                 foreach (var variant in credentialedVariants)
                 {
-                    candidates.Add(new NvrSourceCandidate(variant.Url, $"{source.Kind} ({variant.Label})"));
+                    candidates.Add(new NvrSourceCandidate(variant.Url, $"{source.Kind} ({variant.Label})", false, null));
                 }
             }
 
-            candidates.Add(new NvrSourceCandidate(source.Url, source.Kind.ToString()));
+            candidates.Add(new NvrSourceCandidate(source.Url, source.Kind.ToString(), requiresRelay, relayUpstream));
         }
 
         return candidates
@@ -752,12 +889,126 @@ public partial class MainWindow
 
         if (uri.Scheme.Equals("rtsp", StringComparison.OrdinalIgnoreCase))
         {
-            list.Add(($"{uri.Scheme}://{user}@{authority}{path}{uri.Fragment}", $"{credentials.Label}:user-only"));
+            // Do not collapse explicit empty password into user-only RTSP auth.
         }
 
         variants = list;
         return true;
     }
 
-    private sealed record NvrSourceCandidate(string Url, string Label);
+    private async Task<string?> EnsureLiveCandidateReadyAsync(DeviceIdentity? device, NvrSourceCandidate candidate)
+    {
+        if (!candidate.RequiresGo2RtcRelay)
+        {
+            return null;
+        }
+
+        if (device is null)
+        {
+            return "go2rtc relay required, but no device is assigned.";
+        }
+
+        if (string.IsNullOrWhiteSpace(device.IpAddress))
+        {
+            return "go2rtc relay required, but the device has no IP address.";
+        }
+
+        var script = FindToolScript("Start-5523W-BubbleRelay.ps1");
+        if (script is null)
+        {
+            return "go2rtc relay required, but tools\\Start-5523W-BubbleRelay.ps1 was not found.";
+        }
+
+        var pwsh = ResolvePwshPath();
+        if (pwsh is null)
+        {
+            return "go2rtc relay required, but PowerShell 7 (pwsh.exe) was not found.";
+        }
+
+        var username = string.IsNullOrWhiteSpace(device.LoginName) ? "admin" : device.LoginName!;
+        var password = device.Password ?? string.Empty;
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = pwsh,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+        startInfo.ArgumentList.Add("-NoProfile");
+        startInfo.ArgumentList.Add("-ExecutionPolicy");
+        startInfo.ArgumentList.Add("Bypass");
+        startInfo.ArgumentList.Add("-File");
+        startInfo.ArgumentList.Add(script);
+        startInfo.ArgumentList.Add("-Ip");
+        startInfo.ArgumentList.Add(device.IpAddress);
+        startInfo.ArgumentList.Add("-Username");
+        startInfo.ArgumentList.Add(username);
+        startInfo.ArgumentList.Add("-Password");
+        startInfo.ArgumentList.Add(password);
+
+        using var process = Process.Start(startInfo);
+        if (process is null)
+        {
+            return "go2rtc relay process could not be started.";
+        }
+
+        var waitTask = process.WaitForExitAsync(_nvrShutdown.Token);
+        var timeoutTask = Task.Delay(TimeSpan.FromSeconds(90), _nvrShutdown.Token);
+        var completed = await Task.WhenAny(waitTask, timeoutTask);
+        if (completed == timeoutTask)
+        {
+            try { process.Kill(entireProcessTree: true); } catch { }
+            return "go2rtc relay startup timed out after 90 seconds.";
+        }
+
+        var stdout = await process.StandardOutput.ReadToEndAsync(_nvrShutdown.Token);
+        var stderr = await process.StandardError.ReadToEndAsync(_nvrShutdown.Token);
+        if (process.ExitCode != 0)
+        {
+            return $"go2rtc relay startup failed for {device.IpAddress}.{Environment.NewLine}{stdout}{Environment.NewLine}{stderr}".Trim();
+        }
+
+        NvrDiagnostics = $"go2rtc relay ready for {device.IpAddress}.{Environment.NewLine}{stdout.Trim()}";
+        return null;
+    }
+
+    private static string? FindToolScript(string fileName)
+    {
+        foreach (var start in new[] { AppContext.BaseDirectory, Environment.CurrentDirectory })
+        {
+            var current = new DirectoryInfo(start);
+            while (current is not null)
+            {
+                var candidate = Path.Combine(current.FullName, "tools", fileName);
+                if (File.Exists(candidate))
+                {
+                    return candidate;
+                }
+
+                current = current.Parent;
+            }
+        }
+
+        return null;
+    }
+
+    private static string? ResolvePwshPath()
+    {
+        var path = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+        foreach (var segment in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var candidate = Path.Combine(segment.Trim(), "pwsh.exe");
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+        var defaultPath = Path.Combine(programFiles, "PowerShell", "7", "pwsh.exe");
+        return File.Exists(defaultPath) ? defaultPath : null;
+    }
+
+    private sealed record NvrSourceCandidate(string Url, string Label, bool RequiresGo2RtcRelay, string? RelayUpstream);
 }
