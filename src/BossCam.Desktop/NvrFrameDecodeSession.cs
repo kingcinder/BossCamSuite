@@ -135,8 +135,6 @@ public sealed class NvrFrameDecodeSession : IDisposable
         info.ArgumentList.Add("-hide_banner");
         info.ArgumentList.Add("-loglevel");
         info.ArgumentList.Add("error");
-        info.ArgumentList.Add("-rw_timeout");
-        info.ArgumentList.Add("5000000");
         info.ArgumentList.Add("-analyzeduration");
         info.ArgumentList.Add("3000000");
         info.ArgumentList.Add("-probesize");

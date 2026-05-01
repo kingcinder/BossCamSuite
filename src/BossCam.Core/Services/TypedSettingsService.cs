@@ -231,6 +231,7 @@ public sealed class TypedSettingsService(
         }
 
         var writes = new List<WriteResult>(blocked);
+        var groupedEvidence = new List<GroupedUnsupportedRetestResult>();
         var grouped = resolvedChanges.GroupBy(item => $"{item.Field.SourceEndpoint}|{item.Contract.ContractKey}", StringComparer.OrdinalIgnoreCase);
         foreach (var group in grouped)
         {
@@ -321,6 +322,12 @@ public sealed class TypedSettingsService(
                 {
                     endpointSemantic = semantic;
                 }
+
+                if (TryBuildGroupedEvidence(device, item.Field, item.Contract, item.ContractField, item.Value, baseline, actual, delayed, semantic) is { } evidence)
+                {
+                    groupedEvidence.Add(evidence);
+                }
+
                 perFieldStatuses.Add($"{item.Field.FieldKey}:{semantic}");
             }
 
@@ -373,7 +380,68 @@ public sealed class TypedSettingsService(
             }, cancellationToken);
         }
 
+        if (groupedEvidence.Count > 0)
+        {
+            await store.SaveGroupedRetestResultsAsync(groupedEvidence, cancellationToken);
+        }
+
         return writes;
+    }
+
+    private static GroupedUnsupportedRetestResult? TryBuildGroupedEvidence(
+        DeviceIdentity device,
+        NormalizedSettingField field,
+        EndpointContract contract,
+        ContractField contractField,
+        JsonNode? attempted,
+        JsonNode? baseline,
+        JsonNode? immediate,
+        JsonNode? delayed,
+        SemanticWriteStatus semantic)
+    {
+        var (classification, behavior) = semantic switch
+        {
+            SemanticWriteStatus.AcceptedChanged => (ForcedFieldClassification.Writable, GroupedApplyBehavior.ImmediateApplied),
+            SemanticWriteStatus.AcceptedClamped => (ForcedFieldClassification.Writable, GroupedApplyBehavior.ImmediateApplied),
+            SemanticWriteStatus.AcceptedTranslated => (ForcedFieldClassification.Writable, GroupedApplyBehavior.ImmediateApplied),
+            SemanticWriteStatus.PersistedAfterDelay => (ForcedFieldClassification.DelayedApply, GroupedApplyBehavior.DelayedApplied),
+            SemanticWriteStatus.PersistedAfterReboot => (ForcedFieldClassification.Writable, GroupedApplyBehavior.DelayedApplied),
+            _ => (ForcedFieldClassification.Unsupported, GroupedApplyBehavior.Unknown)
+        };
+
+        if (classification == ForcedFieldClassification.Unsupported)
+        {
+            return null;
+        }
+
+        return new GroupedUnsupportedRetestResult
+        {
+            DeviceId = device.Id,
+            FirmwareFingerprint = field.FirmwareFingerprint ?? BuildFirmwareFingerprint(device),
+            IpAddress = device.IpAddress ?? string.Empty,
+            GroupKind = contract.GroupKind switch
+            {
+                TypedSettingGroupKind.NetworkWireless => GroupedConfigKind.NetworkConfig,
+                TypedSettingGroupKind.UsersMaintenance => GroupedConfigKind.UserConfig,
+                TypedSettingGroupKind.MotionPrivacyAlarms => GroupedConfigKind.AlarmConfig,
+                TypedSettingGroupKind.StoragePlayback => GroupedConfigKind.StorageConfig,
+                _ => GroupedConfigKind.ImageConfig
+            },
+            ContractKey = contract.ContractKey,
+            FieldKey = field.FieldKey,
+            SourceEndpoint = field.SourceEndpoint,
+            SourcePath = contractField.SourcePath,
+            BaselineValue = baseline?.DeepClone(),
+            AttemptedValue = attempted?.DeepClone(),
+            ImmediateValue = immediate?.DeepClone(),
+            Delayed3sValue = delayed?.DeepClone(),
+            FirstWriteSucceeded = true,
+            Behavior = behavior,
+            Classification = classification,
+            BaselineFieldPresent = baseline is not null,
+            DefinitionSource = "typed-apply-readback",
+            Notes = $"Typed apply live readback proved {semantic}."
+        };
     }
 
     private static bool IsOperatorWritable(NormalizedSettingField field, GroupedUnsupportedRetestResult? grouped)

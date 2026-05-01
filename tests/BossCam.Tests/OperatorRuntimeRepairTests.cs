@@ -70,6 +70,20 @@ public sealed class OperatorRuntimeRepairTests
         Assert.Contains("stderrTail=", nvr, StringComparison.Ordinal);
         Assert.Contains("No frames received during startup.", session, StringComparison.Ordinal);
         Assert.Contains("FFmpeg exited before the first frame.", session, StringComparison.Ordinal);
+        Assert.DoesNotContain("-rw_timeout", session, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MainWindow_Uses_Explicit_Tab_Template_And_Larger_Nvr_Diagnostics()
+    {
+        var xaml = ReadRepoFile("src", "BossCam.Desktop", "MainWindow.xaml");
+
+        Assert.Contains("<ControlTemplate TargetType=\"TabItem\">", xaml, StringComparison.Ordinal);
+        Assert.Contains("Value=\"#FFFFA33E\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Value=\"#FF080808\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("<ColumnDefinition Width=\"520\"/>", xaml, StringComparison.Ordinal);
+        Assert.Contains("<RowDefinition Height=\"260\"/>", xaml, StringComparison.Ordinal);
+        Assert.Contains("<TextBox Height=\"240\" Text=\"{Binding NvrDiagnostics}\"", xaml, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -91,6 +105,16 @@ public sealed class OperatorRuntimeRepairTests
         Assert.Contains("ApplySpecificFieldsAsync(\"IR controls\"", code, StringComparison.Ordinal);
         Assert.Contains("ApplySpecificFieldsAsync(\"brightness/contrast/hue\"", code, StringComparison.Ordinal);
         Assert.Contains("ApplySpecificFieldsAsync(\"remaining image settings\"", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void NetSdk_Default_Read_Does_Not_Block_Image_Load_On_Known_Hanging_Storage_Endpoints()
+    {
+        var adapter = ReadRepoFile("src", "BossCam.Infrastructure", "Control", "HttpControlAdapters.cs");
+
+        Assert.Contains("[\"Storage\"] = []", adapter, StringComparison.Ordinal);
+        Assert.DoesNotContain("/NetSDK/Video/input/channel/1/privacyMask/1\"],", adapter, StringComparison.Ordinal);
+        Assert.Contains("if (basic is null || basic.StatusCode != HttpStatusCode.Unauthorized)", adapter, StringComparison.Ordinal);
     }
 
     private static string ReadRepoFile(params string[] segments)
