@@ -73,18 +73,18 @@
               <button type="button" data-layout="7">7</button>
               <button type="button" data-layout="8">8</button>
             </div>
-            <label class="inline-check"><input type="checkbox" id="liveRefresh" checked /> Live refresh</label>
-            <label class="inline-check">Interval
-              <select id="liveInterval">
-                <option value="500">0.5s</option>
-                <option value="1000" selected>1s</option>
-                <option value="2000">2s</option>
-                <option value="3000">3s</option>
+            <label class="inline-check">Stream mode
+              <select id="streamQuality">
+                <option value="sub" selected>Multi-view (recommended)</option>
+                <option value="rtsp">Full motion RTSP (1–2 cams)</option>
+                <option value="main">HD RTSP main (heavy)</option>
               </select>
             </label>
+            <label class="inline-check" style="display:none"><input type="checkbox" id="liveRefresh" checked /> Live refresh</label>
+            <select id="liveInterval" style="display:none"><option value="2000" selected>2s</option></select>
             <button type="button" id="btnResetOrder">Reset order</button>
           </div>
-          <p class="muted small">Drag a tile by its title bar to rearrange. Click a tile to select that camera for Image / Network / Record.</p>
+          <p class="muted small">Continuous live streams (RTSP→MJPEG via ffmpeg). Drag title bar to rearrange. Click a tile to select for settings/record.</p>
         </div>
         <div id="viewGrid" class="view-grid layout-4"></div>
       </section>

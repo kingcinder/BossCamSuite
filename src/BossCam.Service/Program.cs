@@ -211,59 +211,74 @@ app.MapGet("/api/devices/{id:guid}/snapshot", async (Guid id, IApplicationStore 
         }
     }
 
-    // Some Juan units return HTTP 403 on snapShot while RTSP main still works — grab one JPEG frame.
-    var ffmpeg = Environment.GetEnvironmentVariable("BOSSCAM_FFMPEG_PATH")
-        ?? (File.Exists("/usr/bin/ffmpeg") ? "/usr/bin/ffmpeg" : null);
-    if (ffmpeg is not null)
-    {
-        var auth = $"{Uri.EscapeDataString(user)}:{Uri.EscapeDataString(password)}@";
-        var rtsp = $"rtsp://{auth}{device.IpAddress}:554/ch0_0.264";
-        var tmp = Path.Combine(Path.GetTempPath(), $"bosscam-snap-{id:N}.jpg");
-        try
-        {
-            using var proc = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = ffmpeg,
-                Arguments = $"-hide_banner -loglevel error -rtsp_transport tcp -i \"{rtsp}\" -map 0:v:0 -frames:v 1 -q:v 3 -y \"{tmp}\"",
-                RedirectStandardError = true,
-                RedirectStandardOutput = true,
-                UseShellExecute = false
-            });
-            if (proc is not null)
-            {
-                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                timeoutCts.CancelAfter(TimeSpan.FromSeconds(12));
-                try
-                {
-                    await proc.WaitForExitAsync(timeoutCts.Token);
-                }
-                catch (OperationCanceledException)
-                {
-                    try { proc.Kill(entireProcessTree: true); } catch { /* ignore */ }
-                }
-
-                if (File.Exists(tmp))
-                {
-                    var bytes = await File.ReadAllBytesAsync(tmp, ct);
-                    if (bytes.Length > 500 && bytes[0] == 0xFF && bytes[1] == 0xD8)
-                    {
-                        return Results.File(bytes, "image/jpeg");
-                    }
-                }
-            }
-        }
-        catch
-        {
-            // fall through to 502
-        }
-        finally
-        {
-            try { if (File.Exists(tmp)) File.Delete(tmp); } catch { /* ignore */ }
-        }
-    }
+    // RTSP one-shot fallback removed: it exhausts camera RTSP sessions needed for live multi-view.
 
     return Results.StatusCode(StatusCodes.Status502BadGateway);
 });
+
+app.MapGet("/api/devices/{id:guid}/live.ts", async (Guid id, string? quality, HttpContext http, LiveStreamService live, CancellationToken ct) =>
+{
+    http.Response.ContentType = "video/mp2t";
+    http.Response.Headers.CacheControl = "no-cache, no-store";
+    http.Response.Headers["X-Accel-Buffering"] = "no";
+    http.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpResponseBodyFeature>()?.DisableBuffering();
+    try
+    {
+        await http.Response.StartAsync(ct);
+        await live.StreamMpegTsAsync(id, http.Response.Body, quality ?? "sub", ct);
+    }
+    catch (InvalidOperationException ex)
+    {
+        if (!http.Response.HasStarted)
+        {
+            http.Response.StatusCode = StatusCodes.Status400BadRequest;
+            await http.Response.WriteAsJsonAsync(new { error = ex.Message }, ct);
+        }
+    }
+    catch (OperationCanceledException)
+    {
+        // client hung up
+    }
+});
+
+app.MapGet("/api/devices/{id:guid}/live.mjpeg", async (Guid id, string? quality, HttpContext http, LiveStreamService live, CancellationToken ct) =>
+{
+    http.Response.ContentType = "multipart/x-mixed-replace;boundary=ffmpeg";
+    http.Response.Headers.CacheControl = "no-cache, no-store, must-revalidate";
+    http.Response.Headers.Pragma = "no-cache";
+    http.Response.Headers["X-Accel-Buffering"] = "no";
+    http.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpResponseBodyFeature>()?.DisableBuffering();
+    try
+    {
+        await http.Response.StartAsync(ct);
+        await live.StreamMjpegAsync(id, http.Response.Body, quality ?? "sub", ct);
+    }
+    catch (InvalidOperationException ex)
+    {
+        if (!http.Response.HasStarted)
+        {
+            http.Response.StatusCode = StatusCodes.Status400BadRequest;
+            await http.Response.WriteAsJsonAsync(new { error = ex.Message }, ct);
+        }
+    }
+    catch (OperationCanceledException)
+    {
+    }
+});
+
+app.MapGet("/api/devices/{id:guid}/live-info", async (Guid id, LiveStreamService live, CancellationToken ct) =>
+{
+    try
+    {
+        var (main, sub, preferred) = await live.DescribeAsync(id, ct);
+        return Results.Ok(new { mainRtsp = main, subRtsp = sub, preferredLive = preferred });
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.NotFound(new { error = ex.Message });
+    }
+});
+
 app.MapGet("/api/protocols", async (ProtocolCatalogService protocolCatalogService, CancellationToken ct) => Results.Ok(await protocolCatalogService.GetAsync(ct)));
 app.MapPost("/api/protocols/refresh", async (ProtocolCatalogService protocolCatalogService, CancellationToken ct) => Results.Ok(await protocolCatalogService.RefreshAsync(ct)));
 app.MapGet("/api/diagnostics/audit", async (Guid? deviceId, int? limit, IApplicationStore store, CancellationToken ct) => Results.Ok(await store.GetAuditEntriesAsync(deviceId, limit ?? 100, ct)));

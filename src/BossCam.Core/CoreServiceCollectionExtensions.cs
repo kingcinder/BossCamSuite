@@ -24,6 +24,7 @@ public static class CoreServiceCollectionExtensions
         services.AddSingleton<ProbeSessionService>();
         services.AddSingleton<TransportBroker>();
         services.AddSingleton<RecordingService>();
+        services.AddSingleton<LiveStreamService>();
         services.AddSingleton<HighlightBoardService>();
         services.AddSingleton<DeviceRegistrationService>();
         services.AddSingleton<NvrPlaybackService>();

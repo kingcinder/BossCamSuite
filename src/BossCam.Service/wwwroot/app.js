@@ -138,8 +138,8 @@
           <span class="sub">#${i + 1}</span>
         </div>
         <div class="view-tile-media">
-          <img alt="${esc(labelOf(d))}" data-live="${d.id}" />
-          <div class="fail" data-fail="${d.id}" style="display:none">No live frame</div>
+          <img alt="${esc(labelOf(d))}" data-live="${d.id}" class="live-mjpeg" decoding="async" />
+          <div class="fail" data-fail="${d.id}" style="display:none">Connecting live stream…</div>
         </div>
         <div class="view-tile-actions">
           <button type="button" data-act="select">Select</button>
@@ -196,39 +196,54 @@
     refreshLiveImages();
   }
 
-  function refreshLiveImages() {
+  function liveStreamUrl(deviceId) {
+    // Continuous RTSP→MJPEG (or snapShot pump fallback). quality=sub for multi-view fluidity.
+    const q = ($("streamQuality") && $("streamQuality").value) || "sub";
+    return `/api/devices/${deviceId}/live.mjpeg?quality=${encodeURIComponent(q)}&t=${Date.now()}`;
+  }
+
+  function attachLiveStreams() {
     document.querySelectorAll("img[data-live]").forEach((img) => {
       const id = img.getAttribute("data-live");
       const fail = document.querySelector(`[data-fail="${id}"]`);
-      const url = snapUrl(id);
-      const probe = new Image();
-      probe.onload = () => {
-        img.src = url;
-        img.style.display = "block";
+      // Force reconnect if already set
+      img.onload = () => {
         if (fail) fail.style.display = "none";
+        img.style.display = "block";
       };
-      probe.onerror = () => {
-        if (fail) fail.style.display = "grid";
+      img.onerror = () => {
+        if (fail) {
+          fail.style.display = "grid";
+          fail.textContent = "Stream failed — retrying…";
+        }
+        // Retry after short delay (camera busy / ffmpeg spin-up)
+        clearTimeout(img._retry);
+        img._retry = setTimeout(() => {
+          img.src = liveStreamUrl(id);
+        }, 1500);
       };
-      probe.src = url;
+      img.src = liveStreamUrl(id);
     });
   }
 
+  function refreshLiveImages() {
+    // Reconnect all MJPEG streams (used after layout/order change)
+    attachLiveStreams();
+  }
+
   function scheduleLiveRefresh() {
+    // Continuous MJPEG does not need interval polling.
     if (state.liveTimer) {
       clearInterval(state.liveTimer);
       state.liveTimer = null;
     }
-    if (!$("liveRefresh")?.checked) return;
-    const ms = Number($("liveInterval").value || 1000);
+    // Optional: only refresh the single overview snap if that tab is open
+    if (state.liveTimer) return;
     state.liveTimer = setInterval(() => {
-      if ($("tab-viewall").classList.contains("active") || $("tab-overview").classList.contains("active")) {
-        refreshLiveImages();
-        if (state.selectedId && $("tab-overview").classList.contains("active")) {
-          loadSnapshotPreview();
-        }
+      if ($("tab-overview")?.classList.contains("active") && state.selectedId) {
+        loadSnapshotPreview();
       }
-    }, ms);
+    }, 2000);
   }
 
   async function loadDevices() {
@@ -268,7 +283,8 @@
       hint.style.display = "block";
       return;
     }
-    const url = snapUrl(state.selectedId);
+    // Use continuous live.mjpeg for device preview (smooth), not one-shot snapShot
+    const url = liveStreamUrl(state.selectedId);
     img.onload = () => {
       img.classList.add("show");
       hint.style.display = "none";
@@ -276,7 +292,7 @@
     img.onerror = () => {
       img.classList.remove("show");
       hint.style.display = "block";
-      hint.textContent = "Snapshot unavailable for this camera (try another unit).";
+      hint.textContent = "Live stream unavailable — check camera / ffmpeg.";
     };
     img.src = url;
   }
@@ -762,8 +778,9 @@
     document.querySelectorAll("#layoutBtns button").forEach((b) => {
       b.onclick = () => setLayout(Number(b.dataset.layout));
     });
-    $("liveRefresh").onchange = scheduleLiveRefresh;
-    $("liveInterval").onchange = scheduleLiveRefresh;
+    if ($("liveRefresh")) $("liveRefresh").onchange = () => { attachLiveStreams(); scheduleLiveRefresh(); };
+    if ($("liveInterval")) $("liveInterval").onchange = scheduleLiveRefresh;
+    if ($("streamQuality")) $("streamQuality").onchange = () => { attachLiveStreams(); loadSnapshotPreview(); };
     $("btnResetOrder").onclick = () => {
       localStorage.removeItem(LS_ORDER);
       syncOrder();
