@@ -388,5 +388,5 @@ internal static class ControlPointClassifier
             || contractKey.StartsWith("alarm.", StringComparison.OrdinalIgnoreCase)
             || contractKey.StartsWith("storage.", StringComparison.OrdinalIgnoreCase)
             || endpoint.Contains("/Video/encode/", StringComparison.OrdinalIgnoreCase)
-            || endpoint.Contains("/Network/interfaces", StringComparison.OrdinalIgnoreCase);
+            || endpoint.Contains("/Network/interface", StringComparison.OrdinalIgnoreCase);
 }

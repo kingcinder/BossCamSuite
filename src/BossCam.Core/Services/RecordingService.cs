@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using BossCam.Contracts;
 using Microsoft.Extensions.Logging;
 
@@ -24,10 +25,36 @@ public sealed class RecordingService(
             return existing;
         }
 
-        var sourceUrl = request.SourceUrl;
+        var sources = await transportBroker.GetSourcesAsync(device.Id, cancellationToken);
+        string? sourceUrl = request.SourceUrl;
         if (string.IsNullOrWhiteSpace(sourceUrl))
         {
-            sourceUrl = (await transportBroker.GetSourcesAsync(device.Id, cancellationToken)).FirstOrDefault()?.Url;
+            // Prefer proven high-res main RTSP (Juan ch0_0.264 / ONVIF PROFILE_000 / Dahua subtype=0).
+            sourceUrl = SelectHighResMainSource(sources)?.Url;
+        }
+
+        // Snapshot is fallback only (often 704x480). Prefer high-res RTSP when available.
+        var snapshotUrl = sources.FirstOrDefault(static s =>
+                s.Metadata.TryGetValue("kind", out var kind) && kind.Equals("snapshot", StringComparison.OrdinalIgnoreCase)
+                && s.Metadata.TryGetValue("highRes", out var hr) && hr.Equals("true", StringComparison.OrdinalIgnoreCase))?.Url
+            ?? sources.FirstOrDefault(static s =>
+                s.Metadata.TryGetValue("kind", out var kind) && kind.Equals("snapshot", StringComparison.OrdinalIgnoreCase))?.Url
+            ?? BuildSnapshotUrl(device);
+
+        var forceSnapshot = string.Equals(request.SourceUrl, "snapshot", StringComparison.OrdinalIgnoreCase)
+            || (sourceUrl?.Contains("snapShot", StringComparison.OrdinalIgnoreCase) ?? false)
+            || (sourceUrl?.Contains("snapshot.jpg", StringComparison.OrdinalIgnoreCase) ?? false);
+
+        var useSnapshotPipeline = forceSnapshot
+            || (string.IsNullOrWhiteSpace(request.SourceUrl) && SelectHighResMainSource(sources) is null);
+
+        if (useSnapshotPipeline)
+        {
+            sourceUrl = snapshotUrl;
+        }
+        else if (string.IsNullOrWhiteSpace(sourceUrl))
+        {
+            sourceUrl = SelectHighResMainSource(sources)?.Url ?? sources.FirstOrDefault()?.Url;
         }
 
         if (string.IsNullOrWhiteSpace(sourceUrl))
@@ -42,30 +69,42 @@ public sealed class RecordingService(
         }
 
         Directory.CreateDirectory(profile.OutputDirectory);
-        var pattern = Path.Combine(profile.OutputDirectory, $"{device.Id:N}_%Y%m%d_%H%M%S.mp4");
-        var args = $"-hide_banner -loglevel warning -rtsp_transport tcp -i \"{sourceUrl}\" -c copy -f segment -segment_time {Math.Max(5, profile.SegmentSeconds)} -reset_timestamps 1 -strftime 1 \"{pattern}\"";
+        // MPEG-TS segments stay playable without a trailing moov atom (unlike mid-write MP4).
+        var pattern = Path.Combine(profile.OutputDirectory, $"{device.Id:N}_%Y%m%d_%H%M%S.ts");
 
-        var process = new Process
+        Process process;
+        if (useSnapshotPipeline)
         {
-            StartInfo = new ProcessStartInfo
+            process = StartSnapshotPipeline(device, sourceUrl!, pattern, Math.Max(5, profile.SegmentSeconds), ffmpegPath);
+        }
+        else
+        {
+            var args = BuildFfmpegArgs(sourceUrl!, pattern, Math.Max(5, profile.SegmentSeconds));
+            process = new Process
             {
-                FileName = ffmpegPath,
-                Arguments = args,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardError = true,
-                RedirectStandardOutput = true
-            },
-            EnableRaisingEvents = true
-        };
-
-        process.Start();
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = ffmpegPath,
+                    Arguments = args,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardError = true,
+                    RedirectStandardOutput = true
+                },
+                EnableRaisingEvents = true
+            };
+            if (!process.Start())
+            {
+                throw new InvalidOperationException($"Failed to start ffmpeg for device {device.DisplayName}.");
+            }
+            _ = DrainProcessOutputAsync(process, process.Id);
+        }
 
         var started = new RecordingJob
         {
             DeviceId = device.Id,
             ProfileId = profile.Id,
-            SourceUrl = sourceUrl,
+            SourceUrl = RedactUrlCredentials(sourceUrl!),
             OutputDirectory = profile.OutputDirectory,
             SegmentPattern = pattern,
             SegmentSeconds = profile.SegmentSeconds,
@@ -89,7 +128,7 @@ public sealed class RecordingService(
             await _gate.WaitAsync(CancellationToken.None);
             try
             {
-                if (_running.Remove(started.Id, out var running))
+                if (_running.Remove(started.Id, out _))
                 {
                     logger.LogWarning("Recording job exited: {JobId}", started.Id);
                 }
@@ -100,7 +139,225 @@ public sealed class RecordingService(
             }
         };
 
+        logger.LogInformation(
+            "Recording started. job={JobId} device={Device} source={Source} pattern={Pattern} mode={Mode}",
+            started.Id,
+            device.DisplayName,
+            started.SourceUrl,
+            pattern,
+            useSnapshotPipeline ? "snapshot-pipeline" : "direct-ffmpeg");
+
         return started;
+    }
+
+    /// <summary>
+    /// Polls JPEG snapshots and pipes them into ffmpeg segment writer.
+    /// Reliable on 5523-W where /NetSDK/.../snapShot returns image/jpg.
+    /// </summary>
+    private Process StartSnapshotPipeline(DeviceIdentity device, string snapshotUrl, string segmentPattern, int segmentSeconds, string ffmpegPath)
+    {
+        var fps = 2;
+        var interval = "0.5";
+        var user = string.IsNullOrWhiteSpace(device.LoginName) ? "admin" : device.LoginName;
+        var password = device.Password ?? string.Empty;
+
+        var plainSnapshot = snapshotUrl;
+        try
+        {
+            if (Uri.TryCreate(snapshotUrl, UriKind.Absolute, out var uri) && !string.IsNullOrEmpty(uri.UserInfo))
+            {
+                var b = new UriBuilder(uri) { UserName = string.Empty, Password = string.Empty };
+                plainSnapshot = b.Uri.ToString();
+            }
+        }
+        catch
+        {
+        }
+
+        Process process;
+        if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+        {
+            var scriptPath = Path.Combine(Path.GetTempPath(), $"bosscam-rec-{device.Id:N}.sh");
+            var script = new StringBuilder();
+            script.AppendLine("#!/usr/bin/env bash");
+            script.AppendLine("set -euo pipefail");
+            script.Append("while true; do curl -fsS -m 4 -u ")
+                .Append(BashQuote($"{user}:{password}"))
+                .Append(' ')
+                .Append(BashQuote(plainSnapshot))
+                .Append(" || true; sleep ")
+                .Append(interval)
+                .AppendLine("; done \\");
+            // MPEG-TS is robust under kill/restart; no trailing moov required.
+            script.Append("| ")
+                .Append(BashQuote(ffmpegPath))
+                .Append(" -hide_banner -loglevel warning -y -f image2pipe -framerate ")
+                .Append(fps)
+                .Append(" -c:v mjpeg -i - -c:v libx264 -preset veryfast -pix_fmt yuv420p ")
+                .Append("-f segment -segment_time ")
+                .Append(Math.Max(10, segmentSeconds))
+                .Append(" -segment_format mpegts -reset_timestamps 1 -strftime 1 ")
+                .Append(BashQuote(segmentPattern))
+                .AppendLine();
+            File.WriteAllText(scriptPath, script.ToString());
+            try { Process.Start("chmod", $"+x {scriptPath}")?.WaitForExit(2000); } catch { }
+
+            process = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = "/bin/bash",
+                    Arguments = scriptPath,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardError = true,
+                    RedirectStandardOutput = true
+                },
+                EnableRaisingEvents = true
+            };
+        }
+        else
+        {
+            process = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = ffmpegPath,
+                    Arguments = $"-hide_banner -loglevel warning -y -loop 1 -re -i \"{snapshotUrl}\" -c:v libx264 -pix_fmt yuv420p -t 86400 -f segment -segment_time {segmentSeconds} -reset_timestamps 1 -strftime 1 \"{segmentPattern}\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardError = true,
+                    RedirectStandardOutput = true
+                },
+                EnableRaisingEvents = true
+            };
+        }
+
+        if (!process.Start())
+        {
+            throw new InvalidOperationException($"Failed to start snapshot recording pipeline for {device.DisplayName}.");
+        }
+
+        _ = DrainProcessOutputAsync(process, process.Id);
+        return process;
+    }
+
+    private static string BashQuote(string value)
+        => "'" + value.Replace("'", "'\"'\"'", StringComparison.Ordinal) + "'";
+
+    private static string BuildSnapshotUrl(DeviceIdentity device)
+    {
+        var user = string.IsNullOrWhiteSpace(device.LoginName) ? "admin" : device.LoginName;
+        var password = device.Password ?? string.Empty;
+        var port = device.Port <= 0 ? 80 : device.Port;
+        return $"http://{Uri.EscapeDataString(user)}:{Uri.EscapeDataString(password)}@{device.IpAddress}:{port}/NetSDK/Video/encode/channel/101/snapShot";
+    }
+
+    /// <summary>
+    /// Picks the highest-priority main/high-res stream. Never selects sub paths like ch0_1, /12, subtype=1.
+    /// </summary>
+    public static VideoSourceDescriptor? SelectHighResMainSource(IEnumerable<VideoSourceDescriptor> sources)
+    {
+        static bool IsSub(VideoSourceDescriptor s)
+        {
+            var url = s.Url ?? string.Empty;
+            if (s.Metadata.TryGetValue("stream", out var stream) && stream.Equals("sub", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (s.Metadata.TryGetValue("highRes", out var hr) && hr.Equals("false", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            return url.Contains("ch0_1", StringComparison.OrdinalIgnoreCase)
+                || url.Contains("/12", StringComparison.OrdinalIgnoreCase)
+                || url.Contains("subtype=1", StringComparison.OrdinalIgnoreCase)
+                || url.Contains("PROFILE_001", StringComparison.OrdinalIgnoreCase)
+                || (s.DisplayName?.Contains("sub", StringComparison.OrdinalIgnoreCase) ?? false);
+        }
+
+        static bool IsMainHint(VideoSourceDescriptor s)
+        {
+            var url = s.Url ?? string.Empty;
+            if (s.Metadata.TryGetValue("highRes", out var hr) && hr.Equals("true", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (s.Metadata.TryGetValue("stream", out var stream) && stream.Equals("main", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            return url.Contains("ch0_0", StringComparison.OrdinalIgnoreCase)
+                || url.Contains("subtype=0", StringComparison.OrdinalIgnoreCase)
+                || url.Contains("PROFILE_000", StringComparison.OrdinalIgnoreCase)
+                || url.Contains("/11", StringComparison.OrdinalIgnoreCase);
+        }
+
+        var ordered = sources
+            .Where(static s => s.Kind is TransportKind.Rtsp or TransportKind.OnvifRtsp)
+            .Where(static s => !IsSub(s))
+            .OrderBy(static s => s.Rank)
+            .ToList();
+
+        return ordered.FirstOrDefault(IsMainHint) ?? ordered.FirstOrDefault();
+    }
+
+    public async Task<IReadOnlyCollection<RecordingJob>> StartAllAsync(bool preferSubStream, CancellationToken cancellationToken)
+    {
+        var devices = (await store.GetDevicesAsync(cancellationToken))
+            .Where(static device => !string.IsNullOrWhiteSpace(device.IpAddress))
+            .GroupBy(device => device.IpAddress!, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group
+                .OrderByDescending(static d => string.Equals(d.DeviceType, "IPC", StringComparison.OrdinalIgnoreCase))
+                .ThenByDescending(static d => d.DiscoveredAt)
+                .First())
+            .Where(static d =>
+                string.Equals(d.DeviceType, "IPC", StringComparison.OrdinalIgnoreCase)
+                || (d.HardwareModel?.Contains("5523", StringComparison.OrdinalIgnoreCase) ?? false)
+                || !string.IsNullOrWhiteSpace(d.EseeId))
+            .ToList();
+
+        var jobs = new List<RecordingJob>();
+        foreach (var device in devices)
+        {
+            try
+            {
+                // Leave SourceUrl null so StartAsync uses the proven snapshot pipeline on 5523-W.
+                // preferSubStream is reserved for future RTSP media path when RTP is available.
+                _ = preferSubStream;
+                var job = await StartAsync(new RecordingStartRequest
+                {
+                    DeviceId = device.Id
+                }, cancellationToken);
+                jobs.Add(job);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to start recording for {Device} ({Ip})", device.DisplayName, device.IpAddress);
+            }
+        }
+
+        return jobs;
+    }
+
+    public async Task<IReadOnlyCollection<RecordingJob>> StopAllAsync(CancellationToken cancellationToken)
+    {
+        var jobs = await GetJobsAsync(cancellationToken);
+        var stopped = new List<RecordingJob>();
+        foreach (var job in jobs.Where(static j => j.IsRunning))
+        {
+            var result = await StopAsync(job.Id, cancellationToken);
+            if (result is not null)
+            {
+                stopped.Add(result);
+            }
+        }
+
+        return stopped;
     }
 
     public async Task<RecordingJob?> StopAsync(Guid jobId, CancellationToken cancellationToken)
@@ -117,8 +374,9 @@ public sealed class RecordingService(
             {
                 if (!running.Process.HasExited)
                 {
+                    // entireProcessTree is required so bash pipeline children (curl/ffmpeg) die too.
                     running.Process.Kill(entireProcessTree: true);
-                    running.Process.WaitForExit(5000);
+                    running.Process.WaitForExit(8000);
                 }
             }
             catch (Exception ex)
@@ -200,9 +458,18 @@ public sealed class RecordingService(
                 continue;
             }
 
-            foreach (var file in Directory.EnumerateFiles(profile.OutputDirectory, "*.mp4", SearchOption.TopDirectoryOnly))
+            foreach (var file in Directory.EnumerateFiles(profile.OutputDirectory, "*.*", SearchOption.TopDirectoryOnly)
+                .Where(static path => path.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase)
+                    || path.EndsWith(".ts", StringComparison.OrdinalIgnoreCase)
+                    || path.EndsWith(".mkv", StringComparison.OrdinalIgnoreCase)))
             {
                 var info = new FileInfo(file);
+                // Skip empty/stub segment headers (e.g. 48-byte ftyp-only mp4) but keep tiny test fixtures.
+                if (info.Length < 8)
+                {
+                    continue;
+                }
+
                 if (!TryParseStartTime(info.Name, out var start))
                 {
                     start = new DateTimeOffset(info.CreationTimeUtc);
@@ -247,7 +514,10 @@ public sealed class RecordingService(
                 continue;
             }
 
-            var files = Directory.EnumerateFiles(profile.OutputDirectory, "*.mp4", SearchOption.TopDirectoryOnly)
+            var files = Directory.EnumerateFiles(profile.OutputDirectory, "*.*", SearchOption.TopDirectoryOnly)
+                .Where(static path => path.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase)
+                    || path.EndsWith(".ts", StringComparison.OrdinalIgnoreCase)
+                    || path.EndsWith(".mkv", StringComparison.OrdinalIgnoreCase))
                 .Select(path => new FileInfo(path))
                 .OrderBy(info => info.CreationTimeUtc)
                 .ToList();
@@ -340,6 +610,45 @@ public sealed class RecordingService(
         }
     }
 
+    /// <summary>
+    /// High-res RTSP (HEVC/H264) + drop PCMA audio. Segment to MPEG-TS for kill-safe files.
+    /// </summary>
+    public static string BuildFfmpegArgs(string sourceUrl, string segmentPattern, int segmentSeconds)
+    {
+        var sb = new StringBuilder();
+        sb.Append("-hide_banner -loglevel warning -y ");
+        sb.Append("-analyzeduration 8000000 -probesize 8000000 ");
+
+        if (sourceUrl.StartsWith("rtsp://", StringComparison.OrdinalIgnoreCase))
+        {
+            // TCP interleaved RTP. Avoid stimeout/rw_timeout — option names vary by ffmpeg build.
+            sb.Append("-rtsp_transport tcp ");
+        }
+
+        sb.Append("-i \"").Append(sourceUrl).Append("\" ");
+        // Drop PCMA/PCMU audio; copy video (HEVC main high-res or H264).
+        sb.Append("-map 0:v:0 -c:v copy -an ");
+        sb.Append("-f segment -segment_time ").Append(Math.Max(10, segmentSeconds));
+        sb.Append(" -segment_format mpegts -reset_timestamps 1 -strftime 1 \"");
+        sb.Append(segmentPattern).Append('"');
+        return sb.ToString();
+    }
+
+    private async Task DrainProcessOutputAsync(Process process, int processId)
+    {
+        try
+        {
+            var stderr = await process.StandardError.ReadToEndAsync();
+            if (!string.IsNullOrWhiteSpace(stderr))
+            {
+                logger.LogDebug("ffmpeg stderr pid={Pid}: {Stderr}", processId, stderr.Length > 2000 ? stderr[^2000..] : stderr);
+            }
+        }
+        catch
+        {
+        }
+    }
+
     private async Task<RecordingProfile> ResolveProfileAsync(DeviceIdentity device, RecordingStartRequest request, CancellationToken cancellationToken)
     {
         var profiles = await store.GetRecordingProfilesAsync(device.Id, cancellationToken);
@@ -349,17 +658,29 @@ public sealed class RecordingService(
 
         if (profile is not null)
         {
+            // Keep existing custom directories; clamp overly-long segment times so files finalize often.
+            if (profile.SegmentSeconds > 120)
+            {
+                profile = profile with { SegmentSeconds = 30, UpdatedAt = DateTimeOffset.UtcNow };
+                await store.SaveRecordingProfilesAsync([profile], cancellationToken);
+            }
+
             return profile;
         }
 
-        var outputDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BossCamSuite", "recordings", device.Id.ToString("N"));
+        var outputDirectory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "BossCamSuite",
+            "recordings",
+            string.IsNullOrWhiteSpace(device.IpAddress) ? device.Id.ToString("N") : device.IpAddress.Replace('.', '_'));
         profile = new RecordingProfile
         {
             DeviceId = device.Id,
             Name = "Default",
             OutputDirectory = outputDirectory,
-            SegmentSeconds = 300,
-            Enabled = true
+            SegmentSeconds = 30,
+            Enabled = true,
+            AutoStart = false
         };
         await store.SaveRecordingProfilesAsync([profile], cancellationToken);
         return profile;
@@ -395,6 +716,26 @@ public sealed class RecordingService(
         }
     }
 
+    private static string RedactUrlCredentials(string url)
+    {
+        try
+        {
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || string.IsNullOrEmpty(uri.UserInfo))
+            {
+                return url;
+            }
+
+            var userInfo = uri.UserInfo;
+            var user = userInfo.Contains(':') ? userInfo.Split(':', 2)[0] : userInfo;
+            var builder = new UriBuilder(uri) { UserName = user, Password = "***" };
+            return builder.Uri.ToString();
+        }
+        catch
+        {
+            return url;
+        }
+    }
+
     private static string? ResolveFfmpegPath()
     {
         var local = Environment.GetEnvironmentVariable("BOSSCAM_FFMPEG_PATH");
@@ -406,7 +747,19 @@ public sealed class RecordingService(
         var path = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
         foreach (var segment in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
-            var candidate = Path.Combine(segment, "ffmpeg.exe");
+            foreach (var name in new[] { "ffmpeg", "ffmpeg.exe" })
+            {
+                var candidate = Path.Combine(segment, name);
+                if (File.Exists(candidate))
+                {
+                    return candidate;
+                }
+            }
+        }
+
+        // Common absolute locations
+        foreach (var candidate in new[] { "/usr/bin/ffmpeg", "/usr/local/bin/ffmpeg", @"C:\ffmpeg\bin\ffmpeg.exe" })
+        {
             if (File.Exists(candidate))
             {
                 return candidate;

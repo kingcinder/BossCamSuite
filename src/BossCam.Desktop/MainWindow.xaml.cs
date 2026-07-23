@@ -2792,15 +2792,16 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             ? new RecordingProfile
             {
                 DeviceId = SelectedDevice.Id,
-                Name = "Default",
+                Name = "Default-HighRes",
                 OutputDirectory = VideoRecordingStoragePath,
-                SegmentSeconds = 300,
+                SegmentSeconds = 30,
                 Enabled = true,
-                AutoStart = true
+                AutoStart = false
             }
             : current with
             {
                 OutputDirectory = VideoRecordingStoragePath,
+                SegmentSeconds = current.SegmentSeconds > 120 ? 30 : current.SegmentSeconds,
                 UpdatedAt = DateTimeOffset.UtcNow
             };
         using var response = await _httpClient.PostAsJsonAsync("/api/recordings", new[] { profile }, SerializerOptions);

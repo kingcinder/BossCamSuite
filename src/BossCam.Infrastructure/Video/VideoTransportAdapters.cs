@@ -7,6 +7,12 @@ using Microsoft.Extensions.Options;
 
 namespace BossCam.Infrastructure.Video;
 
+/// <summary>
+/// Builds authenticated 5523-W stream URLs proven against live firmware 3.6.103.5721106:
+/// RTSP main <c>rtsp://user:pass@ip:554/11</c>, sub <c>/12</c> (Digest auth, Happytime RTSP).
+/// Bubble live HTTP <c>/bubble/live?ch=1&amp;stream=0</c> (content-type video/bubble).
+/// Snapshot JPEG <c>/NetSDK/Video/encode/channel/101/snapShot</c>.
+/// </summary>
 public sealed class StreamDescriptorAdapter(IOptions<BossCamRuntimeOptions> options) : IVideoTransportAdapter
 {
     public string Name => nameof(StreamDescriptorAdapter);
@@ -21,12 +27,17 @@ public sealed class StreamDescriptorAdapter(IOptions<BossCamRuntimeOptions> opti
             return sources;
         }
 
+        var user = string.IsNullOrWhiteSpace(device.LoginName) ? "admin" : device.LoginName;
+        var password = device.Password ?? string.Empty;
+        var authPrefix = BuildAuthPrefix(user, password);
+        var port = device.Port <= 0 ? 80 : device.Port;
+
         foreach (var existing in device.TransportProfiles.Where(static profile => profile.Kind is TransportKind.Rtsp or TransportKind.RtspOverHttp or TransportKind.FlvOverHttp or TransportKind.Rtmp or TransportKind.OnvifRtsp))
         {
             sources.Add(new VideoSourceDescriptor
             {
                 Kind = existing.Kind,
-                Url = existing.Address,
+                Url = InjectCredentialsIfMissing(existing.Address, user, password),
                 Rank = existing.Rank,
                 DisplayName = existing.Kind.ToString(),
                 RequiresTunnel = existing.IsRemote,
@@ -34,37 +45,101 @@ public sealed class StreamDescriptorAdapter(IOptions<BossCamRuntimeOptions> opti
             });
         }
 
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(options.Value.HttpTimeoutSeconds) };
-        try
-        {
-            var endpoint = $"http://{device.IpAddress}:{device.Port}/NetSDK/Stream/channel/0";
-            var raw = await client.GetStringAsync(endpoint, cancellationToken);
-            var node = HttpControlAdapterBase.TryParseNode(raw);
-            foreach (var url in ExtractUrls(node, raw))
-            {
-                sources.Add(new VideoSourceDescriptor
-                {
-                    Kind = MapKind(url),
-                    Url = url,
-                    Rank = RankFor(url),
-                    DisplayName = Path.GetFileName(url),
-                    Metadata = new Dictionary<string, string> { ["source"] = "/NetSDK/Stream/channel/0" }
-                });
-            }
-        }
-        catch
-        {
-        }
-
-        if (!sources.Any(static source => source.Kind == TransportKind.Rtsp))
+        // Proven 5523-W / Juan-family paths (high-res main is ch0_0.264 HEVC 2560x1920).
+        if (LooksLikeJuanNetSdkFamily(device))
         {
             sources.Add(new VideoSourceDescriptor
             {
                 Kind = TransportKind.Rtsp,
-                Url = $"rtsp://{device.IpAddress}:554",
-                Rank = 15,
-                DisplayName = "RTSP default"
+                Url = $"rtsp://{authPrefix}{device.IpAddress}:554/ch0_0.264",
+                Rank = 0,
+                DisplayName = "RTSP main high-res (ch0_0.264)",
+                Metadata = new Dictionary<string, string>
+                {
+                    ["stream"] = "main",
+                    ["path"] = "/ch0_0.264",
+                    ["auth"] = "digest",
+                    ["encodeChannel"] = "101",
+                    ["highRes"] = "true",
+                    ["resolution"] = "2560x1920"
+                }
             });
+            sources.Add(new VideoSourceDescriptor
+            {
+                Kind = TransportKind.Rtsp,
+                Url = $"rtsp://{authPrefix}{device.IpAddress}:554/ch0_1.264",
+                Rank = 50,
+                DisplayName = "RTSP sub (ch0_1.264)",
+                Metadata = new Dictionary<string, string>
+                {
+                    ["stream"] = "sub",
+                    ["path"] = "/ch0_1.264",
+                    ["auth"] = "digest",
+                    ["encodeChannel"] = "102",
+                    ["highRes"] = "false",
+                    ["resolution"] = "704x480"
+                }
+            });
+            sources.Add(new VideoSourceDescriptor
+            {
+                Kind = TransportKind.Rtsp,
+                Url = $"rtsp://{authPrefix}{device.IpAddress}:554/11",
+                Rank = 4,
+                DisplayName = "RTSP /11 alias",
+                Metadata = new Dictionary<string, string>
+                {
+                    ["stream"] = "main",
+                    ["path"] = "/11",
+                    ["auth"] = "digest",
+                    ["encodeChannel"] = "101",
+                    ["highRes"] = "true"
+                }
+            });
+
+            // NetSDK snapShot is often sub-resolution; keep for tiles only.
+            sources.Add(new VideoSourceDescriptor
+            {
+                Kind = TransportKind.LanRest,
+                Url = $"http://{authPrefix}{device.IpAddress}:{port}/NetSDK/Video/encode/channel/101/snapShot",
+                Rank = 25,
+                DisplayName = "JPEG snapshot (NetSDK)",
+                Metadata = new Dictionary<string, string>
+                {
+                    ["kind"] = "snapshot",
+                    ["contentType"] = "image/jpg",
+                    ["endpoint"] = "/NetSDK/Video/encode/channel/101/snapShot",
+                    ["highRes"] = "false"
+                }
+            });
+        }
+
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(options.Value.HttpTimeoutSeconds) };
+        try
+        {
+            var endpoint = $"http://{device.IpAddress}:{port}/NetSDK/Stream/channel/0";
+            using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
+            var credential = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{user}:{password}"));
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", credential);
+            using var response = await client.SendAsync(request, cancellationToken);
+            if (response.IsSuccessStatusCode)
+            {
+                var raw = await response.Content.ReadAsStringAsync(cancellationToken);
+                var node = HttpControlAdapterBase.TryParseNode(raw);
+                foreach (var url in ExtractUrls(node, raw))
+                {
+                    sources.Add(new VideoSourceDescriptor
+                    {
+                        Kind = MapKind(url),
+                        Url = InjectCredentialsIfMissing(url, user, password),
+                        Rank = RankFor(url),
+                        DisplayName = Path.GetFileName(url),
+                        Metadata = new Dictionary<string, string> { ["source"] = "/NetSDK/Stream/channel/0" }
+                    });
+                }
+            }
+        }
+        catch
+        {
         }
 
         return sources
@@ -72,6 +147,54 @@ public sealed class StreamDescriptorAdapter(IOptions<BossCamRuntimeOptions> opti
             .Select(static group => group.First())
             .OrderBy(static source => source.Rank)
             .ToList();
+    }
+
+    internal static bool LooksLikeJuanNetSdkFamily(DeviceIdentity device)
+    {
+        var model = device.HardwareModel ?? string.Empty;
+        var name = device.Name ?? string.Empty;
+        var type = device.DeviceType ?? string.Empty;
+        if (model.Contains("5523", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("5523", StringComparison.OrdinalIgnoreCase)
+            || type.Equals("IPC", StringComparison.OrdinalIgnoreCase)
+            || !string.IsNullOrWhiteSpace(device.EseeId))
+        {
+            return true;
+        }
+
+        // Explicit transport profile already pointing at NetSDK/bubble also qualifies.
+        return device.TransportProfiles.Any(static p =>
+            p.Kind is TransportKind.LanRest or TransportKind.BubbleFlv
+            || p.Address.Contains("/NetSDK/", StringComparison.OrdinalIgnoreCase)
+            || p.Address.Contains("/bubble/", StringComparison.OrdinalIgnoreCase));
+    }
+
+    internal static string BuildAuthPrefix(string user, string password)
+        => $"{Uri.EscapeDataString(user)}:{Uri.EscapeDataString(password)}@";
+
+    internal static string InjectCredentialsIfMissing(string url, string user, string password)
+    {
+        if (string.IsNullOrWhiteSpace(url) || url.Contains('@', StringComparison.Ordinal))
+        {
+            return url;
+        }
+
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            return url;
+        }
+
+        if (uri.Scheme is not ("rtsp" or "http" or "https" or "rtmp"))
+        {
+            return url;
+        }
+
+        var builder = new UriBuilder(uri)
+        {
+            UserName = user,
+            Password = password
+        };
+        return builder.Uri.ToString();
     }
 
     private static IEnumerable<string> ExtractUrls(JsonNode? node, string raw)
@@ -150,20 +273,44 @@ public sealed class BubbleFlvAdapter : IVideoTransportAdapter
 
     public Task<IReadOnlyCollection<VideoSourceDescriptor>> GetSourcesAsync(DeviceIdentity device, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(device.IpAddress))
+        if (string.IsNullOrWhiteSpace(device.IpAddress) || !StreamDescriptorAdapter.LooksLikeJuanNetSdkFamily(device))
         {
             return Task.FromResult<IReadOnlyCollection<VideoSourceDescriptor>>([]);
         }
 
+        var user = string.IsNullOrWhiteSpace(device.LoginName) ? "admin" : device.LoginName;
+        var password = device.Password ?? string.Empty;
+        var authPrefix = StreamDescriptorAdapter.BuildAuthPrefix(user, password);
+        var port = device.Port <= 0 ? 80 : device.Port;
+
+        // Proven live: content-type video/bubble on both 5523-W units.
         IReadOnlyCollection<VideoSourceDescriptor> sources =
         [
             new VideoSourceDescriptor
             {
                 Kind = TransportKind.BubbleFlv,
-                Url = $"http://{device.IpAddress}:{device.Port}/bubble/live?ch=1&stream=0",
-                Rank = 40,
-                DisplayName = "Vendor FLV",
-                Metadata = new Dictionary<string, string> { ["path"] = "/bubble/live?ch=1&stream=0" }
+                Url = $"http://{authPrefix}{device.IpAddress}:{port}/bubble/live?ch=1&stream=0",
+                Rank = 30,
+                DisplayName = "Bubble live main",
+                Metadata = new Dictionary<string, string>
+                {
+                    ["path"] = "/bubble/live?ch=1&stream=0",
+                    ["stream"] = "main",
+                    ["contentType"] = "video/bubble"
+                }
+            },
+            new VideoSourceDescriptor
+            {
+                Kind = TransportKind.BubbleFlv,
+                Url = $"http://{authPrefix}{device.IpAddress}:{port}/bubble/live?ch=1&stream=1",
+                Rank = 31,
+                DisplayName = "Bubble live sub",
+                Metadata = new Dictionary<string, string>
+                {
+                    ["path"] = "/bubble/live?ch=1&stream=1",
+                    ["stream"] = "sub",
+                    ["contentType"] = "video/bubble"
+                }
             }
         ];
         return Task.FromResult(sources);

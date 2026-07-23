@@ -6,10 +6,18 @@
         mc:Ignorable="d"
         Title="BossCamSuite"
         Icon="Assets/BossCamSuite.ico"
+        MinHeight="720"
+        MinWidth="1280"
         Height="980"
         Width="1700"
+        WindowStartupLocation="CenterScreen"
+        WindowState="Maximized"
+        ResizeMode="CanResizeWithGrip"
         Background="#050506"
-        Foreground="#F2F4F7">
+        Foreground="#F2F4F7"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        TextOptions.TextFormattingMode="Display">
     <Window.Resources>
         <ImageBrush x:Key="BossCamThemeImage"
                     ImageSource="Assets/BossCamSuite.png"
@@ -292,17 +300,17 @@
                 </LinearGradientBrush>
             </Border.Background>
         </Border>
-        <Border HorizontalAlignment="Right" VerticalAlignment="Center" Width="980" Height="980" Margin="0,0,-220,0" Opacity="0.12">
+        <Border HorizontalAlignment="Right" VerticalAlignment="Bottom" Width="420" Height="420" Margin="0,0,24,24" Opacity="0.08" IsHitTestVisible="False" ClipToBounds="True">
             <Border.Background>
                 <ImageBrush ImageSource="Assets/BossCamSuite.png" Stretch="Uniform"/>
             </Border.Background>
         </Border>
 
-    <Grid Margin="14">
+    <Grid Margin="14" ClipToBounds="True">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="340"/>
+            <ColumnDefinition Width="320" MinWidth="260" MaxWidth="420"/>
             <ColumnDefinition Width="12"/>
-            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="*" MinWidth="640"/>
         </Grid.ColumnDefinitions>
 
         <Border Grid.Column="0" Padding="12" CornerRadius="12" Background="{StaticResource ThemePanelBrush}" BorderBrush="{StaticResource ThemeBorderBrush}" BorderThickness="1">
@@ -363,6 +371,7 @@
                 <Border Padding="10" CornerRadius="12" Background="{StaticResource ThemePanelBrush}" BorderBrush="{StaticResource ThemeBorderBrush}" BorderThickness="1">
                     <TabControl>
                         <TabItem Header="Camera">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,8,0">
                             <StackPanel Margin="8">
                                 <TextBlock Text="Camera Identity" FontWeight="SemiBold" Margin="0,0,0,8"/>
                                 <Grid Margin="0,0,0,8">
@@ -414,10 +423,11 @@
                                     <TextBox Grid.Column="1" Text="{Binding CameraMac, Mode=OneWay}" IsReadOnly="True"/>
                                 </Grid>
                             </StackPanel>
+                            </ScrollViewer>
                         </TabItem>
 
                         <TabItem Header="Image">
-                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,8,0">
                                 <StackPanel Margin="8">
                                     <Grid Margin="0,0,0,10" Visibility="{Binding ImageBrightnessVisibility}">
                                         <Grid.ColumnDefinitions>
@@ -802,17 +812,18 @@
                             </ScrollViewer>
                         </TabItem>
                         <TabItem Header="Users">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,8,0">
                             <Grid Margin="8">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="1.4*"/>
+                                    <ColumnDefinition Width="1.4*" MinWidth="280"/>
                                     <ColumnDefinition Width="14"/>
-                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*" MinWidth="240"/>
                                 </Grid.ColumnDefinitions>
                                 <Border Grid.Column="0" Padding="12" CornerRadius="10" Background="#20313E">
                                     <StackPanel>
                                         <TextBlock Text="Accounts" FontSize="16" FontWeight="SemiBold"/>
                                         <TextBlock Margin="0,4,0,12" Foreground="#C4D4E5" Text="Select an account to reuse its username in the password reset flow." TextWrapping="Wrap"/>
-                                        <DataGrid Height="230" ItemsSource="{Binding UserAccounts}" SelectedItem="{Binding SelectedUserAccount}" AutoGenerateColumns="False" Background="#0E171E" BorderThickness="0">
+                                        <DataGrid MinHeight="180" MaxHeight="360" ItemsSource="{Binding UserAccounts}" SelectedItem="{Binding SelectedUserAccount}" AutoGenerateColumns="False" Background="#0E171E" BorderThickness="0">
                                             <DataGrid.Columns>
                                                 <DataGridTextColumn Header="Username" Binding="{Binding Username}" Width="1.2*"/>
                                                 <DataGridTextColumn Header="Role" Binding="{Binding Role}" Width="1*"/>
@@ -825,18 +836,27 @@
                                     <StackPanel>
                                         <TextBlock Text="Password Reset" FontSize="16" FontWeight="SemiBold"/>
                                         <TextBlock Margin="0,4,0,12" Foreground="#C4D4E5" Text="{Binding SelectedUserSummary}" TextWrapping="Wrap"/>
-                                        <WrapPanel Margin="0,0,0,8">
-                                            <TextBlock Width="140" Text="Username" VerticalAlignment="Center"/>
-                                            <TextBox Width="220" Text="{Binding PasswordChangeUsername}"/>
-                                        </WrapPanel>
-                                        <WrapPanel Margin="0,0,0,8">
-                                            <TextBlock Width="140" Text="New Password" VerticalAlignment="Center"/>
-                                            <PasswordBox Width="220" PasswordChanged="PasswordChangePasswordChanged"/>
-                                        </WrapPanel>
-                                        <Button Width="180" Click="ApplyPasswordChange_Click">Apply Password Change</Button>
+                                        <Grid Margin="0,0,0,8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="Username" VerticalAlignment="Center"/>
+                                            <TextBox Grid.Column="1" Text="{Binding PasswordChangeUsername}"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="New Password" VerticalAlignment="Center"/>
+                                            <PasswordBox Grid.Column="1" PasswordChanged="PasswordChangePasswordChanged"/>
+                                        </Grid>
+                                        <Button MinWidth="180" HorizontalAlignment="Left" Click="ApplyPasswordChange_Click">Apply Password Change</Button>
                                     </StackPanel>
                                 </Border>
                             </Grid>
+                            </ScrollViewer>
                         </TabItem>
 
                         <TabItem Header="Motion/Alarm">
@@ -1008,21 +1028,36 @@
                                     <TextBlock Text="Recording" FontWeight="SemiBold" Margin="0,0,0,8"/>
                                     <TextBlock Margin="0,0,0,10" Foreground="#C4D4E5" Text="Operator recording controls stay separate from playback/export workflows so disruptive actions are explicit." TextWrapping="Wrap"/>
                                     <TextBlock Text="Storage Locations" FontWeight="SemiBold" Margin="0,0,0,8"/>
-                                    <WrapPanel Margin="0,0,0,8">
-                                        <TextBlock Width="170" Text="Video Recording Folder" VerticalAlignment="Center"/>
-                                        <TextBox Width="520" Margin="0,0,8,0" Text="{Binding VideoRecordingStoragePath, Mode=OneWay}" IsReadOnly="True"/>
-                                        <Button Width="120" Click="BrowseVideoRecordingStorage_Click">Browse</Button>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8">
-                                        <TextBlock Width="170" Text="Audio Recording Folder" VerticalAlignment="Center"/>
-                                        <TextBox Width="520" Margin="0,0,8,0" Text="{Binding AudioRecordingStoragePath, Mode=OneWay}" IsReadOnly="True"/>
-                                        <Button Width="120" Click="BrowseAudioRecordingStorage_Click">Browse</Button>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,12">
-                                        <TextBlock Width="170" Text="Screenshot Still Folder" VerticalAlignment="Center"/>
-                                        <TextBox Width="520" Margin="0,0,8,0" Text="{Binding ScreenshotStoragePath, Mode=OneWay}" IsReadOnly="True"/>
-                                        <Button Width="120" Click="BrowseScreenshotStorage_Click">Browse</Button>
-                                    </WrapPanel>
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="170"/>
+                                            <ColumnDefinition Width="*" MinWidth="200"/>
+                                            <ColumnDefinition Width="120"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Video Recording Folder" VerticalAlignment="Center"/>
+                                        <TextBox Grid.Column="1" Margin="0,0,8,0" Text="{Binding VideoRecordingStoragePath, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap"/>
+                                        <Button Grid.Column="2" Click="BrowseVideoRecordingStorage_Click">Browse</Button>
+                                    </Grid>
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="170"/>
+                                            <ColumnDefinition Width="*" MinWidth="200"/>
+                                            <ColumnDefinition Width="120"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Audio Recording Folder" VerticalAlignment="Center"/>
+                                        <TextBox Grid.Column="1" Margin="0,0,8,0" Text="{Binding AudioRecordingStoragePath, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap"/>
+                                        <Button Grid.Column="2" Click="BrowseAudioRecordingStorage_Click">Browse</Button>
+                                    </Grid>
+                                    <Grid Margin="0,0,0,12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="170"/>
+                                            <ColumnDefinition Width="*" MinWidth="200"/>
+                                            <ColumnDefinition Width="120"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Screenshot Still Folder" VerticalAlignment="Center"/>
+                                        <TextBox Grid.Column="1" Margin="0,0,8,0" Text="{Binding ScreenshotStoragePath, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap"/>
+                                        <Button Grid.Column="2" Click="BrowseScreenshotStorage_Click">Browse</Button>
+                                    </Grid>
                                     <WrapPanel Margin="0,0,0,8">
                                         <Button Width="170" Margin="0,0,8,8" Click="StartRecording_Click">Start Recording</Button>
                                         <Button Width="170" Margin="0,0,8,8" Click="StopRecording_Click">Stop Recording</Button>
@@ -1046,20 +1081,34 @@
                                         <TextBlock Width="90" Text="End Time" VerticalAlignment="Center"/>
                                         <TextBox Width="280" Text="{Binding StorageEndTime}" ToolTip="Local time, e.g. 2026-04-21 13:40:00"/>
                                     </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8">
-                                        <TextBlock Width="100" Text="Cursor" VerticalAlignment="Center"/>
-                                        <TextBox Width="564" Margin="0,0,14,0" Text="{Binding StorageCursor}" ToolTip="Used by Find Next File."/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8">
-                                        <TextBlock Width="100" Text="File Name" VerticalAlignment="Center"/>
-                                        <TextBox Width="280" Margin="0,0,14,0" Text="{Binding StorageFileName}" ToolTip="Used by PlayBackByName / GetFileByName."/>
-                                        <TextBlock Width="90" Text="Handle ID" VerticalAlignment="Center"/>
-                                        <TextBox Width="280" Text="{Binding StorageHandleId}" ToolTip="Used by FindClose / StopGetFile / StopPlayBackSave."/>
-                                    </WrapPanel>
-                                    <WrapPanel Margin="0,0,0,8">
-                                        <TextBlock Width="100" Text="Save Path" VerticalAlignment="Center"/>
-                                        <TextBox Width="654" Text="{Binding StorageSavePath}" ToolTip="Local export path hint for save/download flows."/>
-                                    </WrapPanel>
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="100"/>
+                                            <ColumnDefinition Width="*" MinWidth="200"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Cursor" VerticalAlignment="Center"/>
+                                        <TextBox Grid.Column="1" Text="{Binding StorageCursor}" ToolTip="Used by Find Next File."/>
+                                    </Grid>
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="100"/>
+                                            <ColumnDefinition Width="*" MinWidth="120"/>
+                                            <ColumnDefinition Width="90"/>
+                                            <ColumnDefinition Width="*" MinWidth="120"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="File Name" VerticalAlignment="Center"/>
+                                        <TextBox Grid.Column="1" Margin="0,0,14,0" Text="{Binding StorageFileName}" ToolTip="Used by PlayBackByName / GetFileByName."/>
+                                        <TextBlock Grid.Column="2" Text="Handle ID" VerticalAlignment="Center"/>
+                                        <TextBox Grid.Column="3" Text="{Binding StorageHandleId}" ToolTip="Used by FindClose / StopGetFile / StopPlayBackSave."/>
+                                    </Grid>
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="100"/>
+                                            <ColumnDefinition Width="*" MinWidth="200"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Save Path" VerticalAlignment="Center"/>
+                                        <TextBox Grid.Column="1" Text="{Binding StorageSavePath}" ToolTip="Local export path hint for save/download flows." TextWrapping="Wrap"/>
+                                    </Grid>
                                     <WrapPanel Margin="0,0,0,8">
                                         <Button Width="170" Margin="0,0,8,8" Click="FindFile_Click">Find File</Button>
                                         <Button Width="170" Margin="0,0,8,8" Click="FindNextFile_Click">Find Next File</Button>
@@ -1092,6 +1141,7 @@
                         </TabItem>
 
                         <TabItem Header="Maintenance">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,8,0">
                             <StackPanel Margin="8">
                                 <WrapPanel Margin="0,0,0,10">
                                     <Button Width="170" Margin="0,0,8,8" Click="RebootCamera_Click">Reboot</Button>
@@ -1105,10 +1155,12 @@
                                 </WrapPanel>
                                 <TextBlock Text="{Binding MaintenanceState}" Foreground="#FFD27A" TextWrapping="Wrap"/>
                             </StackPanel>
+                            </ScrollViewer>
                         </TabItem>
 
                         <TabItem Header="NVR">
-                            <Grid Margin="4">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Padding="0,0,8,0">
+                            <Grid Margin="4" MinHeight="520">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="8"/>
@@ -1210,14 +1262,16 @@
                                     </GroupBox>
                                 </Grid>
                             </Grid>
+                            </ScrollViewer>
                         </TabItem>
 
                         <TabItem Header="Advanced">
-                            <Grid Margin="4">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,8,0">
+                            <Grid Margin="4" MinHeight="480">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="8"/>
-                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="*" MinHeight="320"/>
                                 </Grid.RowDefinitions>
                                 <WrapPanel Grid.Row="0" Margin="0,0,0,4">
                                     <ComboBox Width="170" Margin="0,0,8,8" ItemsSource="{Binding ProbeModes}" SelectedItem="{Binding SelectedProbeMode}"/>
@@ -1360,6 +1414,7 @@
                                     </TabItem>
                                 </TabControl>
                             </Grid>
+                            </ScrollViewer>
                         </TabItem>
                     </TabControl>
                 </Border>

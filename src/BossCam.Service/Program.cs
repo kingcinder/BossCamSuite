@@ -7,10 +7,21 @@ using BossCam.Service.Hosted;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
+if (OperatingSystem.IsLinux())
+{
+    builder.Configuration.AddJsonFile("appsettings.Linux.json", optional: true, reloadOnChange: true);
+}
 
 var localApiBaseUrl = builder.Configuration["BossCam:LocalApiBaseUrl"] ?? "http://127.0.0.1:5317";
 builder.WebHost.UseUrls(localApiBaseUrl);
-builder.Host.UseWindowsService();
+if (OperatingSystem.IsWindows())
+{
+    builder.Host.UseWindowsService();
+}
+else if (OperatingSystem.IsLinux())
+{
+    builder.Host.UseSystemd();
+}
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -22,11 +33,23 @@ builder.Services.AddHostedService<RecordingLifecycleWorker>();
 
 var app = builder.Build();
 
+app.UseDefaultFiles();
+app.UseStaticFiles();
 app.UseSwagger();
 app.UseSwaggerUI();
 app.UseCors();
 
-app.MapGet("/api/health", () => Results.Ok(new { status = "ok", timestamp = DateTimeOffset.UtcNow }));
+app.MapGet("/api/health", () => Results.Ok(new
+{
+    status = "ok",
+    timestamp = DateTimeOffset.UtcNow,
+    platform = System.Runtime.InteropServices.RuntimeInformation.OSDescription,
+    framework = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
+    processArch = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString(),
+    contentRoot = app.Environment.ContentRootPath,
+    ffmpeg = Environment.GetEnvironmentVariable("BOSSCAM_FFMPEG_PATH")
+        ?? (File.Exists("/usr/bin/ffmpeg") ? "/usr/bin/ffmpeg" : null)
+}));
 
 app.MapGet("/api/devices", async (IApplicationStore store, CancellationToken ct) =>
 {
@@ -47,6 +70,12 @@ app.MapGet("/api/devices", async (IApplicationStore store, CancellationToken ct)
     return Results.Ok(withIp.Concat(withoutIp).OrderByDescending(static device => device.DiscoveredAt).ToList());
 });
 app.MapPost("/api/devices/discover", async (DiscoveryCoordinator coordinator, CancellationToken ct) => Results.Ok(await coordinator.RunAsync(ct)));
+app.MapPost("/api/devices/register", async (DeviceRegisterRequest request, DeviceRegistrationService registrationService, CancellationToken ct) =>
+    Results.Ok(await registrationService.RegisterAsync(request, ct)));
+app.MapPost("/api/devices/register-many", async (List<DeviceRegisterRequest> requests, DeviceRegistrationService registrationService, CancellationToken ct) =>
+    Results.Ok(await registrationService.RegisterManyAsync(requests ?? [], ct)));
+app.MapPost("/api/devices/register-aegon-lan", async (AegonLanRegisterRequest? request, DeviceRegistrationService registrationService, CancellationToken ct) =>
+    Results.Ok(await registrationService.RegisterAegonLanDefaultsAsync(request?.LorexPassword, request?.WvcPassword, ct)));
 app.MapPost("/api/devices/{id:guid}/probe", async (Guid id, CapabilityProbeService probeService, CancellationToken ct) =>
 {
     var result = await probeService.ProbeAsync(id, ct);
@@ -133,6 +162,107 @@ app.MapGet("/api/devices/{id:guid}/preview", async (Guid id, TransportBroker tra
 {
     var result = await transportBroker.StartPreviewAsync(id, ct);
     return result is null ? Results.NotFound() : Results.Ok(result);
+});
+app.MapGet("/api/devices/{id:guid}/snapshot", async (Guid id, IApplicationStore store, CancellationToken ct) =>
+{
+    var device = await store.GetDeviceAsync(id, ct);
+    if (device is null || string.IsNullOrWhiteSpace(device.IpAddress))
+    {
+        return Results.NotFound();
+    }
+
+    var user = string.IsNullOrWhiteSpace(device.LoginName) ? "admin" : device.LoginName;
+    var password = device.Password ?? string.Empty;
+    var port = device.Port <= 0 ? 80 : device.Port;
+    var token = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{user}:{password}"));
+    var candidatePaths = new[]
+    {
+        $"/NetSDK/Video/encode/channel/101/snapShot",
+        $"/NetSDK/Video/encode/channel/102/snapShot",
+        $"/NetSDK/Video/input/channel/1/snapShot",
+        $"/cgi-bin/snapshot.cgi",
+        $"/snapshot.jpg"
+    };
+
+    using var handler = new HttpClientHandler { Credentials = new System.Net.NetworkCredential(user, password) };
+    using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(8) };
+    foreach (var path in candidatePaths)
+    {
+        try
+        {
+            var url = $"http://{device.IpAddress}:{port}{path}";
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", token);
+            using var response = await client.SendAsync(request, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                continue;
+            }
+
+            var bytes = await response.Content.ReadAsByteArrayAsync(ct);
+            if (bytes.Length > 500 && bytes[0] == 0xFF && bytes[1] == 0xD8)
+            {
+                return Results.File(bytes, "image/jpeg");
+            }
+        }
+        catch
+        {
+            // try next candidate
+        }
+    }
+
+    // Some Juan units return HTTP 403 on snapShot while RTSP main still works — grab one JPEG frame.
+    var ffmpeg = Environment.GetEnvironmentVariable("BOSSCAM_FFMPEG_PATH")
+        ?? (File.Exists("/usr/bin/ffmpeg") ? "/usr/bin/ffmpeg" : null);
+    if (ffmpeg is not null)
+    {
+        var auth = $"{Uri.EscapeDataString(user)}:{Uri.EscapeDataString(password)}@";
+        var rtsp = $"rtsp://{auth}{device.IpAddress}:554/ch0_0.264";
+        var tmp = Path.Combine(Path.GetTempPath(), $"bosscam-snap-{id:N}.jpg");
+        try
+        {
+            using var proc = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = ffmpeg,
+                Arguments = $"-hide_banner -loglevel error -rtsp_transport tcp -i \"{rtsp}\" -map 0:v:0 -frames:v 1 -q:v 3 -y \"{tmp}\"",
+                RedirectStandardError = true,
+                RedirectStandardOutput = true,
+                UseShellExecute = false
+            });
+            if (proc is not null)
+            {
+                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                timeoutCts.CancelAfter(TimeSpan.FromSeconds(12));
+                try
+                {
+                    await proc.WaitForExitAsync(timeoutCts.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    try { proc.Kill(entireProcessTree: true); } catch { /* ignore */ }
+                }
+
+                if (File.Exists(tmp))
+                {
+                    var bytes = await File.ReadAllBytesAsync(tmp, ct);
+                    if (bytes.Length > 500 && bytes[0] == 0xFF && bytes[1] == 0xD8)
+                    {
+                        return Results.File(bytes, "image/jpeg");
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // fall through to 502
+        }
+        finally
+        {
+            try { if (File.Exists(tmp)) File.Delete(tmp); } catch { /* ignore */ }
+        }
+    }
+
+    return Results.StatusCode(StatusCodes.Status502BadGateway);
 });
 app.MapGet("/api/protocols", async (ProtocolCatalogService protocolCatalogService, CancellationToken ct) => Results.Ok(await protocolCatalogService.GetAsync(ct)));
 app.MapPost("/api/protocols/refresh", async (ProtocolCatalogService protocolCatalogService, CancellationToken ct) => Results.Ok(await protocolCatalogService.RefreshAsync(ct)));
@@ -238,9 +368,22 @@ app.MapPost("/api/recordings", async (IEnumerable<RecordingProfile> profiles, IA
 });
 app.MapPost("/api/recordings/start", async (RecordingStartRequest request, RecordingService recordingService, CancellationToken ct) =>
 {
-    var job = await recordingService.StartAsync(request, ct);
-    return Results.Ok(job);
+    try
+    {
+        var job = await recordingService.StartAsync(request, ct);
+        return Results.Ok(job);
+    }
+    catch (InvalidOperationException ex) when (ex.Message.Contains("Device not found", StringComparison.OrdinalIgnoreCase)
+        || ex.Message.Contains("No video source", StringComparison.OrdinalIgnoreCase)
+        || ex.Message.Contains("ffmpeg not found", StringComparison.OrdinalIgnoreCase))
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
 });
+app.MapPost("/api/recordings/start-all", async (bool? preferSubStream, RecordingService recordingService, CancellationToken ct) =>
+    Results.Ok(await recordingService.StartAllAsync(preferSubStream ?? false, ct)));
+app.MapPost("/api/recordings/stop-all", async (RecordingService recordingService, CancellationToken ct) =>
+    Results.Ok(await recordingService.StopAllAsync(ct)));
 app.MapPost("/api/recordings/stop/{jobId:guid}", async (Guid jobId, RecordingService recordingService, CancellationToken ct) =>
 {
     var job = await recordingService.StopAsync(jobId, ct);
@@ -248,6 +391,27 @@ app.MapPost("/api/recordings/stop/{jobId:guid}", async (Guid jobId, RecordingSer
 });
 app.MapGet("/api/recordings/jobs", async (RecordingService recordingService, CancellationToken ct) =>
     Results.Ok(await recordingService.GetJobsAsync(ct)));
+app.MapGet("/api/highlights", async (HighlightBoardService highlights, CancellationToken ct) =>
+    Results.Ok(await highlights.GetStateAsync(ct)));
+app.MapPost("/api/highlights/select/{deviceId:guid}", async (Guid deviceId, HighlightBoardService highlights, CancellationToken ct) =>
+{
+    try
+    {
+        return Results.Ok(await highlights.SelectAsync(deviceId, ct));
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.NotFound(new { error = ex.Message });
+    }
+});
+app.MapPost("/api/highlights/next", async (HighlightBoardService highlights, CancellationToken ct) =>
+    Results.Ok(await highlights.FlipAsync(+1, ct)));
+app.MapPost("/api/highlights/prev", async (HighlightBoardService highlights, CancellationToken ct) =>
+    Results.Ok(await highlights.FlipAsync(-1, ct)));
+app.MapPost("/api/highlights/stream/{mode}", async (string mode, HighlightBoardService highlights, CancellationToken ct) =>
+    Results.Ok(await highlights.SetPreferredStreamAsync(mode, ct)));
+app.MapPost("/api/highlights/record-selected", async (HighlightBoardService highlights, CancellationToken ct) =>
+    Results.Ok(await highlights.RecordSelectedAsync(ct)));
 app.MapPost("/api/recordings/index/refresh", async (Guid? deviceId, RecordingService recordingService, CancellationToken ct) =>
     Results.Ok(await recordingService.RefreshIndexAsync(deviceId, ct)));
 app.MapGet("/api/recordings/index", async (Guid? deviceId, int? limit, RecordingService recordingService, CancellationToken ct) =>
@@ -364,16 +528,51 @@ app.MapGet("/api/devices/{id:guid}/native-fallback-assessment", async (Guid id, 
 });
 app.MapPost("/api/firmware/register", async (FirmwareRegisterRequest request, FirmwareCatalogService service, CancellationToken ct) =>
 {
+    if (string.IsNullOrWhiteSpace(request.FilePath) || !File.Exists(request.FilePath))
+    {
+        return Results.BadRequest(new { error = "FilePath must point to an existing firmware file." });
+    }
+
     var result = await service.RegisterAsync(request.FilePath, ct);
     return Results.Ok(result);
 });
 app.MapGet("/api/firmware", async (FirmwareCatalogService service, CancellationToken ct) => Results.Ok(await service.GetAsync(ct)));
 
+// SPA fallback for operator console. Never swallow /api or /swagger with index.html.
+app.MapFallback(async context =>
+{
+    var path = context.Request.Path.Value ?? string.Empty;
+    if (path.StartsWith("/api", StringComparison.OrdinalIgnoreCase)
+        || path.StartsWith("/swagger", StringComparison.OrdinalIgnoreCase))
+    {
+        context.Response.StatusCode = StatusCodes.Status404NotFound;
+        context.Response.ContentType = "application/json";
+        await context.Response.WriteAsync("""{"error":"Not found"}""");
+        return;
+    }
+
+    var webRoot = app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot");
+    var index = Path.Combine(webRoot, "index.html");
+    if (!File.Exists(index))
+    {
+        context.Response.StatusCode = StatusCodes.Status404NotFound;
+        await context.Response.WriteAsync("Operator UI not found.");
+        return;
+    }
+
+    context.Response.ContentType = "text/html; charset=utf-8";
+    await context.Response.SendFileAsync(index);
+});
+
 app.Run();
 
+public sealed record AegonLanRegisterRequest(string? LorexPassword, string? WvcPassword);
 public sealed record FirmwareRegisterRequest(string FilePath);
 public sealed record TypedSettingApplyRequest(string FieldKey, JsonNode? Value, bool ExpertOverride);
 public sealed record TypedSettingBatchApplyRequest(IReadOnlyCollection<TypedFieldChange> Changes, bool ExpertOverride);
 public sealed record PersistenceFieldVerifyRequest(string FieldKey, JsonNode? Value, bool RebootForVerification, bool ExpertOverride);
 public sealed record ContractFixturePromotionRequest(string ExportRoot);
 public sealed record ImageTruthSweepRequest(bool IncludeBehaviorMapping, bool RefreshFromDevice, string? ExportRoot);
+
+// Expose entry point for WebApplicationFactory / E2E host.
+public partial class Program;

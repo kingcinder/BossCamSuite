@@ -369,7 +369,7 @@ public sealed class ContractDrivenWorkflowTests : IDisposable
         var recordingDir = Path.Combine(_tempDirectory, "recordings");
         Directory.CreateDirectory(recordingDir);
         var filePath = Path.Combine(recordingDir, $"{device.Id:N}_20260418_101500.mp4");
-        await File.WriteAllBytesAsync(filePath, new byte[] { 1, 2, 3, 4 }, CancellationToken.None);
+        await File.WriteAllBytesAsync(filePath, Enumerable.Range(0, 64).Select(static i => (byte)i).ToArray(), CancellationToken.None);
 
         var profile = new RecordingProfile
         {

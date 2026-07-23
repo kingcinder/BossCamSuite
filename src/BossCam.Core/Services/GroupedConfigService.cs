@@ -1857,9 +1857,12 @@ public sealed class GroupedConfigService(
                 break;
             case GroupedConfigKind.NetworkConfig:
             case GroupedConfigKind.WifiConfig:
+                // 5523-W uses singular /interface (list) and /interface/1 (eth0), /interface/4 (wlan0).
+                Add(candidates, "/NetSDK/Network/interface");
+                Add(candidates, "/NetSDK/Network/interface/1");
+                Add(candidates, "/NetSDK/Network/interface/4");
                 Add(candidates, "/NetSDK/Network/interfaces");
                 Add(candidates, "/NetSDK/Network/interfaces/0");
-                Add(candidates, "/NetSDK/Network/Ports");
                 Add(candidates, "/NetSDK/Network/Dns");
                 Add(candidates, "/NetSDK/Network/Esee");
                 break;
@@ -1950,11 +1953,11 @@ public sealed class GroupedConfigService(
                 || endpoint.Contains("overlay", StringComparison.OrdinalIgnoreCase),
             GroupedConfigKind.VideoEncodeConfig => endpoint.Contains("/netsdk/video/encode/channel", StringComparison.OrdinalIgnoreCase)
                 || endpoint.Contains("/netsdk/stream/channel", StringComparison.OrdinalIgnoreCase),
-            GroupedConfigKind.NetworkConfig => endpoint.Contains("/netsdk/network/interfaces", StringComparison.OrdinalIgnoreCase)
+            GroupedConfigKind.NetworkConfig => endpoint.Contains("/netsdk/network/interface", StringComparison.OrdinalIgnoreCase)
                 || endpoint.Contains("/netsdk/network/ports", StringComparison.OrdinalIgnoreCase)
                 || endpoint.Contains("/netsdk/network/dns", StringComparison.OrdinalIgnoreCase)
                 || endpoint.Contains("/netsdk/network/esee", StringComparison.OrdinalIgnoreCase),
-            GroupedConfigKind.WifiConfig => endpoint.Contains("/netsdk/network/interfaces", StringComparison.OrdinalIgnoreCase)
+            GroupedConfigKind.WifiConfig => endpoint.Contains("/netsdk/network/interface", StringComparison.OrdinalIgnoreCase)
                 || endpoint.Contains("wireless", StringComparison.OrdinalIgnoreCase),
             GroupedConfigKind.UserConfig => endpoint.Contains("/user/", StringComparison.OrdinalIgnoreCase)
                 || endpoint.Contains("/netsdk/system/deviceinfo", StringComparison.OrdinalIgnoreCase),
@@ -2246,32 +2249,32 @@ public sealed class GroupedConfigService(
             F(GroupedConfigKind.VideoEncodeConfig, "frameRate", "Frame Rate", "/NetSDK/Video/encode/channel/*", "$.frameRate", ContractFieldKind.Integer, true, 1, 120),
             F(GroupedConfigKind.VideoEncodeConfig, "keyframeInterval", "Keyframe Interval", "/NetSDK/Video/encode/channel/*", "$.keyFrameInterval", ContractFieldKind.Integer, true, 1, 240),
 
-            F(GroupedConfigKind.NetworkConfig, "addressingType", "Addressing Type", "/NetSDK/Network/interfaces/*", "$.lan.addressingType", ContractFieldKind.Enum, true, enums: ["static", "dynamic"]),
-            F(GroupedConfigKind.NetworkConfig, "staticIP", "Static IP", "/NetSDK/Network/interfaces/*", "$.lan.staticIP", ContractFieldKind.IpAddress),
-            F(GroupedConfigKind.NetworkConfig, "staticNetmask", "Static Netmask", "/NetSDK/Network/interfaces/*", "$.lan.staticNetmask", ContractFieldKind.IpAddress),
-            F(GroupedConfigKind.NetworkConfig, "staticGateway", "Static Gateway", "/NetSDK/Network/interfaces/*", "$.lan.staticGateway", ContractFieldKind.IpAddress),
-            F(GroupedConfigKind.NetworkConfig, "upnpEnabled", "UPnP Enabled", "/NetSDK/Network/interfaces/*", "$.upnp.enabled", ContractFieldKind.Boolean),
-            F(GroupedConfigKind.NetworkConfig, "pppoeEnabled", "PPPoE Enabled", "/NetSDK/Network/interfaces/*", "$.pppoe.enabled", ContractFieldKind.Boolean),
-            F(GroupedConfigKind.NetworkConfig, "pppoeUserName", "PPPoE Username", "/NetSDK/Network/interfaces/*", "$.pppoe.userName", ContractFieldKind.String),
-            F(GroupedConfigKind.NetworkConfig, "pppoePassword", "PPPoE Password", "/NetSDK/Network/interfaces/*", "$.pppoe.password", ContractFieldKind.Password),
+            F(GroupedConfigKind.NetworkConfig, "addressingType", "Addressing Type", "/NetSDK/Network/interface/*", "$.lan.addressingType", ContractFieldKind.Enum, true, enums: ["static", "dynamic"]),
+            F(GroupedConfigKind.NetworkConfig, "staticIP", "Static IP", "/NetSDK/Network/interface/*", "$.lan.staticIP", ContractFieldKind.IpAddress),
+            F(GroupedConfigKind.NetworkConfig, "staticNetmask", "Static Netmask", "/NetSDK/Network/interface/*", "$.lan.staticNetmask", ContractFieldKind.IpAddress),
+            F(GroupedConfigKind.NetworkConfig, "staticGateway", "Static Gateway", "/NetSDK/Network/interface/*", "$.lan.staticGateway", ContractFieldKind.IpAddress),
+            F(GroupedConfigKind.NetworkConfig, "upnpEnabled", "UPnP Enabled", "/NetSDK/Network/interface/*", "$.upnp.enabled", ContractFieldKind.Boolean),
+            F(GroupedConfigKind.NetworkConfig, "pppoeEnabled", "PPPoE Enabled", "/NetSDK/Network/interface/*", "$.pppoe.enabled", ContractFieldKind.Boolean),
+            F(GroupedConfigKind.NetworkConfig, "pppoeUserName", "PPPoE Username", "/NetSDK/Network/interface/*", "$.pppoe.userName", ContractFieldKind.String),
+            F(GroupedConfigKind.NetworkConfig, "pppoePassword", "PPPoE Password", "/NetSDK/Network/interface/*", "$.pppoe.password", ContractFieldKind.Password),
             F(GroupedConfigKind.NetworkConfig, "preferredDns", "Preferred DNS", "/NetSDK/Network/DNS", "$.preferredDns", ContractFieldKind.IpAddress, false),
             F(GroupedConfigKind.NetworkConfig, "alternateDns", "Alternate DNS", "/NetSDK/Network/DNS", "$.staticAlternateDns", ContractFieldKind.IpAddress, false),
             F(GroupedConfigKind.NetworkConfig, "eseeEnabled", "ESEE Enabled", "/NetSDK/Network/Esee", "$.enabled", ContractFieldKind.Boolean, false),
             F(GroupedConfigKind.NetworkConfig, "portValue", "Port Value", "/NetSDK/Network/ports/*", "$.value", ContractFieldKind.Integer, true, 1, 60000),
 
-            F(GroupedConfigKind.WifiConfig, "wirelessMode", "Wireless Mode", "/NetSDK/Network/interfaces/*", "$.wireless.wirelessMode", ContractFieldKind.Enum, true, enums: ["none", "accessPoint", "stationMode"]),
-            F(GroupedConfigKind.WifiConfig, "wirelessApBssId", "Wireless AP BSSID", "/NetSDK/Network/interfaces/*", "$.wireless.stationMode.wirelessApBssId", ContractFieldKind.String),
-            F(GroupedConfigKind.WifiConfig, "wirelessApEssId", "Wireless AP ESSID", "/NetSDK/Network/interfaces/*", "$.wireless.stationMode.wirelessApEssId", ContractFieldKind.String),
-            F(GroupedConfigKind.WifiConfig, "wirelessApPsk", "Wireless AP PSK", "/NetSDK/Network/interfaces/*", "$.wireless.stationMode.wirelessApPsk", ContractFieldKind.Password),
-            F(GroupedConfigKind.WifiConfig, "wirelessEssId", "AP ESSID", "/NetSDK/Network/interfaces/*", "$.wireless.accessPointMode.wirelessEssId", ContractFieldKind.String),
-            F(GroupedConfigKind.WifiConfig, "wirelessPsk", "AP PSK", "/NetSDK/Network/interfaces/*", "$.wireless.accessPointMode.wirelessPsk", ContractFieldKind.Password),
-            F(GroupedConfigKind.WifiConfig, "wirelessApMode", "AP Mode", "/NetSDK/Network/interfaces/*", "$.wireless.accessPointMode.wirelessApMode", ContractFieldKind.Enum, true, enums: ["802.11b", "802.11g", "802.11n", "802.11bg", "802.11bgn"]),
-            F(GroupedConfigKind.WifiConfig, "wirelessApMode80211nChannel", "AP Channel", "/NetSDK/Network/interfaces/*", "$.wireless.accessPointMode.wirelessApMode80211nChannel", ContractFieldKind.Enum, true, enums: ["Auto", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14"]),
-            F(GroupedConfigKind.WifiConfig, "wirelessWpaMode", "Wireless WPA Mode", "/NetSDK/Network/interfaces/*", "$.wireless.accessPointMode.wirelessWpaMode", ContractFieldKind.Enum, true, enums: ["WPA_PSK", "WPA2_PSK"]),
-            F(GroupedConfigKind.WifiConfig, "dhcpIpRange", "DHCP IP Range", "/NetSDK/Network/interfaces/*", "$.dhcpServer.dhcpIpRange", ContractFieldKind.String, false),
-            F(GroupedConfigKind.WifiConfig, "dhcpIpNumber", "DHCP IP Number", "/NetSDK/Network/interfaces/*", "$.dhcpServer.dhcpIpNumber", ContractFieldKind.String, false),
-            F(GroupedConfigKind.WifiConfig, "dhcpIpDns", "DHCP DNS", "/NetSDK/Network/interfaces/*", "$.dhcpServer.dhcpIpDns", ContractFieldKind.String, false),
-            F(GroupedConfigKind.WifiConfig, "dhcpIpGateway", "DHCP Gateway", "/NetSDK/Network/interfaces/*", "$.dhcpServer.dhcpIpGateway", ContractFieldKind.String, false),
+            F(GroupedConfigKind.WifiConfig, "wirelessMode", "Wireless Mode", "/NetSDK/Network/interface/*", "$.wireless.wirelessMode", ContractFieldKind.Enum, true, enums: ["none", "accessPoint", "stationMode"]),
+            F(GroupedConfigKind.WifiConfig, "wirelessApBssId", "Wireless AP BSSID", "/NetSDK/Network/interface/*", "$.wireless.stationMode.wirelessApBssId", ContractFieldKind.String),
+            F(GroupedConfigKind.WifiConfig, "wirelessApEssId", "Wireless AP ESSID", "/NetSDK/Network/interface/*", "$.wireless.stationMode.wirelessApEssId", ContractFieldKind.String),
+            F(GroupedConfigKind.WifiConfig, "wirelessApPsk", "Wireless AP PSK", "/NetSDK/Network/interface/*", "$.wireless.stationMode.wirelessApPsk", ContractFieldKind.Password),
+            F(GroupedConfigKind.WifiConfig, "wirelessEssId", "AP ESSID", "/NetSDK/Network/interface/*", "$.wireless.accessPointMode.wirelessEssId", ContractFieldKind.String),
+            F(GroupedConfigKind.WifiConfig, "wirelessPsk", "AP PSK", "/NetSDK/Network/interface/*", "$.wireless.accessPointMode.wirelessPsk", ContractFieldKind.Password),
+            F(GroupedConfigKind.WifiConfig, "wirelessApMode", "AP Mode", "/NetSDK/Network/interface/*", "$.wireless.accessPointMode.wirelessApMode", ContractFieldKind.Enum, true, enums: ["802.11b", "802.11g", "802.11n", "802.11bg", "802.11bgn"]),
+            F(GroupedConfigKind.WifiConfig, "wirelessApMode80211nChannel", "AP Channel", "/NetSDK/Network/interface/*", "$.wireless.accessPointMode.wirelessApMode80211nChannel", ContractFieldKind.Enum, true, enums: ["Auto", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14"]),
+            F(GroupedConfigKind.WifiConfig, "wirelessWpaMode", "Wireless WPA Mode", "/NetSDK/Network/interface/*", "$.wireless.accessPointMode.wirelessWpaMode", ContractFieldKind.Enum, true, enums: ["WPA_PSK", "WPA2_PSK"]),
+            F(GroupedConfigKind.WifiConfig, "dhcpIpRange", "DHCP IP Range", "/NetSDK/Network/interface/*", "$.dhcpServer.dhcpIpRange", ContractFieldKind.String, false),
+            F(GroupedConfigKind.WifiConfig, "dhcpIpNumber", "DHCP IP Number", "/NetSDK/Network/interface/*", "$.dhcpServer.dhcpIpNumber", ContractFieldKind.String, false),
+            F(GroupedConfigKind.WifiConfig, "dhcpIpDns", "DHCP DNS", "/NetSDK/Network/interface/*", "$.dhcpServer.dhcpIpDns", ContractFieldKind.String, false),
+            F(GroupedConfigKind.WifiConfig, "dhcpIpGateway", "DHCP Gateway", "/NetSDK/Network/interface/*", "$.dhcpServer.dhcpIpGateway", ContractFieldKind.String, false),
 
             F(GroupedConfigKind.UserConfig, "deviceName", "Device Name", "/NetSDK/System/deviceInfo", "$.name", ContractFieldKind.String),
             F(GroupedConfigKind.UserConfig, "deviceSerial", "Device Serial", "/NetSDK/System/deviceInfo", "$.serial", ContractFieldKind.String, false),

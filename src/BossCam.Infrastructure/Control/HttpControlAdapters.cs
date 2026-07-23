@@ -249,16 +249,51 @@ public sealed class LanDirectNetSdkRestAdapter(
     IApplicationStore store,
     ILogger<LanDirectNetSdkRestAdapter> logger) : HttpControlAdapterBase(options, logger), IControlAdapter
 {
+    // Live-proven on 5523-W firmware 3.6.103.5721106 (singular /Network/interface/N, not /interfaces).
     private static readonly Dictionary<string, string[]> ReadEndpoints = new(StringComparer.OrdinalIgnoreCase)
     {
         ["Device"] = ["/NetSDK/System/deviceInfo", "/NetSDK/System/time/localTime", "/NetSDK/System/time/ntp"],
-        ["Network"] = ["/NetSDK/Network/interfaces", "/NetSDK/Network/Ports", "/NetSDK/Network/Dns", "/NetSDK/Network/Esee"],
+        ["Network"] =
+        [
+            "/NetSDK/Network/interface",
+            "/NetSDK/Network/interface/1",
+            "/NetSDK/Network/interface/4",
+            "/NetSDK/Network/Dns",
+            "/NetSDK/Network/Esee"
+        ],
         ["Audio"] = ["/NetSDK/Audio/input/channels", "/NetSDK/Audio/input/channel/1", "/NetSDK/Audio/encode/channels", "/NetSDK/Audio/encode/channel/1"],
-        ["Video"] = ["/NetSDK/Video/input/channel/1", "/NetSDK/Video/encode/channels", "/NetSDK/Video/encode/channel/101/properties", "/NetSDK/Video/encode/channel/102/properties", "/NetSDK/Video/encode/channel/101/channelNameOverlay", "/NetSDK/Video/encode/channel/101/datetimeOverlay", "/NetSDK/Video/encode/channel/101/snapShot"],
+        ["Video"] =
+        [
+            "/NetSDK/Video/input/channels",
+            "/NetSDK/Video/input/channel/1",
+            "/NetSDK/Video/encode/channels",
+            "/NetSDK/Video/encode/channel/101",
+            "/NetSDK/Video/encode/channel/101/properties",
+            "/NetSDK/Video/encode/channel/102",
+            "/NetSDK/Video/encode/channel/102/properties",
+            "/NetSDK/Video/encode/channel/101/channelNameOverlay",
+            "/NetSDK/Video/encode/channel/101/datetimeOverlay",
+            "/NetSDK/Video/encode/channel/101/snapShot"
+        ],
         ["Detection"] = ["/NetSDK/Video/motionDetection/channels", "/NetSDK/Video/motionDetection/channel/1", "/NetSDK/IO/alarmInput/channels", "/NetSDK/IO/alarmInput/channel/1", "/NetSDK/IO/alarmOutput/channels", "/NetSDK/IO/alarmOutput/channel/1"],
         ["PTZ"] = ["/NetSDK/PTZ/channels"],
-        ["Stream"] = ["/NetSDK/Stream/channles", "/NetSDK/Stream/channel/ID"],
-        ["Image"] = ["/NetSDK/Image", "/NetSDK/Image/irCutFilter", "/NetSDK/Image/manualSharpness", "/NetSDK/Image/denoise3d", "/NetSDK/Image/wdr", "/NetSDK/Image/gamma", "/NetSDK/Image/AF", "/NetSDK/Factory?cmd=WhiteLightCtrl", "/NetSDK/Factory?cmd=InfraRedCtrl", "/NetSDK/Video/input/channel/1/privacyMask/1"],
+        ["Stream"] =
+        [
+            "/NetSDK/Video/encode/channels",
+            "/NetSDK/Video/encode/channel/101",
+            "/NetSDK/Video/encode/channel/102"
+        ],
+        ["Image"] =
+        [
+            "/NetSDK/Image",
+            "/NetSDK/Image/irCutFilter",
+            "/NetSDK/Image/manualSharpness",
+            "/NetSDK/Image/denoise3d",
+            "/NetSDK/Image/wdr",
+            "/NetSDK/Factory?cmd=WhiteLightCtrl",
+            "/NetSDK/Factory?cmd=InfraRedCtrl",
+            "/NetSDK/Video/input/channel/1/privacyMask/1"
+        ],
         ["Storage"] = ["/NetSDK/SDCard/status", "/NetSDK/SDCard/media/search", "/NetSDK/SDCard/media/playbackFLV", "/NetSDK/SDCard/format"]
     };
 
@@ -333,8 +368,28 @@ public sealed class LanDirectNetSdkRestAdapter(
         };
     }
 
-    public Task<MaintenanceResult> ExecuteMaintenanceAsync(DeviceIdentity device, MaintenanceOperation operation, JsonObject? payload, CancellationToken cancellationToken)
-        => Task.FromResult(new MaintenanceResult { Success = false, AdapterName = Name, Operation = operation, Message = "Maintenance operation is not mapped on the public NETSDK adapter." });
+    public async Task<MaintenanceResult> ExecuteMaintenanceAsync(DeviceIdentity device, MaintenanceOperation operation, JsonObject? payload, CancellationToken cancellationToken)
+    {
+        return operation switch
+        {
+            MaintenanceOperation.Reboot => await ExecuteMaintenanceSimpleAsync(device, "/NetSDK/System/operation/reboot", "PUT", payload, operation, cancellationToken),
+            MaintenanceOperation.FactoryReset => await ExecuteMaintenanceSimpleAsync(device, "/NetSDK/System/operation/default", "PUT", payload, operation, cancellationToken),
+            _ => new MaintenanceResult { Success = false, AdapterName = Name, Operation = operation, Message = "Maintenance operation is not mapped on the public NETSDK adapter." }
+        };
+    }
+
+    private async Task<MaintenanceResult> ExecuteMaintenanceSimpleAsync(DeviceIdentity device, string endpoint, string method, JsonObject? payload, MaintenanceOperation operation, CancellationToken cancellationToken)
+    {
+        var response = await SendAsync(device, endpoint, method, payload, cancellationToken);
+        return new MaintenanceResult
+        {
+            Success = IsSemanticSuccess(response),
+            AdapterName = Name,
+            Operation = operation,
+            Response = response?.Json,
+            Message = response?.RawContent ?? "No HTTP response."
+        };
+    }
 }
 
 public sealed class LanPrivateVendorHttpAdapter(

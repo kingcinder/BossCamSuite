@@ -1,15 +1,27 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
+  <!-- Windows-only WPF shell. On Linux/macOS this project is a no-op stub so solution builds succeed. -->
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <ApplicationIcon>Assets\BossCamSuite.ico</ApplicationIcon>
   </PropertyGroup>
-  <ItemGroup>
+
+  <PropertyGroup Condition="!$([MSBuild]::IsOSPlatform('Windows'))">
+    <TargetFramework>net8.0</TargetFramework>
+    <OutputType>Library</OutputType>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <EnableDefaultEmbeddedResourceItems>false</EnableDefaultEmbeddedResourceItems>
+    <EnableDefaultPageItems>false</EnableDefaultPageItems>
+    <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
     <ProjectReference Include="..\BossCam.Contracts\BossCam.Contracts.csproj" />
-  </ItemGroup>
-  <ItemGroup>
     <Resource Include="Assets\BossCamSuite.ico" />
     <Resource Include="Assets\BossCamSuite.png" />
   </ItemGroup>

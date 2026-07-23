@@ -818,7 +818,7 @@ public sealed class EndpointContractCatalogService(
             new EndpointContract
             {
                 ContractKey = "network.interfaces",
-                Endpoint = "/NetSDK/Network/interfaces*",
+                Endpoint = "/NetSDK/Network/interface*",
                 Method = "PUT",
                 Surface = ContractSurface.NetSdkRest,
                 GroupKind = TypedSettingGroupKind.NetworkWireless,

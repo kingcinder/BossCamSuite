@@ -18,6 +18,50 @@ Implemented surfaces in this repository:
 
 ## Run
 
+### Ubuntu / Linux (fully supported)
+
+Primary UI on Linux is the **web operator console** served by the service (WPF Desktop remains Windows-only).
+
+```bash
+# one-time deps
+chmod +x scripts/*.sh
+./scripts/install-ubuntu-deps.sh
+
+# start service + open operator UI
+./scripts/start-bosscam-ubuntu.sh
+```
+
+Then open **http://127.0.0.1:5317/** (or the printed URL).
+
+Optional env vars:
+
+| Variable | Meaning |
+|----------|---------|
+| `BOSSCAM_BIND` | Bind host (default `127.0.0.1`; use `0.0.0.0` for LAN) |
+| `BOSSCAM_PORT` | Port (default `5317`) |
+| `BOSSCAM_CAMERA_IPS` | Comma IPs to register instead of Aegon defaults |
+| `BOSSCAM_LOREX_PASSWORD` / `BOSSCAM_WVC_PASSWORD` | Brand credentials |
+| `BOSSCAM_FFMPEG_PATH` | ffmpeg binary |
+| `BOSSCAM_OPEN_BROWSER` | `0` to skip `xdg-open` |
+
+systemd install:
+
+```bash
+./scripts/install-systemd.sh
+sudo systemctl status bosscam
+```
+
+Linux solution (no WPF):
+
+```bash
+dotnet build BossCamSuite.Linux.sln -c Release
+dotnet test BossCamSuite.Linux.sln -c Release
+```
+
+Data lives under `~/.local/share/BossCamSuite/` (DB + recordings).
+
+### Windows (desktop + service)
+
 One-command launcher (build + service health wait + desktop):
 
 ```powershell

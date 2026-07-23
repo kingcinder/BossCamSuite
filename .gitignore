@@ -1,17 +1,30 @@
 bin/
 obj/
 .vs/
+.idea/
 TestResults/
-
 *.user
 *.suo
 *.cache
-
 *.db
 *.db-shm
 *.db-wal
-
 *.log
 artifacts/
+publish/
+/tmp/
 
+# Local secrets / machine-specific
 src/BossCam.Service/appsettings.Development.json
+**/appsettings.*.local.json
+.env
+.env.*
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Recorded media / local runtime
+*.ts
+*.mp4
+!tests/**/Fixtures/**

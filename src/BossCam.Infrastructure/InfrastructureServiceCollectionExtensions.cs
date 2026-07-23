@@ -20,11 +20,37 @@ public static class InfrastructureServiceCollectionExtensions
             .PostConfigure(options =>
             {
                 var baseDirectory = AppContext.BaseDirectory;
-                options.ProtocolAssetsPath = string.IsNullOrWhiteSpace(options.ProtocolAssetsPath) ? Path.Combine(baseDirectory, "assets", "protocols") : options.ProtocolAssetsPath;
-                options.DatabasePath = string.IsNullOrWhiteSpace(options.DatabasePath) ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BossCamSuite", "bosscam.db") : options.DatabasePath;
-                options.FirmwareArtifactDirectory = string.IsNullOrWhiteSpace(options.FirmwareArtifactDirectory) ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BossCamSuite", "firmware") : options.FirmwareArtifactDirectory;
+                // Linux: ~/.local/share/BossCamSuite ; Windows: %LocalAppData%\BossCamSuite
+                var dataRoot = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "BossCamSuite");
+                if (string.IsNullOrWhiteSpace(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)))
+                {
+                    dataRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "share", "BossCamSuite");
+                }
+
+                options.ProtocolAssetsPath = string.IsNullOrWhiteSpace(options.ProtocolAssetsPath)
+                    ? Path.Combine(baseDirectory, "assets", "protocols")
+                    : options.ProtocolAssetsPath;
+                options.DatabasePath = string.IsNullOrWhiteSpace(options.DatabasePath)
+                    ? Path.Combine(dataRoot, "bosscam.db")
+                    : options.DatabasePath;
+                options.FirmwareArtifactDirectory = string.IsNullOrWhiteSpace(options.FirmwareArtifactDirectory)
+                    ? Path.Combine(dataRoot, "firmware")
+                    : options.FirmwareArtifactDirectory;
+                if (string.IsNullOrWhiteSpace(options.IpcamSuiteDirectory) && OperatingSystem.IsWindows())
+                {
+                    options.IpcamSuiteDirectory = @"C:\Program Files\IPCamSuite";
+                }
+
+                if (string.IsNullOrWhiteSpace(options.EseeCloudDirectory) && OperatingSystem.IsWindows())
+                {
+                    options.EseeCloudDirectory = @"C:\Program Files (x86)\EseeCloud";
+                }
+
                 Directory.CreateDirectory(Path.GetDirectoryName(options.DatabasePath)!);
                 Directory.CreateDirectory(options.FirmwareArtifactDirectory);
+                Directory.CreateDirectory(Path.Combine(dataRoot, "recordings"));
             });
 
         services.AddSingleton<IApplicationStore, SqliteApplicationStore>();
@@ -40,9 +66,12 @@ public static class InfrastructureServiceCollectionExtensions
 
         services.AddSingleton<IControlAdapter, LanDirectNetSdkRestAdapter>();
         services.AddSingleton<IControlAdapter, LanPrivateVendorHttpAdapter>();
+        services.AddSingleton<IControlAdapter, DahuaLorexControlAdapter>();
+        services.AddSingleton<IControlAdapter, OnvifImagingControlAdapter>();
         services.AddSingleton<IControlAdapter, OwnedRemoteCommandAdapter>();
         services.AddSingleton<IControlAdapter, NativeFallbackAdapter>();
 
+        services.AddSingleton<IVideoTransportAdapter, MultiBrandHighResTransportAdapter>();
         services.AddSingleton<IVideoTransportAdapter, StreamDescriptorAdapter>();
         services.AddSingleton<IVideoTransportAdapter, BubbleFlvAdapter>();
         services.AddSingleton<IVideoTransportAdapter, EseeJuanP2PAdapter>();

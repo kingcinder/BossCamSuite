@@ -89,8 +89,10 @@ public sealed class SqliteApplicationStore(IOptions<BossCamRuntimeOptions> optio
                     continue;
                 }
 
+                // Keep id and payload aligned. Previous ON CONFLICT only rewrote payload, which left
+                // row id stale vs DeviceIdentity.Id inside JSON and broke GetDeviceAsync lookups.
                 await using var upsertByKey = connection.CreateCommand();
-                upsertByKey.CommandText = "INSERT INTO devices (id, dedupe_key, payload, updated_at) VALUES ($id, $key, $payload, $updated) ON CONFLICT(dedupe_key) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at";
+                upsertByKey.CommandText = "INSERT INTO devices (id, dedupe_key, payload, updated_at) VALUES ($id, $key, $payload, $updated) ON CONFLICT(dedupe_key) DO UPDATE SET id = excluded.id, payload = excluded.payload, updated_at = excluded.updated_at";
                 upsertByKey.Parameters.AddWithValue("$id", device.Id.ToString());
                 upsertByKey.Parameters.AddWithValue("$key", key);
                 upsertByKey.Parameters.AddWithValue("$payload", payload);

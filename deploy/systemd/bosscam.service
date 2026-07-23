@@ -1,0 +1,24 @@
+[Unit]
+Description=BossCamSuite camera control service (Linux)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+# Set User= to a real account (install-systemd.sh fills this in).
+User=cody
+WorkingDirectory=/opt/bosscam
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=DOTNET_ENVIRONMENT=Production
+Environment=BOSSCAM_FFMPEG_PATH=/usr/bin/ffmpeg
+Environment=BossCam__LocalApiBaseUrl=http://0.0.0.0:5317
+ExecStart=/usr/bin/dotnet /opt/bosscam/BossCam.Service.dll
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGINT
+SyslogIdentifier=bosscam
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
