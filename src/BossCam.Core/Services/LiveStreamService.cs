@@ -1,22 +1,25 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Threading.Channels;
 using BossCam.Contracts;
 using Microsoft.Extensions.Logging;
 
 namespace BossCam.Core;
 
 /// <summary>
-/// Live preview for browser multi-view.
-/// Juan/5523-W RTSP is often HEVC and needs multi-second probe before video packets arrive.
-/// Primary path: ffmpeg RTSP → MJPEG (works in &lt;img&gt; multipart). Fallback: NetSDK snapShot pump.
-/// Optional: RTSP → H.264 MPEG-TS for mpegts.js.
+/// Live multi-view streaming.
+/// Each camera gets at most one shared ffmpeg RTSP→MJPEG session (subscribers fan-out),
+/// so multi-tile boards stay fluid without exhausting camera RTSP slots.
+/// Falls back to NetSDK snapShot pump when RTSP cannot produce frames.
 /// </summary>
 public sealed class LiveStreamService(
     IApplicationStore store,
     TransportBroker transportBroker,
-    ILogger<LiveStreamService> logger)
+    ILogger<LiveStreamService> logger) : IAsyncDisposable
 {
+    private readonly ConcurrentDictionary<string, SharedMjpegSession> _sessions = new(StringComparer.Ordinal);
     private static readonly HttpClient SnapshotClient = CreateSnapshotClient();
 
     public async Task StreamMpegTsAsync(
@@ -25,26 +28,23 @@ public sealed class LiveStreamService(
         string quality,
         CancellationToken cancellationToken)
     {
+        // TS path stays one-ffmpeg-per-viewer (optional advanced); multi-view uses MJPEG sessions.
         var (device, rtspUrl) = await ResolveRtspAsync(deviceId, quality, cancellationToken);
         var ffmpeg = ResolveFfmpegPath()
             ?? throw new InvalidOperationException("ffmpeg not found. Install ffmpeg for live streams.");
-
-        // Always transcode to baseline H.264 — these firmwares advertise HEVC even on "sub".
         var scale = IsMain(quality) ? "1280:-2" : "960:-2";
         var bitrate = IsMain(quality) ? "2500k" : "1200k";
         var args = new StringBuilder()
             .Append("-hide_banner -loglevel warning ")
             .Append(RtspInputFlags())
             .Append("-i \"").Append(rtspUrl).Append("\" ")
-            .Append("-an -map 0:v:0 ")
-            .Append("-vf scale=").Append(scale).Append(" ")
+            .Append("-an -map 0:v:0 -vf scale=").Append(scale).Append(' ')
             .Append("-c:v libx264 -preset ultrafast -tune zerolatency -profile:v baseline -pix_fmt yuv420p ")
             .Append("-b:v ").Append(bitrate).Append(" -maxrate ").Append(bitrate).Append(" -bufsize 800k ")
             .Append("-g 30 -bf 0 -f mpegts -flush_packets 1 -")
             .ToString();
-
-        logger.LogInformation("Live MPEG-TS {Name} {Ip} q={Q}", device.DisplayName, device.IpAddress, quality);
-        await RunFfmpegPipeAsync(ffmpeg, args, output, cancellationToken);
+        logger.LogInformation("Live MPEG-TS {Ip} q={Q}", device.IpAddress, quality);
+        await RunFfmpegCopyAsync(ffmpeg, args, output, cancellationToken);
     }
 
     public async Task StreamMjpegAsync(
@@ -56,18 +56,15 @@ public sealed class LiveStreamService(
         var device = await store.GetDeviceAsync(deviceId, cancellationToken)
             ?? throw new InvalidOperationException("Device not found.");
 
-        // quality:
-        //  - sub/auto (default multi-view): prefer fast NetSDK snapShot pump (~3–8 fps, instant start)
-        //    then RTSP if snapShot is dead (e.g. 403).
-        //  - main/rtsp: prefer RTSP→MJPEG (~12–15 fps after probe) for watchable full-motion.
-        var wantRtspFirst = IsMain(quality)
-            || string.Equals(quality, "rtsp", StringComparison.OrdinalIgnoreCase);
+        // Prefer shared RTSP session for real motion. snapShot-only when quality=sub and RTSP is dead.
+        var preferSnapOnly = string.Equals(quality, "snap", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(quality, "sub", StringComparison.OrdinalIgnoreCase);
 
-        if (!wantRtspFirst)
+        if (!preferSnapOnly)
         {
             try
             {
-                await StreamMjpegFromSnapshotPumpAsync(device, output, cancellationToken);
+                await StreamFromSharedRtspAsync(deviceId, device, quality, output, cancellationToken);
                 return;
             }
             catch (OperationCanceledException)
@@ -76,28 +73,36 @@ public sealed class LiveStreamService(
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "snapShot pump failed for {Ip}; trying RTSP MJPEG", device.IpAddress);
+                logger.LogWarning(ex, "Shared RTSP failed for {Ip}; snapShot pump", device.IpAddress);
             }
-
-            await StreamMjpegFromRtspAsync(deviceId, output, quality, cancellationToken);
-            return;
         }
 
         try
         {
-            await StreamMjpegFromRtspAsync(deviceId, output, quality, cancellationToken);
-            return;
+            // For multi-view default (sub): try shared RTSP first too — much smoother than snapShot.
+            if (preferSnapOnly)
+            {
+                try
+                {
+                    await StreamFromSharedRtspAsync(deviceId, device, "rtsp", output, cancellationToken);
+                    return;
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    logger.LogDebug(ex, "RTSP shared unavailable for {Ip}, using snapShot", device.IpAddress);
+                }
+            }
+
+            await StreamMjpegFromSnapshotPumpAsync(device, output, cancellationToken);
         }
         catch (OperationCanceledException)
         {
             throw;
         }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "RTSP MJPEG failed for {Ip}; trying snapShot pump", device.IpAddress);
-        }
-
-        await StreamMjpegFromSnapshotPumpAsync(device, output, cancellationToken);
     }
 
     public async Task<(string? MainRtsp, string? SubRtsp, string? PreferredLive)> DescribeAsync(
@@ -118,29 +123,40 @@ public sealed class LiveStreamService(
         return (EnsureCredentials(main!, device), EnsureCredentials(sub!, device), EnsureCredentials(sub!, device));
     }
 
-    private async Task StreamMjpegFromRtspAsync(
+    private async Task StreamFromSharedRtspAsync(
         Guid deviceId,
+        DeviceIdentity device,
+        string quality,
         Stream output,
+        CancellationToken cancellationToken)
+    {
+        var q = IsMain(quality) ? "main" : "sub";
+        var key = $"{deviceId:N}:{q}";
+        var session = _sessions.GetOrAdd(key, _ => new SharedMjpegSession(deviceId, device, q, this, logger));
+        // Subscribe first so early frames are not dropped, then start ffmpeg.
+        await session.WriteToAsync(output, cancellationToken);
+    }
+
+    internal async Task<(string Ffmpeg, string Args)> BuildRtspMjpegCommandAsync(
+        Guid deviceId,
         string quality,
         CancellationToken cancellationToken)
     {
-        var (device, rtspUrl) = await ResolveRtspAsync(deviceId, quality, cancellationToken);
+        var (_, rtspUrl) = await ResolveRtspAsync(deviceId, quality, cancellationToken);
         var ffmpeg = ResolveFfmpegPath()
             ?? throw new InvalidOperationException("ffmpeg not found.");
-
-        var scale = IsMain(quality) ? "1280:-2" : "720:-2";
-        var fps = IsMain(quality) ? 12 : 15;
+        // Sub is often HEVC 704x480 — decode once per cam (shared session) into light MJPEG.
+        var scale = IsMain(quality) ? "960:-2" : "640:-2";
+        var fps = IsMain(quality) ? 10 : 12;
         var args = new StringBuilder()
             .Append("-hide_banner -loglevel warning ")
             .Append(RtspInputFlags())
             .Append("-i \"").Append(rtspUrl).Append("\" ")
             .Append("-an -map 0:v:0 ")
             .Append("-vf \"fps=").Append(fps).Append(",scale=").Append(scale).Append("\" ")
-            .Append("-q:v 5 -f mpjpeg -")
+            .Append("-q:v 7 -f mpjpeg -")
             .ToString();
-
-        logger.LogInformation("Live RTSP-MJPEG {Name} {Ip} q={Q}", device.DisplayName, device.IpAddress, quality);
-        await RunFfmpegPipeAsync(ffmpeg, args, output, cancellationToken);
+        return (ffmpeg, args);
     }
 
     private async Task StreamMjpegFromSnapshotPumpAsync(
@@ -158,15 +174,12 @@ public sealed class LiveStreamService(
         var port = device.Port <= 0 ? 80 : device.Port;
         var paths = new[]
         {
-            $"/NetSDK/Video/encode/channel/101/snapShot",
-            $"/NetSDK/Video/encode/channel/102/snapShot"
+            "/NetSDK/Video/encode/channel/101/snapShot",
+            "/NetSDK/Video/encode/channel/102/snapShot"
         };
 
         logger.LogInformation("Live snapShot-pump {Ip}", device.IpAddress);
-        var boundary = "ffmpeg";
-        // Note: browsers expect multipart/x-mixed-replace; boundary=...
-        // We write frames matching that boundary.
-
+        const string boundary = "ffmpeg";
         var failures = 0;
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -197,21 +210,19 @@ public sealed class LiveStreamService(
                 }
                 catch
                 {
-                    // try next path
+                    // next path
                 }
             }
 
             if (jpeg is null)
             {
                 failures++;
-                // Fail fast so caller can switch to RTSP (e.g. cam .30 returns 403 on snapShot).
-                if (failures >= 8)
+                if (failures >= 10)
                 {
-                    throw new InvalidOperationException(
-                        $"NetSDK snapShot unavailable for {device.IpAddress}.");
+                    throw new InvalidOperationException($"NetSDK snapShot unavailable for {device.IpAddress}.");
                 }
 
-                await Task.Delay(150, cancellationToken);
+                await Task.Delay(120, cancellationToken);
                 continue;
             }
 
@@ -220,9 +231,8 @@ public sealed class LiveStreamService(
                 $"--{boundary}\r\nContent-Type: image/jpeg\r\nContent-Length: {jpeg.Length}\r\n\r\n");
             await output.WriteAsync(header, cancellationToken);
             await output.WriteAsync(jpeg, cancellationToken);
-            await output.WriteAsync(Encoding.ASCII.GetBytes("\r\n"), cancellationToken);
+            await output.WriteAsync("\r\n"u8.ToArray(), cancellationToken);
             await output.FlushAsync(cancellationToken);
-            // No artificial delay — pace is limited by camera snapShot latency (~200–400ms).
         }
     }
 
@@ -243,7 +253,6 @@ public sealed class LiveStreamService(
         if (IsMain(quality))
         {
             url = RecordingService.SelectHighResMainSource(sources)?.Url
-                ?? sources.FirstOrDefault(s => s.Kind is TransportKind.Rtsp or TransportKind.OnvifRtsp)?.Url
                 ?? BuildJuanUrl(device, "ch0_0.264");
         }
         else
@@ -260,48 +269,14 @@ public sealed class LiveStreamService(
         return (device, EnsureCredentials(url!, device));
     }
 
-    private async Task RunFfmpegPipeAsync(
+    private static async Task RunFfmpegCopyAsync(
         string ffmpegPath,
         string args,
         Stream output,
         CancellationToken cancellationToken)
     {
-        using var process = new Process
-        {
-            StartInfo = new ProcessStartInfo
-            {
-                FileName = ffmpegPath,
-                Arguments = args,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            },
-            EnableRaisingEvents = true
-        };
-
-        if (!process.Start())
-        {
-            throw new InvalidOperationException("Failed to start ffmpeg for live stream.");
-        }
-
-        var stderrTask = Task.Run(async () =>
-        {
-            try
-            {
-                var err = await process.StandardError.ReadToEndAsync(CancellationToken.None);
-                if (!string.IsNullOrWhiteSpace(err))
-                {
-                    logger.LogDebug("ffmpeg live: {Err}", err.Length > 2000 ? err[^2000..] : err);
-                }
-            }
-            catch
-            {
-                // ignore
-            }
-        }, CancellationToken.None);
-
-        long bytesCopied = 0;
+        using var process = StartFfmpeg(ffmpegPath, args);
+        long bytes = 0;
         try
         {
             var buffer = new byte[64 * 1024];
@@ -316,48 +291,70 @@ public sealed class LiveStreamService(
 
                 await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
                 await output.FlushAsync(cancellationToken);
-                bytesCopied += read;
+                bytes += read;
             }
         }
         catch (OperationCanceledException)
         {
-            // client gone — success if we already delivered frames
         }
         catch (IOException)
         {
-            // broken pipe
         }
         finally
         {
-            try
-            {
-                if (!process.HasExited)
-                {
-                    process.Kill(entireProcessTree: true);
-                }
-            }
-            catch
-            {
-                // ignore
-            }
-
-            try { await stderrTask; } catch { /* ignore */ }
+            TryKill(process);
         }
 
-        // Only fail when nothing was delivered (true RTSP connect/decode failure).
-        if (bytesCopied == 0)
+        if (bytes == 0)
         {
-            var code = process.HasExited ? process.ExitCode : -1;
-            throw new InvalidOperationException($"ffmpeg produced no live media (exit {code}).");
+            throw new InvalidOperationException("ffmpeg produced no live media.");
         }
     }
 
-    /// <summary>
-    /// Critical for Juan/GUANGZHOU: tiny probesize yields "video stream with no packets".
-    /// </summary>
+    internal static Process StartFfmpeg(string ffmpegPath, string args)
+    {
+        var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = ffmpegPath,
+                Arguments = args,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            },
+            EnableRaisingEvents = true
+        };
+        if (!process.Start())
+        {
+            throw new InvalidOperationException("Failed to start ffmpeg.");
+        }
+
+        _ = Task.Run(async () =>
+        {
+            try { await process.StandardError.ReadToEndAsync(); }
+            catch { /* ignore */ }
+        });
+        return process;
+    }
+
+    internal static void TryKill(Process process)
+    {
+        try
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+            }
+        }
+        catch
+        {
+            // ignore
+        }
+    }
+
     private static string RtspInputFlags()
-        // Juan needs a non-trivial probe or video arrives with "no packets".
-        // Keep this under ~2s so first frame is not multi-second lag.
         => "-rtsp_transport tcp -rtsp_flags prefer_tcp "
            + "-fflags nobuffer+genpts -flags low_delay "
            + "-probesize 2000000 -analyzeduration 2000000 "
@@ -416,16 +413,6 @@ public sealed class LiveStreamService(
             }
         }
 
-        var path = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
-        foreach (var segment in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
-        {
-            var full = Path.Combine(segment, "ffmpeg");
-            if (File.Exists(full))
-            {
-                return full;
-            }
-        }
-
         return null;
     }
 
@@ -434,12 +421,269 @@ public sealed class LiveStreamService(
         var handler = new SocketsHttpHandler
         {
             MaxConnectionsPerServer = 32,
-            PooledConnectionLifetime = TimeSpan.FromMinutes(5),
-            PooledConnectionIdleTimeout = TimeSpan.FromMinutes(1),
-            EnableMultipleHttp2Connections = true
+            PooledConnectionLifetime = TimeSpan.FromMinutes(5)
         };
-        var c = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
-        c.DefaultRequestHeaders.ConnectionClose = false;
-        return c;
+        return new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        foreach (var s in _sessions.Values)
+        {
+            await s.DisposeAsync();
+        }
+
+        _sessions.Clear();
+    }
+
+    /// <summary>One ffmpeg process, many HTTP viewers.</summary>
+    private sealed class SharedMjpegSession(
+        Guid deviceId,
+        DeviceIdentity device,
+        string quality,
+        LiveStreamService owner,
+        ILogger logger) : IAsyncDisposable
+    {
+        private readonly object _gate = new();
+        private readonly ConcurrentDictionary<Guid, Channel<byte[]>> _subscribers = new();
+        private Process? _process;
+        private Task? _pumpTask;
+        private int _started;
+        private CancellationTokenSource? _cts;
+
+        public async Task EnsureStartedAsync(CancellationToken cancellationToken)
+        {
+            if (Interlocked.CompareExchange(ref _started, 1, 0) == 0)
+            {
+                _cts = new CancellationTokenSource();
+                var (ffmpeg, args) = await owner.BuildRtspMjpegCommandAsync(deviceId, quality, cancellationToken);
+                logger.LogInformation("Shared RTSP session start {Ip} q={Q}", device.IpAddress, quality);
+                _process = StartFfmpeg(ffmpeg, args);
+                _pumpTask = Task.Run(() => PumpAsync(_cts.Token), CancellationToken.None);
+            }
+
+            // Wait briefly for first frame so clients don't hang on black.
+            var deadline = DateTime.UtcNow.AddSeconds(8);
+            while (DateTime.UtcNow < deadline && !cancellationToken.IsCancellationRequested)
+            {
+                if (_subscribers.IsEmpty && _process is { HasExited: true })
+                {
+                    break;
+                }
+
+                // session is up once pump is running
+                if (_pumpTask is not null)
+                {
+                    break;
+                }
+
+                await Task.Delay(50, cancellationToken);
+            }
+        }
+
+        public async Task WriteToAsync(Stream output, CancellationToken cancellationToken)
+        {
+            var id = Guid.NewGuid();
+            var channel = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(4)
+            {
+                FullMode = BoundedChannelFullMode.DropOldest,
+                SingleReader = true,
+                SingleWriter = false
+            });
+            _subscribers[id] = channel;
+            await EnsureStartedAsync(cancellationToken);
+
+            var gotFrame = false;
+            try
+            {
+                const string boundary = "ffmpeg";
+                using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                // Fail over to snapShot if RTSP never yields a frame.
+                linked.CancelAfter(TimeSpan.FromSeconds(14));
+                try
+                {
+                    await foreach (var jpeg in channel.Reader.ReadAllAsync(linked.Token))
+                    {
+                        if (!gotFrame)
+                        {
+                            gotFrame = true;
+                            // After first frame, only client cancel should stop the stream.
+                            linked.CancelAfter(Timeout.InfiniteTimeSpan);
+                        }
+
+                        var header = Encoding.ASCII.GetBytes(
+                            $"--{boundary}\r\nContent-Type: image/jpeg\r\nContent-Length: {jpeg.Length}\r\n\r\n");
+                        await output.WriteAsync(header, cancellationToken);
+                        await output.WriteAsync(jpeg, cancellationToken);
+                        await output.WriteAsync("\r\n"u8.ToArray(), cancellationToken);
+                        await output.FlushAsync(cancellationToken);
+                    }
+                }
+                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && !gotFrame)
+                {
+                    throw new InvalidOperationException("Shared RTSP session produced no frames in time.");
+                }
+
+                if (!gotFrame)
+                {
+                    throw new InvalidOperationException("Shared RTSP session ended without frames.");
+                }
+            }
+            finally
+            {
+                _subscribers.TryRemove(id, out _);
+                if (_subscribers.IsEmpty)
+                {
+                    _ = Task.Run(async () =>
+                    {
+                        await Task.Delay(5000);
+                        if (_subscribers.IsEmpty)
+                        {
+                            await DisposeAsync();
+                        }
+                    });
+                }
+            }
+        }
+
+        private async Task PumpAsync(CancellationToken cancellationToken)
+        {
+            if (_process is null)
+            {
+                return;
+            }
+
+            try
+            {
+                // Parse multipart MJPEG from ffmpeg stdout and fan-out complete JPEG frames.
+                var stdout = _process.StandardOutput.BaseStream;
+                var buffer = new byte[64 * 1024];
+                var acc = new MemoryStream();
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    var read = await stdout.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken);
+                    if (read <= 0)
+                    {
+                        break;
+                    }
+
+                    acc.Write(buffer, 0, read);
+                    ExtractAndPublishJpegs(acc);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                logger.LogDebug(ex, "Shared RTSP pump ended for {Ip}", device.IpAddress);
+            }
+            finally
+            {
+                // unblock waiters
+                foreach (var ch in _subscribers.Values)
+                {
+                    ch.Writer.TryComplete();
+                }
+
+                if (_process is not null)
+                {
+                    TryKill(_process);
+                }
+
+                Interlocked.Exchange(ref _started, 0);
+            }
+        }
+
+        private void ExtractAndPublishJpegs(MemoryStream acc)
+        {
+            var data = acc.ToArray();
+            var searchFrom = 0;
+            while (true)
+            {
+                var soi = IndexOf(data, [0xFF, 0xD8], searchFrom);
+                if (soi < 0)
+                {
+                    break;
+                }
+
+                var eoi = IndexOf(data, [0xFF, 0xD9], soi + 2);
+                if (eoi < 0)
+                {
+                    // incomplete frame — keep from SOI
+                    var keep = data.AsSpan(soi).ToArray();
+                    acc.SetLength(0);
+                    acc.Write(keep, 0, keep.Length);
+                    return;
+                }
+
+                var len = eoi + 2 - soi;
+                var jpeg = new byte[len];
+                Buffer.BlockCopy(data, soi, jpeg, 0, len);
+                foreach (var ch in _subscribers.Values)
+                {
+                    ch.Writer.TryWrite(jpeg);
+                }
+
+                searchFrom = eoi + 2;
+            }
+
+            if (searchFrom > 0 && searchFrom < data.Length)
+            {
+                var keep = data.AsSpan(searchFrom).ToArray();
+                acc.SetLength(0);
+                acc.Write(keep, 0, keep.Length);
+            }
+            else if (searchFrom >= data.Length)
+            {
+                acc.SetLength(0);
+            }
+            else if (data.Length > 2 * 1024 * 1024)
+            {
+                // avoid unbounded growth if stream is garbage
+                acc.SetLength(0);
+            }
+        }
+
+        private static int IndexOf(byte[] haystack, byte[] needle, int start)
+        {
+            for (var i = start; i <= haystack.Length - needle.Length; i++)
+            {
+                var ok = true;
+                for (var j = 0; j < needle.Length; j++)
+                {
+                    if (haystack[i + j] != needle[j])
+                    {
+                        ok = false;
+                        break;
+                    }
+                }
+
+                if (ok)
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            try { _cts?.Cancel(); } catch { /* ignore */ }
+            if (_process is not null)
+            {
+                TryKill(_process);
+            }
+
+            foreach (var ch in _subscribers.Values)
+            {
+                ch.Writer.TryComplete();
+            }
+
+            _subscribers.Clear();
+            Interlocked.Exchange(ref _started, 0);
+            return ValueTask.CompletedTask;
+        }
     }
 }
