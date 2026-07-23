@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>BossCamSuite — Linux Operator</title>
+  <title>BossCamSuite — Operator Console</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="app.css" />
 </head>
@@ -14,7 +14,7 @@
         <div class="logo">BC</div>
         <div>
           <h1>BossCamSuite</h1>
-          <p class="muted">Linux Operator Console</p>
+          <p class="muted">Multi-camera operator console</p>
         </div>
       </div>
       <div class="toolbar">
@@ -25,12 +25,12 @@
       <label class="field">
         <span>Quick add IP</span>
         <div class="row">
-          <input id="regIp" placeholder="10.0.0.30" />
+          <input id="regIp" placeholder="10.0.0.170" />
           <input id="regPass" placeholder="password" type="password" />
           <button id="btnAddCam" type="button">Add</button>
         </div>
       </label>
-      <h2>Cameras</h2>
+      <h2>Cameras <span class="muted" id="camCount"></span></h2>
       <ul id="deviceList" class="device-list"></ul>
       <div class="sidebar-foot muted" id="healthLine">Connecting…</div>
     </aside>
@@ -38,18 +38,19 @@
     <main class="main">
       <header class="topbar">
         <div>
-          <h2 id="selTitle">No camera selected</h2>
-          <p class="muted" id="selMeta">Select a device to control image, network, stream, and recording.</p>
+          <h2 id="selTitle">View All</h2>
+          <p class="muted" id="selMeta">Live multi-camera board · drag tiles to reorder</p>
         </div>
-        <div class="row gap">
-          <button id="btnSave" type="button" class="accent" disabled>Save Changes</button>
+        <div class="row gap wrap">
+          <button id="btnSave" type="button" class="accent" disabled>Save Settings</button>
           <button id="btnRefreshSettings" type="button" disabled>Reload Settings</button>
-          <button id="btnSnapshot" type="button" disabled>Snapshot</button>
+          <button id="btnSnapshot" type="button" disabled>Save Snapshot</button>
         </div>
       </header>
 
       <nav class="tabs" id="tabs">
-        <button type="button" data-tab="overview" class="active">Overview</button>
+        <button type="button" data-tab="viewall" class="active">View All</button>
+        <button type="button" data-tab="overview">Device</button>
         <button type="button" data-tab="image">Image</button>
         <button type="button" data-tab="stream">Stream</button>
         <button type="button" data-tab="network">Network</button>
@@ -58,13 +59,43 @@
         <button type="button" data-tab="advanced">Advanced</button>
       </nav>
 
-      <section class="panel active" id="tab-overview">
+      <!-- VIEW ALL: multi-camera live board -->
+      <section class="panel active" id="tab-viewall">
+        <div class="card view-toolbar">
+          <div class="row gap wrap">
+            <span class="muted">Layout</span>
+            <div class="layout-btns" id="layoutBtns">
+              <button type="button" data-layout="1">1</button>
+              <button type="button" data-layout="2">2</button>
+              <button type="button" data-layout="4" class="active">4</button>
+              <button type="button" data-layout="5">5</button>
+              <button type="button" data-layout="6">6</button>
+              <button type="button" data-layout="7">7</button>
+              <button type="button" data-layout="8">8</button>
+            </div>
+            <label class="inline-check"><input type="checkbox" id="liveRefresh" checked /> Live refresh</label>
+            <label class="inline-check">Interval
+              <select id="liveInterval">
+                <option value="500">0.5s</option>
+                <option value="1000" selected>1s</option>
+                <option value="2000">2s</option>
+                <option value="3000">3s</option>
+              </select>
+            </label>
+            <button type="button" id="btnResetOrder">Reset order</button>
+          </div>
+          <p class="muted small">Drag a tile by its title bar to rearrange. Click a tile to select that camera for Image / Network / Record.</p>
+        </div>
+        <div id="viewGrid" class="view-grid layout-4"></div>
+      </section>
+
+      <section class="panel" id="tab-overview">
         <div class="grid-2">
           <div class="card">
-            <h3>Live snapshot</h3>
+            <h3>Live preview</h3>
             <div class="snap-wrap">
-              <img id="snapImg" alt="Snapshot" />
-              <p class="muted" id="snapHint">Snapshot loads after selection.</p>
+              <img id="snapImg" alt="Live preview" />
+              <p class="muted" id="snapHint">Select a camera or open View All.</p>
             </div>
           </div>
           <div class="card">
@@ -78,36 +109,72 @@
 
       <section class="panel" id="tab-image">
         <div class="card">
-          <h3>Image (main capture path)</h3>
-          <p class="muted">Writes go to the shared video input used by the high-res encode channel.</p>
+          <h3>Image (video input channel 1)</h3>
+          <p class="muted">Brightness, contrast, saturation, sharpness, hue, flip, mirror — loaded live from NetSDK.</p>
           <div id="imageFields" class="form-grid"></div>
+          <p id="imageStatus" class="muted small"></p>
         </div>
       </section>
 
       <section class="panel" id="tab-stream">
         <div class="card">
-          <h3>Stream encode (main / channel 101)</h3>
-          <p class="muted">Main stream only — not sub-stream 102.</p>
+          <h3>Encode (main channel 101)</h3>
+          <p class="muted">High-res main stream metadata from the camera.</p>
           <div id="streamFields" class="form-grid"></div>
+          <p id="streamStatus" class="muted small"></p>
         </div>
       </section>
 
       <section class="panel" id="tab-network">
         <div class="card">
-          <h3>Network / Wireless</h3>
+          <h3>Network (interface 1 / eth0)</h3>
+          <p class="muted">LAN addressing, DHCP/static, gateway, netmask — loaded live from NetSDK.</p>
           <div id="networkFields" class="form-grid"></div>
+          <p id="networkStatus" class="muted small"></p>
         </div>
       </section>
 
       <section class="panel" id="tab-record">
         <div class="card">
+          <h3>Save folders</h3>
+          <p class="muted">Server-side Linux paths. Browser cannot open a native folder picker for the service host — set paths here (or use Browse defaults).</p>
+          <div class="form-grid paths-grid">
+            <div class="form-item">
+              <label>Continuous recordings folder</label>
+              <div class="row">
+                <input type="text" id="pathContinuous" placeholder="/home/you/Videos/BossCam/continuous" />
+                <button type="button" id="btnPathContDefault">Default</button>
+              </div>
+            </div>
+            <div class="form-item">
+              <label>Highlights folder</label>
+              <div class="row">
+                <input type="text" id="pathHighlights" placeholder="/home/you/Videos/BossCam/highlights" />
+                <button type="button" id="btnPathHlDefault">Default</button>
+              </div>
+            </div>
+            <div class="form-item">
+              <label>Snapshots folder</label>
+              <div class="row">
+                <input type="text" id="pathSnapshots" placeholder="/home/you/Pictures/BossCam" />
+                <button type="button" id="btnPathSnapDefault">Default</button>
+              </div>
+            </div>
+          </div>
+          <div class="row gap wrap" style="margin-top:12px">
+            <button type="button" id="btnSavePaths" class="accent">Save folders</button>
+            <button type="button" id="btnPromptPaths">Prompt all three…</button>
+          </div>
+          <p id="pathStatus" class="muted small"></p>
+        </div>
+        <div class="card">
           <h3>Recording</h3>
-          <p class="muted">Default source is high-res main RTSP (e.g. ch0_0.264 @ 2560×1920).</p>
+          <p class="muted">Continuous record uses the high-res main stream (ch0_0 / channel 101) into the continuous folder.</p>
           <div class="row gap wrap">
-            <button id="btnRecStart" type="button" class="accent" disabled>Start Selected</button>
-            <button id="btnRecStartAll" type="button">Start All IPC</button>
-            <button id="btnRecStopAll" type="button">Stop All</button>
-            <button id="btnRecIndex" type="button">Refresh Index</button>
+            <button id="btnRecStart" type="button" class="accent" disabled>Start selected</button>
+            <button id="btnRecStartAll" type="button">Start all cameras</button>
+            <button id="btnRecStopAll" type="button">Stop all</button>
+            <button id="btnRecIndex" type="button">Refresh index</button>
           </div>
           <h4>Jobs</h4>
           <pre id="recJobs" class="code">[]</pre>
@@ -124,7 +191,7 @@
             <button id="btnHlNext" type="button" class="accent">Next</button>
             <button id="btnHlMain" type="button">Prefer Main</button>
             <button id="btnHlSub" type="button">Prefer Sub</button>
-            <button id="btnHlRec" type="button">Record Highlight</button>
+            <button id="btnHlRec" type="button">Record highlight → highlights folder</button>
           </div>
           <p id="hlSelected" class="banner"></p>
           <div id="hlTiles" class="tiles"></div>
@@ -133,10 +200,10 @@
 
       <section class="panel" id="tab-advanced">
         <div class="card">
-          <h3>Raw settings snapshot</h3>
+          <h3>Raw NetSDK / typed payload</h3>
           <pre id="rawSettings" class="code">Select a camera and reload settings.</pre>
           <h3>API</h3>
-          <p class="muted">Swagger: <a id="swaggerLink" href="/swagger" target="_blank" rel="noopener">/swagger</a></p>
+          <p class="muted">Swagger: <a href="/swagger" target="_blank" rel="noopener">/swagger</a></p>
           <pre id="platformInfo" class="code"></pre>
         </div>
       </section>

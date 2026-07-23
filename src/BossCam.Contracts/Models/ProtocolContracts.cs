@@ -195,6 +195,16 @@ public sealed record RecordingStartRequest
     public Guid DeviceId { get; init; }
     public Guid? ProfileId { get; init; }
     public string? SourceUrl { get; init; }
+    /// <summary>Optional override for continuous recording output folder.</summary>
+    public string? OutputDirectory { get; init; }
+}
+
+/// <summary>Operator-configurable media folders (Linux paths).</summary>
+public sealed record MediaStoragePaths
+{
+    public string ContinuousRecordings { get; init; } = string.Empty;
+    public string Highlights { get; init; } = string.Empty;
+    public string Snapshots { get; init; } = string.Empty;
 }
 
 public sealed record RecordingJob

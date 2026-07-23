@@ -1,10 +1,22 @@
 (() => {
-  const api = "";
+  const LS_ORDER = "bosscam.viewOrder";
+  const LS_LAYOUT = "bosscam.viewLayout";
+
   const state = {
     devices: [],
     selectedId: null,
-    typed: [],
+    order: [], // device ids in display order
+    layout: Number(localStorage.getItem(LS_LAYOUT) || 4),
+    liveTimer: null,
     dirty: {},
+    netPayload: null,
+    imagePayload: null,
+    streamPayload: null,
+    storage: {
+      continuousRecordings: "",
+      highlights: "",
+      snapshots: "",
+    },
   };
 
   const $ = (id) => document.getElementById(id);
@@ -13,11 +25,18 @@
     el.textContent = msg;
     el.className = `toast ${ok ? "ok" : "bad"}`;
     clearTimeout(toast._t);
-    toast._t = setTimeout(() => el.classList.add("hidden"), 4200);
+    toast._t = setTimeout(() => el.classList.add("hidden"), 4500);
   };
 
+  const esc = (s) =>
+    String(s ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;");
+
   async function req(path, opts = {}) {
-    const res = await fetch(api + path, {
+    const res = await fetch(path, {
       headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
       ...opts,
     });
@@ -35,50 +54,213 @@
     return state.devices.find((d) => d.id === state.selectedId) || null;
   }
 
+  function deviceById(id) {
+    return state.devices.find((d) => d.id === id) || null;
+  }
+
+  function labelOf(d) {
+    return d.displayName || d.name || d.ipAddress || d.id;
+  }
+
+  function syncOrder() {
+    const ids = state.devices.map((d) => d.id);
+    let saved = [];
+    try {
+      saved = JSON.parse(localStorage.getItem(LS_ORDER) || "[]");
+    } catch {
+      saved = [];
+    }
+    const next = [];
+    saved.forEach((id) => {
+      if (ids.includes(id) && !next.includes(id)) next.push(id);
+    });
+    ids.forEach((id) => {
+      if (!next.includes(id)) next.push(id);
+    });
+    state.order = next;
+    localStorage.setItem(LS_ORDER, JSON.stringify(state.order));
+  }
+
   function renderDevices() {
     const list = $("deviceList");
     list.innerHTML = "";
+    $("camCount").textContent = `(${state.devices.length})`;
     state.devices.forEach((d) => {
       const li = document.createElement("li");
       if (d.id === state.selectedId) li.classList.add("active");
-      li.innerHTML = `<div class="name">${esc(d.displayName || d.name || d.ipAddress)}</div>
+      li.innerHTML = `<div class="name">${esc(labelOf(d))}</div>
         <div class="sub">${esc(d.ipAddress || "—")} · ${esc(d.hardwareModel || d.deviceType || "camera")}</div>`;
       li.onclick = () => selectDevice(d.id);
       list.appendChild(li);
     });
   }
 
-  function esc(s) {
-    return String(s ?? "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;");
+  function setLayout(n) {
+    state.layout = n;
+    localStorage.setItem(LS_LAYOUT, String(n));
+    document.querySelectorAll("#layoutBtns button").forEach((b) => {
+      b.classList.toggle("active", Number(b.dataset.layout) === n);
+    });
+    const grid = $("viewGrid");
+    grid.className = `view-grid layout-${n}`;
+    renderViewGrid();
+  }
+
+  function snapUrl(deviceId) {
+    return `/api/devices/${deviceId}/snapshot?t=${Date.now()}`;
+  }
+
+  function renderViewGrid() {
+    const grid = $("viewGrid");
+    const n = state.layout;
+    const ordered = state.order.map(deviceById).filter(Boolean);
+    grid.innerHTML = "";
+
+    for (let i = 0; i < n; i++) {
+      const d = ordered[i];
+      const tile = document.createElement("div");
+      if (!d) {
+        tile.className = "view-tile empty";
+        tile.textContent = `Slot ${i + 1} — add/register a camera`;
+        grid.appendChild(tile);
+        continue;
+      }
+
+      tile.className = "view-tile" + (d.id === state.selectedId ? " selected" : "");
+      tile.draggable = true;
+      tile.dataset.deviceId = d.id;
+      tile.innerHTML = `
+        <div class="view-tile-bar">
+          <div>
+            <strong>${esc(labelOf(d))}</strong>
+            <div class="sub">${esc(d.ipAddress || "")} · ${esc(d.hardwareModel || "")}</div>
+          </div>
+          <span class="sub">#${i + 1}</span>
+        </div>
+        <div class="view-tile-media">
+          <img alt="${esc(labelOf(d))}" data-live="${d.id}" />
+          <div class="fail" data-fail="${d.id}" style="display:none">No live frame</div>
+        </div>
+        <div class="view-tile-actions">
+          <button type="button" data-act="select">Select</button>
+          <button type="button" data-act="snap">Snapshot</button>
+          <button type="button" data-act="rec">Record</button>
+        </div>`;
+
+      tile.addEventListener("dragstart", (e) => {
+        tile.classList.add("dragging");
+        e.dataTransfer.setData("text/plain", d.id);
+        e.dataTransfer.effectAllowed = "move";
+      });
+      tile.addEventListener("dragend", () => tile.classList.remove("dragging"));
+      tile.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        tile.classList.add("drag-over");
+      });
+      tile.addEventListener("dragleave", () => tile.classList.remove("drag-over"));
+      tile.addEventListener("drop", (e) => {
+        e.preventDefault();
+        tile.classList.remove("drag-over");
+        const fromId = e.dataTransfer.getData("text/plain");
+        const toId = d.id;
+        if (!fromId || fromId === toId) return;
+        const from = state.order.indexOf(fromId);
+        const to = state.order.indexOf(toId);
+        if (from < 0 || to < 0) return;
+        const next = state.order.slice();
+        next.splice(from, 1);
+        next.splice(to, 0, fromId);
+        state.order = next;
+        localStorage.setItem(LS_ORDER, JSON.stringify(state.order));
+        renderViewGrid();
+        scheduleLiveRefresh();
+      });
+
+      tile.querySelector('[data-act="select"]').onclick = (e) => {
+        e.stopPropagation();
+        selectDevice(d.id);
+      };
+      tile.querySelector('[data-act="snap"]').onclick = async (e) => {
+        e.stopPropagation();
+        await saveSnapshot(d.id);
+      };
+      tile.querySelector('[data-act="rec"]').onclick = async (e) => {
+        e.stopPropagation();
+        await startRecording(d.id);
+      };
+      tile.onclick = () => selectDevice(d.id);
+
+      grid.appendChild(tile);
+    }
+
+    refreshLiveImages();
+  }
+
+  function refreshLiveImages() {
+    document.querySelectorAll("img[data-live]").forEach((img) => {
+      const id = img.getAttribute("data-live");
+      const fail = document.querySelector(`[data-fail="${id}"]`);
+      const url = snapUrl(id);
+      const probe = new Image();
+      probe.onload = () => {
+        img.src = url;
+        img.style.display = "block";
+        if (fail) fail.style.display = "none";
+      };
+      probe.onerror = () => {
+        if (fail) fail.style.display = "grid";
+      };
+      probe.src = url;
+    });
+  }
+
+  function scheduleLiveRefresh() {
+    if (state.liveTimer) {
+      clearInterval(state.liveTimer);
+      state.liveTimer = null;
+    }
+    if (!$("liveRefresh")?.checked) return;
+    const ms = Number($("liveInterval").value || 1000);
+    state.liveTimer = setInterval(() => {
+      if ($("tab-viewall").classList.contains("active") || $("tab-overview").classList.contains("active")) {
+        refreshLiveImages();
+        if (state.selectedId && $("tab-overview").classList.contains("active")) {
+          loadSnapshotPreview();
+        }
+      }
+    }, ms);
   }
 
   async function loadDevices() {
     state.devices = (await req("/api/devices")) || [];
+    syncOrder();
     renderDevices();
+    renderViewGrid();
     if (state.selectedId && !selected()) state.selectedId = null;
     if (!state.selectedId && state.devices.length) await selectDevice(state.devices[0].id);
+    else if (state.selectedId) await selectDevice(state.selectedId);
   }
 
   async function selectDevice(id) {
     state.selectedId = id;
     state.dirty = {};
+    state.netPayload = null;
+    state.imagePayload = null;
+    state.streamPayload = null;
     renderDevices();
+    renderViewGrid();
     const d = selected();
-    $("selTitle").textContent = d ? d.displayName || d.name || d.ipAddress : "No camera selected";
+    $("selTitle").textContent = d ? labelOf(d) : "View All";
     $("selMeta").textContent = d
       ? `${d.ipAddress || ""} · ${d.hardwareModel || ""} · fw ${d.firmwareVersion || "unknown"}`
-      : "Select a device to control image, network, stream, and recording.";
-    ["btnSave", "btnRefreshSettings", "btnSnapshot", "btnRecStart"].forEach((id) => {
-      $(id).disabled = !d;
+      : "Live multi-camera board · drag tiles to reorder";
+    ["btnSave", "btnRefreshSettings", "btnSnapshot", "btnRecStart"].forEach((bid) => {
+      $(bid).disabled = !d;
     });
-    await Promise.all([loadSnapshot(), loadSources(), loadTyped()]);
+    await Promise.all([loadSnapshotPreview(), loadSources(), loadDeviceSettings()]);
   }
 
-  async function loadSnapshot() {
+  function loadSnapshotPreview() {
     const img = $("snapImg");
     const hint = $("snapHint");
     if (!state.selectedId) {
@@ -86,21 +268,17 @@
       hint.style.display = "block";
       return;
     }
-    try {
-      const url = `/api/devices/${state.selectedId}/snapshot?t=${Date.now()}`;
-      img.onload = () => {
-        img.classList.add("show");
-        hint.style.display = "none";
-      };
-      img.onerror = () => {
-        img.classList.remove("show");
-        hint.style.display = "block";
-        hint.textContent = "Snapshot unavailable (auth or brand path).";
-      };
-      img.src = url;
-    } catch {
-      hint.textContent = "Snapshot failed.";
-    }
+    const url = snapUrl(state.selectedId);
+    img.onload = () => {
+      img.classList.add("show");
+      hint.style.display = "none";
+    };
+    img.onerror = () => {
+      img.classList.remove("show");
+      hint.style.display = "block";
+      hint.textContent = "Snapshot unavailable for this camera (try another unit).";
+    };
+    img.src = url;
   }
 
   async function loadSources() {
@@ -112,8 +290,8 @@
       ul.innerHTML = "";
       return;
     }
-    const rows = [
-      ["Name", d.displayName || d.name],
+    [
+      ["Name", labelOf(d)],
       ["IP", d.ipAddress],
       ["Port", d.port],
       ["Model", d.hardwareModel],
@@ -122,14 +300,13 @@
       ["ESEE", d.eseeId],
       ["Serial", d.deviceId],
       ["Login", d.loginName],
-    ];
-    rows.forEach(([k, v]) => {
+    ].forEach(([k, v]) => {
       kv.innerHTML += `<dt>${esc(k)}</dt><dd>${esc(v ?? "—")}</dd>`;
     });
     try {
       const sources = await req(`/api/devices/${d.id}/sources`);
       ul.innerHTML = (sources || [])
-        .slice(0, 12)
+        .slice(0, 16)
         .map((s) => `<li><strong>${esc(s.displayName || s.kind)}</strong> r${s.rank}: ${esc(s.url)}</li>`)
         .join("");
     } catch (e) {
@@ -137,200 +314,387 @@
     }
   }
 
-  function collectFields(groups, keys) {
-    const map = new Map();
-    (groups || []).forEach((g) => {
-      (g.fields || g.Fields || []).forEach((f) => {
-        const key = f.fieldKey || f.FieldKey || f.key;
-        if (key) map.set(key, f);
-      });
+  /** Direct NetSDK GET via service settings/write */
+  async function netsdkGet(endpoint) {
+    const res = await req(`/api/devices/${state.selectedId}/settings/write`, {
+      method: "POST",
+      body: JSON.stringify({
+        endpoint,
+        method: "GET",
+        requireWriteVerification: false,
+        snapshotBeforeWrite: false,
+      }),
     });
-    // Also flatten normalized-like objects if shape differs
-    if (map.size === 0 && Array.isArray(groups)) {
-      groups.forEach((g) => {
-        Object.entries(g.values || g.Values || {}).forEach(([k, v]) => {
-          map.set(k, { fieldKey: k, value: v?.value ?? v, displayName: k });
-        });
-      });
+    // Response shapes vary: { success, response } or raw
+    if (res?.response != null) return res.response;
+    if (res?.Response != null) return res.Response;
+    if (res?.body != null) return res.body;
+    if (typeof res === "string") {
+      try {
+        return JSON.parse(res);
+      } catch {
+        return res;
+      }
     }
-    return keys.map((k) => map.get(k)).filter(Boolean);
+    return res;
   }
 
-  function fieldValue(f) {
-    const v = f.value ?? f.Value ?? f.editableValue ?? f.EditableValue;
-    if (v && typeof v === "object" && "value" in v) return v.value;
-    return v;
+  async function netsdkPut(endpoint, payload) {
+    return req(`/api/devices/${state.selectedId}/settings/write`, {
+      method: "POST",
+      body: JSON.stringify({
+        endpoint,
+        method: "PUT",
+        payload,
+        requireWriteVerification: false,
+        snapshotBeforeWrite: true,
+      }),
+    });
   }
 
-  function renderFieldEditors(containerId, fields) {
+  function renderEditor(containerId, fields, prefix) {
     const root = $(containerId);
     root.innerHTML = "";
     if (!fields.length) {
-      root.innerHTML = `<p class="muted">No typed fields loaded for this group. Use Advanced → raw snapshot or Reload Settings.</p>`;
+      root.innerHTML = `<p class="muted">No fields available. Check camera connectivity and Reload Settings.</p>`;
       return;
     }
     fields.forEach((f) => {
-      const key = f.fieldKey || f.FieldKey || f.key;
-      const label = f.displayName || f.DisplayName || key;
-      const val = state.dirty[key] !== undefined ? state.dirty[key] : fieldValue(f);
+      const key = f.key;
+      const fullKey = `${prefix}.${key}`;
+      const val = state.dirty[fullKey] !== undefined ? state.dirty[fullKey] : f.value;
       const item = document.createElement("div");
       item.className = "form-item";
-      const isNum = typeof val === "number" || /level|bitrate|rate|brightness|contrast|saturation|sharpness|hue|gamma/i.test(key);
-      const isBool = typeof val === "boolean" || /enabled|flip|mirror|dhcp/i.test(key);
-      if (isBool) {
-        item.innerHTML = `<label><input type="checkbox" data-key="${esc(key)}" ${val ? "checked" : ""}/> ${esc(label)}</label>`;
+      if (f.type === "bool") {
+        item.innerHTML = `<label><input type="checkbox" ${val ? "checked" : ""}/> ${esc(f.label)}</label>`;
         item.querySelector("input").onchange = (e) => {
-          state.dirty[key] = e.target.checked;
+          state.dirty[fullKey] = e.target.checked;
         };
-      } else if (isNum) {
+      } else if (f.type === "number") {
         const n = Number(val ?? 0);
-        item.innerHTML = `<label>${esc(label)} <span class="val" id="v-${esc(key)}">${esc(n)}</span></label>
-          <input type="range" min="0" max="100" value="${esc(n)}" data-key="${esc(key)}" />`;
+        const min = f.min ?? 0;
+        const max = f.max ?? 100;
+        item.innerHTML = `<label>${esc(f.label)} <span class="val">${esc(n)}</span></label>
+          <input type="range" min="${min}" max="${max}" value="${esc(n)}" />`;
         const range = item.querySelector("input");
+        const span = item.querySelector(".val");
         range.oninput = () => {
-          $("v-" + key).textContent = range.value;
-          state.dirty[key] = Number(range.value);
+          span.textContent = range.value;
+          state.dirty[fullKey] = Number(range.value);
         };
       } else {
-        item.innerHTML = `<label>${esc(label)}</label><input type="text" data-key="${esc(key)}" value="${esc(val ?? "")}" />`;
+        item.innerHTML = `<label>${esc(f.label)}</label><input type="text" value="${esc(val ?? "")}" />`;
         item.querySelector("input").oninput = (e) => {
-          state.dirty[key] = e.target.value;
+          state.dirty[fullKey] = e.target.value;
         };
       }
       root.appendChild(item);
     });
   }
 
-  async function loadTyped() {
+  async function loadDeviceSettings() {
     if (!state.selectedId) return;
+    $("imageStatus").textContent = "Loading image settings…";
+    $("streamStatus").textContent = "Loading stream settings…";
+    $("networkStatus").textContent = "Loading network settings…";
+
+    // IMAGE
     try {
-      // Prefer refresh from device
-      state.typed = (await req(`/api/devices/${state.selectedId}/settings/typed/refresh`, { method: "POST", body: "null" })) || [];
-    } catch {
-      try {
-        state.typed = (await req(`/api/devices/${state.selectedId}/settings/typed`)) || [];
-      } catch (e) {
-        state.typed = [];
-        $("rawSettings").textContent = e.message;
+      const img = await netsdkGet("/NetSDK/Video/input/channel/1");
+      state.imagePayload = typeof img === "object" ? img : null;
+      if (state.imagePayload) {
+        const p = state.imagePayload;
+        renderEditor(
+          "imageFields",
+          [
+            { key: "brightnessLevel", label: "Brightness", type: "number", value: p.brightnessLevel ?? 50 },
+            { key: "contrastLevel", label: "Contrast", type: "number", value: p.contrastLevel ?? 50 },
+            { key: "saturationLevel", label: "Saturation", type: "number", value: p.saturationLevel ?? 50 },
+            { key: "sharpnessLevel", label: "Sharpness", type: "number", value: p.sharpnessLevel ?? 50 },
+            { key: "hueLevel", label: "Hue", type: "number", value: p.hueLevel ?? 50 },
+            { key: "flipEnabled", label: "Flip", type: "bool", value: !!p.flipEnabled },
+            { key: "mirrorEnabled", label: "Mirror", type: "bool", value: !!p.mirrorEnabled },
+            { key: "powerLineFrequencyMode", label: "Power line Hz", type: "number", value: p.powerLineFrequencyMode ?? 60, min: 50, max: 60 },
+          ],
+          "image"
+        );
+        $("imageStatus").textContent = "Loaded from /NetSDK/Video/input/channel/1";
+      } else {
+        renderEditor("imageFields", [], "image");
+        $("imageStatus").textContent = "Unexpected image payload shape.";
       }
+    } catch (e) {
+      renderEditor("imageFields", [], "image");
+      $("imageStatus").textContent = "Image load failed: " + e.message;
     }
 
-    const imageKeys = ["brightness", "contrast", "saturation", "sharpness", "hue", "gamma", "flipEnabled", "mirrorEnabled", "wdr", "denoise"];
-    const streamKeys = ["codec", "profile", "resolution", "bitrate", "frameRate", "bitRateControlType", "codecType", "constantBitRate"];
-    const networkKeys = ["addressingType", "staticIP", "staticNetmask", "staticGateway", "wirelessMode", "wirelessApEssId", "dhcpMode", "eseeEnabled"];
+    // STREAM encode 101
+    try {
+      const st = await netsdkGet("/NetSDK/Video/encode/channel/101");
+      state.streamPayload = typeof st === "object" ? st : null;
+      if (state.streamPayload) {
+        const p = state.streamPayload;
+        renderEditor(
+          "streamFields",
+          [
+            { key: "codecType", label: "Codec", type: "text", value: p.codecType },
+            { key: "resolution", label: "Resolution", type: "text", value: p.resolution },
+            { key: "frameRate", label: "Frame rate", type: "number", value: p.frameRate ?? 15, min: 1, max: 30 },
+            { key: "constantBitRate", label: "Bitrate (kbps)", type: "number", value: p.constantBitRate ?? 1536, min: 64, max: 8192 },
+            { key: "bitRateControlType", label: "Rate control", type: "text", value: p.bitRateControlType },
+            { key: "h264Profile", label: "Profile", type: "text", value: p.h264Profile },
+            { key: "keyFrameInterval", label: "Keyframe interval", type: "number", value: p.keyFrameInterval ?? 30, min: 1, max: 200 },
+            { key: "channelName", label: "Channel name", type: "text", value: p.channelName },
+            { key: "enabled", label: "Enabled", type: "bool", value: p.enabled !== false },
+          ],
+          "stream"
+        );
+        $("streamStatus").textContent = "Loaded from /NetSDK/Video/encode/channel/101 (main high-res)";
+      } else {
+        renderEditor("streamFields", [], "stream");
+        $("streamStatus").textContent = "Unexpected stream payload.";
+      }
+    } catch (e) {
+      renderEditor("streamFields", [], "stream");
+      $("streamStatus").textContent = "Stream load failed: " + e.message;
+    }
 
-    // Flatten: typed may be group snapshots with nested fields
-    let flat = [];
-    (state.typed || []).forEach((g) => {
-      if (Array.isArray(g.fields)) flat = flat.concat(g.fields.map((f) => ({ ...f, group: g.groupName || g.name })));
-      else if (Array.isArray(g.Fields)) flat = flat.concat(g.Fields.map((f) => ({ ...f, group: g.GroupName || g.Name })));
-    });
-
-    const byKey = (keys) =>
-      keys
-        .map((k) => flat.find((f) => (f.fieldKey || f.FieldKey || "").toLowerCase() === k.toLowerCase() || (f.fieldKey || "").includes(k)))
-        .filter(Boolean);
-
-    // If still empty, synthesize from raw settings groups
-    if (!flat.length) {
-      try {
-        const snap = await req(`/api/devices/${state.selectedId}/settings`);
-        $("rawSettings").textContent = JSON.stringify(snap, null, 2);
-        // Build synthetic image fields from video input payload if present
-        const groups = snap?.groups || [];
-        const video = groups.find((g) => /video/i.test(g.name || ""));
-        const vals = video?.values || {};
-        for (const [k, entry] of Object.entries(vals)) {
-          const node = entry?.value ?? entry;
-          if (node && typeof node === "object" && !Array.isArray(node)) {
-            for (const [fk, fv] of Object.entries(node)) {
-              if (["brightnessLevel", "contrastLevel", "saturationLevel", "sharpnessLevel", "hueLevel", "flipEnabled", "mirrorEnabled"].includes(fk)) {
-                flat.push({ fieldKey: fk.replace("Level", "").replace("Enabled", "Enabled"), value: fv, displayName: fk });
-              }
-            }
+    // NETWORK interface 1
+    try {
+      let net = await netsdkGet("/NetSDK/Network/interface/1");
+      // Some firmwares return array from list endpoint
+      if (Array.isArray(net)) net = net[0] || net;
+      state.netPayload = typeof net === "object" ? net : null;
+      if (state.netPayload) {
+        const lan = state.netPayload.lan || state.netPayload.Lan || {};
+        renderEditor(
+          "networkFields",
+          [
+            { key: "interfaceName", label: "Interface", type: "text", value: state.netPayload.interfaceName || "eth0" },
+            { key: "addressingType", label: "Addressing", type: "text", value: lan.addressingType ?? (lan.dhcp ? "dynamic" : "static") },
+            { key: "staticIP", label: "IP address", type: "text", value: lan.staticIP },
+            { key: "staticNetmask", label: "Netmask", type: "text", value: lan.staticNetmask },
+            { key: "staticGateway", label: "Gateway", type: "text", value: lan.staticGateway },
+            { key: "dhcp", label: "DHCP enabled", type: "bool", value: !!lan.dhcp },
+            { key: "mtu", label: "MTU", type: "number", value: lan.mtu ?? 1500, min: 576, max: 9000 },
+            { key: "upnp", label: "UPnP", type: "bool", value: !!(state.netPayload.upnp && state.netPayload.upnp.enabled) },
+          ],
+          "network"
+        );
+        $("networkStatus").textContent = "Loaded from /NetSDK/Network/interface/1";
+      } else {
+        // Fallback list
+        try {
+          const list = await netsdkGet("/NetSDK/Network/interface");
+          $("rawSettings").textContent = JSON.stringify(list, null, 2);
+          const first = Array.isArray(list) ? list[0] : list;
+          state.netPayload = first;
+          if (first?.lan) {
+            const lan = first.lan;
+            renderEditor(
+              "networkFields",
+              [
+                { key: "staticIP", label: "IP address", type: "text", value: lan.staticIP },
+                { key: "staticNetmask", label: "Netmask", type: "text", value: lan.staticNetmask },
+                { key: "staticGateway", label: "Gateway", type: "text", value: lan.staticGateway },
+                { key: "addressingType", label: "Addressing", type: "text", value: lan.addressingType },
+                { key: "dhcp", label: "DHCP", type: "bool", value: !!lan.dhcp },
+              ],
+              "network"
+            );
+            $("networkStatus").textContent = "Loaded from /NetSDK/Network/interface list";
+          } else {
+            renderEditor("networkFields", [], "network");
+            $("networkStatus").textContent = "No network interface payload.";
           }
+        } catch (e2) {
+          renderEditor("networkFields", [], "network");
+          $("networkStatus").textContent = "Network load failed: " + e2.message;
         }
-      } catch (e) {
-        $("rawSettings").textContent = e.message;
       }
-    } else {
-      $("rawSettings").textContent = JSON.stringify(state.typed, null, 2);
+    } catch (e) {
+      renderEditor("networkFields", [], "network");
+      $("networkStatus").textContent = "Network load failed: " + e.message;
     }
 
-    renderFieldEditors("imageFields", byKey(imageKeys).length ? byKey(imageKeys) : flat.filter((f) => /bright|contrast|sat|sharp|hue|flip|mirror|gamma|wdr|denoise/i.test(f.fieldKey || f.displayName || "")));
-    renderFieldEditors("streamFields", byKey(streamKeys).length ? byKey(streamKeys) : flat.filter((f) => /codec|resol|bit|frame|profile/i.test(f.fieldKey || f.displayName || "")));
-    renderFieldEditors("networkFields", byKey(networkKeys).length ? byKey(networkKeys) : flat.filter((f) => /ip|gateway|mask|wireless|dhcp|esee|dns/i.test(f.fieldKey || f.displayName || "")));
+    $("rawSettings").textContent = JSON.stringify(
+      {
+        image: state.imagePayload,
+        stream: state.streamPayload,
+        network: state.netPayload,
+        dirty: state.dirty,
+      },
+      null,
+      2
+    );
   }
 
   async function saveChanges() {
     if (!state.selectedId) return;
-    const changes = Object.entries(state.dirty).map(([fieldKey, value]) => ({ fieldKey, value }));
-    if (!changes.length) {
+    const keys = Object.keys(state.dirty);
+    if (!keys.length) {
       toast("No edits to save");
       return;
     }
     try {
-      const result = await req(`/api/devices/${state.selectedId}/settings/typed/apply-batch`, {
-        method: "POST",
-        body: JSON.stringify({ changes, expertOverride: true }),
-      });
-      state.dirty = {};
-      toast(`Saved ${Array.isArray(result) ? result.filter((r) => r.success).length : "?"} change(s)`);
-      await loadTyped();
-    } catch (e) {
-      // Fallback: direct write for brightness etc via video input channel
-      try {
-        await applyDirectNetSdkFallback(changes);
-        toast("Saved via NetSDK direct write");
-        state.dirty = {};
-        await loadTyped();
-      } catch (e2) {
-        toast(e2.message || e.message, false);
+      // Image
+      const imgKeys = keys.filter((k) => k.startsWith("image."));
+      if (imgKeys.length && state.imagePayload) {
+        const p = { ...state.imagePayload };
+        imgKeys.forEach((k) => {
+          const field = k.slice("image.".length);
+          p[field] = state.dirty[k];
+        });
+        await netsdkPut("/NetSDK/Video/input/channel/1", p);
       }
+      // Stream
+      const stKeys = keys.filter((k) => k.startsWith("stream."));
+      if (stKeys.length && state.streamPayload) {
+        const p = { ...state.streamPayload };
+        stKeys.forEach((k) => {
+          const field = k.slice("stream.".length);
+          p[field] = state.dirty[k];
+        });
+        await netsdkPut("/NetSDK/Video/encode/channel/101", p);
+      }
+      // Network
+      const netKeys = keys.filter((k) => k.startsWith("network."));
+      if (netKeys.length && state.netPayload) {
+        const p = JSON.parse(JSON.stringify(state.netPayload));
+        p.lan = p.lan || {};
+        netKeys.forEach((k) => {
+          const field = k.slice("network.".length);
+          if (field === "interfaceName") p.interfaceName = state.dirty[k];
+          else if (field === "upnp") p.upnp = { ...(p.upnp || {}), enabled: !!state.dirty[k] };
+          else p.lan[field] = state.dirty[k];
+        });
+        if (p.lan.dhcp === true) p.lan.addressingType = "dynamic";
+        if (p.lan.dhcp === false && !p.lan.addressingType) p.lan.addressingType = "static";
+        await netsdkPut("/NetSDK/Network/interface/1", p);
+      }
+      state.dirty = {};
+      toast("Settings saved to camera");
+      await loadDeviceSettings();
+    } catch (e) {
+      toast("Save failed: " + e.message, false);
     }
   }
 
-  async function applyDirectNetSdkFallback(changes) {
-    // Read full main image object, merge known fields, PUT back (durable on Juan).
-    const d = selected();
-    if (!d?.ipAddress) throw new Error("No device IP");
-    // Use service write API with full payload if possible
-    const map = Object.fromEntries(changes.map((c) => [c.fieldKey, c.value]));
-    const endpoint = "/NetSDK/Video/input/channel/1";
-    // GET via write plan GET through settings API is awkward; use typed apply expert already failed.
-    // Send PUT with known fields only through settings/write when we have payload from raw.
-    const snap = await req(`/api/devices/${d.id}/settings`);
-    const videoGroup = (snap.groups || []).find((g) => /video/i.test(g.name || ""));
-    let payload = null;
-    for (const [k, entry] of Object.entries(videoGroup?.values || {})) {
-      if (String(k).includes("/Video/input/channel/1") || String(k).endsWith("channel/1")) {
-        payload = entry?.value ?? entry;
-        break;
-      }
+  async function loadStoragePaths() {
+    try {
+      const p = await req("/api/storage/paths");
+      state.storage = {
+        continuousRecordings: p.continuousRecordings || p.ContinuousRecordings || "",
+        highlights: p.highlights || p.Highlights || "",
+        snapshots: p.snapshots || p.Snapshots || "",
+      };
+      $("pathContinuous").value = state.storage.continuousRecordings;
+      $("pathHighlights").value = state.storage.highlights;
+      $("pathSnapshots").value = state.storage.snapshots;
+      $("pathStatus").textContent = "Paths loaded from server.";
+    } catch (e) {
+      $("pathStatus").textContent = "Could not load paths: " + e.message;
     }
-    if (!payload || typeof payload !== "object") throw new Error("Could not load channel/1 payload for direct write");
-    const p = { ...payload };
-    if (map.brightness != null) p.brightnessLevel = Number(map.brightness);
-    if (map.brightnessLevel != null) p.brightnessLevel = Number(map.brightnessLevel);
-    if (map.contrast != null) p.contrastLevel = Number(map.contrast);
-    if (map.contrastLevel != null) p.contrastLevel = Number(map.contrastLevel);
-    if (map.saturation != null) p.saturationLevel = Number(map.saturation);
-    if (map.saturationLevel != null) p.saturationLevel = Number(map.saturationLevel);
-    if (map.sharpness != null) p.sharpnessLevel = Number(map.sharpness);
-    if (map.sharpnessLevel != null) p.sharpnessLevel = Number(map.sharpnessLevel);
-    if (map.hue != null) p.hueLevel = Number(map.hue);
-    if (map.flipEnabled != null) p.flipEnabled = !!map.flipEnabled;
-    if (map.mirrorEnabled != null) p.mirrorEnabled = !!map.mirrorEnabled;
-    await req(`/api/devices/${d.id}/settings/write`, {
-      method: "POST",
-      body: JSON.stringify({
-        endpoint,
-        method: "PUT",
-        payload: p,
-        requireWriteVerification: false,
-        snapshotBeforeWrite: true,
-      }),
-    });
+  }
+
+  async function saveStoragePaths() {
+    const body = {
+      continuousRecordings: $("pathContinuous").value.trim(),
+      highlights: $("pathHighlights").value.trim(),
+      snapshots: $("pathSnapshots").value.trim(),
+    };
+    if (!body.continuousRecordings || !body.highlights || !body.snapshots) {
+      toast("Fill all three folder paths", false);
+      return;
+    }
+    try {
+      const p = await req("/api/storage/paths", { method: "POST", body: JSON.stringify(body) });
+      state.storage = {
+        continuousRecordings: p.continuousRecordings || body.continuousRecordings,
+        highlights: p.highlights || body.highlights,
+        snapshots: p.snapshots || body.snapshots,
+      };
+      $("pathContinuous").value = state.storage.continuousRecordings;
+      $("pathHighlights").value = state.storage.highlights;
+      $("pathSnapshots").value = state.storage.snapshots;
+      toast("Save folders stored on server");
+      $("pathStatus").textContent = "Saved.";
+    } catch (e) {
+      toast(e.message, false);
+    }
+  }
+
+  function promptAllPaths() {
+    const c = prompt("Continuous recordings folder (server path):", $("pathContinuous").value);
+    if (c === null) return;
+    const h = prompt("Highlights folder (server path):", $("pathHighlights").value);
+    if (h === null) return;
+    const s = prompt("Snapshots folder (server path):", $("pathSnapshots").value);
+    if (s === null) return;
+    $("pathContinuous").value = c.trim();
+    $("pathHighlights").value = h.trim();
+    $("pathSnapshots").value = s.trim();
+    saveStoragePaths();
+  }
+
+  async function ensureContinuousPath() {
+    let path = $("pathContinuous").value.trim() || state.storage.continuousRecordings;
+    if (!path) {
+      path = prompt("Where should continuous recordings be saved? (server folder path)") || "";
+      if (!path.trim()) throw new Error("Recording folder required");
+      $("pathContinuous").value = path.trim();
+      await saveStoragePaths();
+      path = $("pathContinuous").value.trim();
+    }
+    return path;
+  }
+
+  async function ensureHighlightPath() {
+    let path = $("pathHighlights").value.trim() || state.storage.highlights;
+    if (!path) {
+      path = prompt("Where should highlight clips be saved? (server folder path)") || "";
+      if (!path.trim()) throw new Error("Highlights folder required");
+      $("pathHighlights").value = path.trim();
+      await saveStoragePaths();
+      path = $("pathHighlights").value.trim();
+    }
+    return path;
+  }
+
+  async function startRecording(deviceId) {
+    const id = deviceId || state.selectedId;
+    if (!id) return toast("Select a camera", false);
+    try {
+      const outputDirectory = await ensureContinuousPath();
+      const job = await req("/api/recordings/start", {
+        method: "POST",
+        body: JSON.stringify({ deviceId: id, outputDirectory }),
+      });
+      toast(`Recording → ${job.outputDirectory || outputDirectory}`);
+      await refreshRec();
+    } catch (e) {
+      toast(e.message, false);
+    }
+  }
+
+  async function saveSnapshot(deviceId) {
+    const id = deviceId || state.selectedId;
+    if (!id) return toast("Select a camera", false);
+    try {
+      // Ensure snapshot folder is set
+      if (!$("pathSnapshots").value.trim()) {
+        const s = prompt("Where should snapshots be saved? (server folder path)", state.storage.snapshots || "");
+        if (!s) return;
+        $("pathSnapshots").value = s.trim();
+        await saveStoragePaths();
+      }
+      const result = await req(`/api/storage/save-snapshot/${id}`, { method: "POST", body: "{}" });
+      toast(`Snapshot saved: ${result.path || "ok"}`);
+    } catch (e) {
+      // Fallback: open snapshot in new tab for manual save
+      window.open(snapUrl(id), "_blank");
+      toast("Server save failed — opened snapshot in new tab: " + e.message, false);
+    }
   }
 
   async function refreshRec() {
@@ -340,7 +704,7 @@
       $("recJobs").textContent = e.message;
     }
     try {
-      $("recIndex").textContent = JSON.stringify(await req("/api/recordings/index?limit=30"), null, 2);
+      $("recIndex").textContent = JSON.stringify(await req("/api/recordings/index?limit=40"), null, 2);
     } catch (e) {
       $("recIndex").textContent = e.message;
     }
@@ -358,11 +722,11 @@
         const div = document.createElement("div");
         div.className = "tile" + (i === s.selectedIndex ? " selected" : "");
         div.innerHTML = `<strong>${esc(t.displayName)}</strong>
-          <div class="sub">${esc(t.ipAddress)} · ${esc(t.hardwareModel || "")}</div>
-          <div class="sub">${esc((t.recordUrl || t.liveUrl || "").slice(0, 80))}</div>`;
+          <div class="sub">${esc(t.ipAddress)} · ${esc(t.hardwareModel || "")}</div>`;
         div.onclick = async () => {
           await req(`/api/highlights/select/${t.deviceId}`, { method: "POST" });
           await loadHighlights();
+          await selectDevice(t.deviceId);
         };
         tiles.appendChild(div);
       });
@@ -378,13 +742,35 @@
         document.querySelectorAll(".panel").forEach((p) => p.classList.remove("active"));
         btn.classList.add("active");
         $("tab-" + btn.dataset.tab).classList.add("active");
-        if (btn.dataset.tab === "record") refreshRec();
+        if (btn.dataset.tab === "viewall") {
+          renderViewGrid();
+          scheduleLiveRefresh();
+        }
+        if (btn.dataset.tab === "record") {
+          loadStoragePaths();
+          refreshRec();
+        }
         if (btn.dataset.tab === "highlights") loadHighlights();
+        if (btn.dataset.tab === "image" || btn.dataset.tab === "stream" || btn.dataset.tab === "network") {
+          loadDeviceSettings();
+        }
       };
     });
   }
 
   function bindActions() {
+    document.querySelectorAll("#layoutBtns button").forEach((b) => {
+      b.onclick = () => setLayout(Number(b.dataset.layout));
+    });
+    $("liveRefresh").onchange = scheduleLiveRefresh;
+    $("liveInterval").onchange = scheduleLiveRefresh;
+    $("btnResetOrder").onclick = () => {
+      localStorage.removeItem(LS_ORDER);
+      syncOrder();
+      renderViewGrid();
+      toast("View order reset");
+    };
+
     $("btnRefresh").onclick = () => loadDevices().then(() => toast("Refreshed"));
     $("btnDiscover").onclick = async () => {
       try {
@@ -430,21 +816,34 @@
       }
     };
     $("btnSave").onclick = () => saveChanges();
-    $("btnRefreshSettings").onclick = () => loadTyped().then(() => toast("Settings reloaded"));
-    $("btnSnapshot").onclick = () => loadSnapshot();
-    $("btnRecStart").onclick = async () => {
-      try {
-        await req("/api/recordings/start", { method: "POST", body: JSON.stringify({ deviceId: state.selectedId }) });
-        toast("Recording started (high-res main)");
-        await refreshRec();
-      } catch (e) {
-        toast(e.message, false);
-      }
+    $("btnRefreshSettings").onclick = () => loadDeviceSettings().then(() => toast("Settings reloaded"));
+    $("btnSnapshot").onclick = () => saveSnapshot();
+
+    $("btnSavePaths").onclick = () => saveStoragePaths();
+    $("btnPromptPaths").onclick = () => promptAllPaths();
+    $("btnPathContDefault").onclick = async () => {
+      await loadStoragePaths();
+      toast("Defaults reloaded from server");
     };
+    $("btnPathHlDefault").onclick = () => $("btnPathContDefault").onclick();
+    $("btnPathSnapDefault").onclick = () => $("btnPathContDefault").onclick();
+
+    $("btnRecStart").onclick = () => startRecording();
     $("btnRecStartAll").onclick = async () => {
       try {
-        await req("/api/recordings/start-all", { method: "POST" });
-        toast("Started all IPC recordings");
+        const outputDirectory = await ensureContinuousPath();
+        // Start each device into continuous folder
+        for (const d of state.devices) {
+          try {
+            await req("/api/recordings/start", {
+              method: "POST",
+              body: JSON.stringify({ deviceId: d.id, outputDirectory: `${outputDirectory}/${(d.ipAddress || d.id).replace(/\./g, "_")}` }),
+            });
+          } catch (e) {
+            console.warn("start failed", d.ipAddress, e);
+          }
+        }
+        toast("Started recordings for registered cameras");
         await refreshRec();
       } catch (e) {
         toast(e.message, false);
@@ -468,6 +867,7 @@
         toast(e.message, false);
       }
     };
+
     $("btnHlNext").onclick = async () => {
       await req("/api/highlights/next", { method: "POST" });
       await loadHighlights();
@@ -486,8 +886,15 @@
     };
     $("btnHlRec").onclick = async () => {
       try {
-        await req("/api/highlights/record-selected", { method: "POST" });
-        toast("Highlight recording started");
+        const hl = await req("/api/highlights");
+        const id = hl.selectedDeviceId || hl.selected?.deviceId;
+        if (!id) return toast("No highlight selected", false);
+        const outputDirectory = await ensureHighlightPath();
+        await req("/api/recordings/start", {
+          method: "POST",
+          body: JSON.stringify({ deviceId: id, outputDirectory }),
+        });
+        toast("Highlight recording started → " + outputDirectory);
       } catch (e) {
         toast(e.message, false);
       }
@@ -495,18 +902,22 @@
   }
 
   async function boot() {
+    if (![1, 2, 4, 5, 6, 7, 8].includes(state.layout)) state.layout = 4;
     bindTabs();
     bindActions();
-    $("platformInfo").textContent = `Operator UI: Linux-native web console\nAPI: ${location.origin}\nUser agent: ${navigator.userAgent}`;
+    setLayout(state.layout);
+    $("platformInfo").textContent = `Operator UI: multi-view live board\nAPI: ${location.origin}\nUA: ${navigator.userAgent}`;
     try {
       const h = await req("/api/health");
-      $("healthLine").textContent = `API ok · ${h.timestamp || ""}`;
+      $("healthLine").textContent = `API ok · ${h.platform || ""} · ${h.timestamp || ""}`;
     } catch {
       $("healthLine").textContent = "API unreachable";
     }
+    await loadStoragePaths();
     await loadDevices();
     await loadHighlights();
     await refreshRec();
+    scheduleLiveRefresh();
   }
 
   boot();

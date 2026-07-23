@@ -656,19 +656,32 @@ public sealed class RecordingService(
             ? profiles.FirstOrDefault(item => item.Id == id)
             : profiles.OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase).FirstOrDefault();
 
+        var overrideDir = string.IsNullOrWhiteSpace(request.OutputDirectory)
+            ? null
+            : Path.GetFullPath(request.OutputDirectory.Trim());
+
         if (profile is not null)
         {
-            // Keep existing custom directories; clamp overly-long segment times so files finalize often.
-            if (profile.SegmentSeconds > 120)
+            var next = profile;
+            if (next.SegmentSeconds > 120)
             {
-                profile = profile with { SegmentSeconds = 30, UpdatedAt = DateTimeOffset.UtcNow };
-                await store.SaveRecordingProfilesAsync([profile], cancellationToken);
+                next = next with { SegmentSeconds = 30, UpdatedAt = DateTimeOffset.UtcNow };
             }
 
-            return profile;
+            if (overrideDir is not null && !string.Equals(next.OutputDirectory, overrideDir, StringComparison.Ordinal))
+            {
+                next = next with { OutputDirectory = overrideDir, UpdatedAt = DateTimeOffset.UtcNow };
+            }
+
+            if (!ReferenceEquals(next, profile))
+            {
+                await store.SaveRecordingProfilesAsync([next], cancellationToken);
+            }
+
+            return next;
         }
 
-        var outputDirectory = Path.Combine(
+        var outputDirectory = overrideDir ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "BossCamSuite",
             "recordings",

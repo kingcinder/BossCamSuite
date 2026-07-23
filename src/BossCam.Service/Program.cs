@@ -360,6 +360,117 @@ app.MapPost("/api/devices/{id:guid}/grouped-config/force-enumerate-sdk-fields", 
     Results.Ok(await groupedConfigService.ForceEnumerateSdkFieldsAsync(id, request ?? new ForcedEnumerationRequest(), ct)));
 app.MapPost("/api/devices/{id:guid}/network/recovery", async (Guid id, NetworkRecoveryContext context, SemanticTrustService semanticTrustService, CancellationToken ct) =>
     Results.Ok(await semanticTrustService.RecoverNetworkAsync(context with { DeviceId = id }, ct)));
+
+// Operator media folders (continuous / highlights / snapshots)
+static string MediaStorageConfigPath()
+{
+    var root = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "BossCamSuite");
+    Directory.CreateDirectory(root);
+    return Path.Combine(root, "media-storage.json");
+}
+
+static MediaStoragePaths DefaultMediaStoragePaths()
+{
+    var root = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "BossCamSuite");
+    return new MediaStoragePaths
+    {
+        ContinuousRecordings = Path.Combine(root, "recordings", "continuous"),
+        Highlights = Path.Combine(root, "recordings", "highlights"),
+        Snapshots = Path.Combine(root, "snapshots")
+    };
+}
+
+static MediaStoragePaths LoadMediaStoragePaths()
+{
+    var path = MediaStorageConfigPath();
+    if (!File.Exists(path))
+    {
+        var defaults = DefaultMediaStoragePaths();
+        Directory.CreateDirectory(defaults.ContinuousRecordings);
+        Directory.CreateDirectory(defaults.Highlights);
+        Directory.CreateDirectory(defaults.Snapshots);
+        File.WriteAllText(path, System.Text.Json.JsonSerializer.Serialize(defaults, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+        return defaults;
+    }
+
+    try
+    {
+        var loaded = System.Text.Json.JsonSerializer.Deserialize<MediaStoragePaths>(File.ReadAllText(path));
+        return loaded ?? DefaultMediaStoragePaths();
+    }
+    catch
+    {
+        return DefaultMediaStoragePaths();
+    }
+}
+
+app.MapGet("/api/storage/paths", () => Results.Ok(LoadMediaStoragePaths()));
+app.MapPost("/api/storage/paths", (MediaStoragePaths paths) =>
+{
+    if (string.IsNullOrWhiteSpace(paths.ContinuousRecordings)
+        || string.IsNullOrWhiteSpace(paths.Highlights)
+        || string.IsNullOrWhiteSpace(paths.Snapshots))
+    {
+        return Results.BadRequest(new { error = "ContinuousRecordings, Highlights, and Snapshots paths are required." });
+    }
+
+    var normalized = new MediaStoragePaths
+    {
+        ContinuousRecordings = Path.GetFullPath(paths.ContinuousRecordings.Trim()),
+        Highlights = Path.GetFullPath(paths.Highlights.Trim()),
+        Snapshots = Path.GetFullPath(paths.Snapshots.Trim())
+    };
+    Directory.CreateDirectory(normalized.ContinuousRecordings);
+    Directory.CreateDirectory(normalized.Highlights);
+    Directory.CreateDirectory(normalized.Snapshots);
+    File.WriteAllText(MediaStorageConfigPath(), System.Text.Json.JsonSerializer.Serialize(normalized, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+    return Results.Ok(normalized);
+});
+
+app.MapPost("/api/storage/save-snapshot/{id:guid}", async (Guid id, IApplicationStore store, CancellationToken ct) =>
+{
+    var device = await store.GetDeviceAsync(id, ct);
+    if (device is null || string.IsNullOrWhiteSpace(device.IpAddress))
+    {
+        return Results.NotFound(new { error = "Device not found." });
+    }
+
+    var paths = LoadMediaStoragePaths();
+    Directory.CreateDirectory(paths.Snapshots);
+    // Reuse proxy by fetching snapShot then writing
+    var user = string.IsNullOrWhiteSpace(device.LoginName) ? "admin" : device.LoginName;
+    var password = device.Password ?? string.Empty;
+    var port = device.Port <= 0 ? 80 : device.Port;
+    var token = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{user}:{password}"));
+    using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+    using var request = new HttpRequestMessage(HttpMethod.Get, $"http://{device.IpAddress}:{port}/NetSDK/Video/encode/channel/101/snapShot");
+    request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", token);
+    using var response = await client.SendAsync(request, ct);
+    byte[] bytes;
+    if (response.IsSuccessStatusCode)
+    {
+        bytes = await response.Content.ReadAsByteArrayAsync(ct);
+    }
+    else
+    {
+        return Results.StatusCode((int)response.StatusCode);
+    }
+
+    if (bytes.Length < 500)
+    {
+        return Results.BadRequest(new { error = "Snapshot payload too small." });
+    }
+
+    var name = $"{(device.IpAddress ?? id.ToString("N")).Replace('.', '_')}_{DateTimeOffset.Now:yyyyMMdd_HHmmss}.jpg";
+    var filePath = Path.Combine(paths.Snapshots, name);
+    await File.WriteAllBytesAsync(filePath, bytes, ct);
+    return Results.Ok(new { path = filePath, bytes = bytes.Length });
+});
+
 app.MapGet("/api/recordings", async (Guid? deviceId, IApplicationStore store, CancellationToken ct) => Results.Ok(await store.GetRecordingProfilesAsync(deviceId, ct)));
 app.MapPost("/api/recordings", async (IEnumerable<RecordingProfile> profiles, IApplicationStore store, CancellationToken ct) =>
 {
