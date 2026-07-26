@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using BossCam.Contracts;
 using BossCam.Core;
+using BossCam.Core.Utilities;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -56,15 +57,12 @@ public sealed class MultiBrandHighResTransportAdapter(
         }
 
         // --- ONVIF discovery of stream URIs (high-res first) ---
-        try
-        {
-            var onvifSources = await DiscoverOnvifStreamsAsync(device, user, password, cancellationToken);
-            sources.AddRange(onvifSources);
-        }
-        catch (Exception ex)
-        {
-            logger.LogDebug(ex, "ONVIF stream discovery failed for {Ip}", device.IpAddress);
-        }
+        // DiscoverOnvifStreamsAsync already swallows per-port failure internally via SoapAsync
+        // (which uses ProbeExceptionSwallow underneath), so no outer wrap is needed here. Wrapping
+        // again would have introduced CS8619 (nullable mismatch with the non-nullable
+        // IReadOnlyCollection<...> return) and added a redundant log line per call.
+        var onvifSources = await DiscoverOnvifStreamsAsync(device, user, password, cancellationToken);
+        sources.AddRange(onvifSources);
 
         // Prefer authenticated unique URLs, main rank lowest number wins.
         return sources
@@ -81,7 +79,13 @@ public sealed class MultiBrandHighResTransportAdapter(
         CancellationToken cancellationToken)
     {
         var results = new List<VideoSourceDescriptor>();
-        var ports = new[] { 8888, 8899, device.Port <= 0 ? 80 : device.Port, 80 }
+        // Canonical ONVIF probe ports, ordered WVC (8899) → Dahua media (8888) → OEM HTTP (80),
+        // with device.Port appended as a brand-specific tail when non-zero. Tuple form
+        // avoids an extra allocation per Distinct.
+        var devicePort = device.Port > 0 ? device.Port : 0;
+        var ports = options.Value.OnvifProbePorts
+            .Append(devicePort)
+            .Where(p => p > 0)
             .Distinct()
             .ToArray();
 
@@ -199,7 +203,7 @@ public sealed class MultiBrandHighResTransportAdapter(
         return results;
     }
 
-    private async Task<string?> SoapAsync(string url, string bodyInner, string user, string password, CancellationToken cancellationToken)
+    private Task<string?> SoapAsync(string url, string bodyInner, string user, string password, CancellationToken cancellationToken)
     {
         var envelope = $"""
             <?xml version="1.0" encoding="UTF-8"?>
@@ -207,25 +211,24 @@ public sealed class MultiBrandHighResTransportAdapter(
               <s:Body>{bodyInner}</s:Body>
             </s:Envelope>
             """;
-        try
-        {
-            using var handler = new HttpClientHandler
+        return ProbeExceptionSwallow.RunAsync(
+            async () =>
             {
-                Credentials = new NetworkCredential(user, password),
-                PreAuthenticate = false
-            };
-            using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(Math.Max(3, options.Value.HttpTimeoutSeconds)) };
-            using var request = new HttpRequestMessage(HttpMethod.Post, url);
-            request.Content = new StringContent(envelope, Encoding.UTF8, "application/soap+xml");
-            var token = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{user}:{password}"));
-            request.Headers.TryAddWithoutValidation("Authorization", $"Basic {token}");
-            using var response = await client.SendAsync(request, cancellationToken);
-            return await response.Content.ReadAsStringAsync(cancellationToken);
-        }
-        catch
-        {
-            return null;
-        }
+                using var handler = new HttpClientHandler
+                {
+                    Credentials = new NetworkCredential(user, password),
+                    PreAuthenticate = false
+                };
+                using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(Math.Max(3, options.Value.HttpTimeoutSeconds)) };
+                using var request = new HttpRequestMessage(HttpMethod.Post, url);
+                request.Content = new StringContent(envelope, Encoding.UTF8, "application/soap+xml");
+                var token = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{user}:{password}"));
+                request.Headers.TryAddWithoutValidation("Authorization", $"Basic {token}");
+                using var response = await client.SendAsync(request, cancellationToken);
+                return await response.Content.ReadAsStringAsync(cancellationToken);
+            },
+            logger,
+            $"SOAP POST {url}");
     }
 
     private static string? ExtractTag(string? xml, string localName)
@@ -318,10 +321,18 @@ public enum CameraBrand
 /// <summary>
 /// Dahua/Lorex HTTP CGI control adapter (Digest). Settings map to configManager.cgi encode/main stream.
 /// </summary>
+// CS9107: primary-constructor parameter 'options' is captured into a hidden field for this
+// derived class AND passed to HttpControlAdapterBase, which stores its own copy. The two
+// references are the same IOptions<BossCamRuntimeOptions> instance, so there is no behavior
+// cost to the duplication. Accepted by Roslyn as an informational warning on the standard
+// primary-constructor-with-base-pass pattern; refactoring away would require a non-primary
+// constructor with explicit field duplication for no functional gain.
+#pragma warning disable CS9107
 public sealed class DahuaLorexControlAdapter(
     IOptions<BossCamRuntimeOptions> options,
     ILogger<DahuaLorexControlAdapter> logger) : BossCam.Infrastructure.Control.HttpControlAdapterBase(options, logger), IControlAdapter
 {
+#pragma warning restore CS9107
     // options forwarded to HttpControlAdapterBase for timeout/config.
     public string Name => nameof(DahuaLorexControlAdapter);
     public int Priority => 25;
@@ -334,8 +345,6 @@ public sealed class DahuaLorexControlAdapter(
             return false;
         }
 
-        _ = Options.HttpTimeoutSeconds; // ensure runtime options are bound on Linux hosts
-
         // Lorex web shell or magicBox endpoint presence.
         var response = await SendAsync(device, "/cgi-bin/magicBox.cgi?action=getDeviceType", "GET", null, cancellationToken);
         if (response is not null && (int)response.StatusCode is 200 or 401)
@@ -345,7 +354,7 @@ public sealed class DahuaLorexControlAdapter(
 
         try
         {
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(Math.Max(2, options.Value.HttpTimeoutSeconds / 2)) };
             var html = await client.GetStringAsync($"http://{device.IpAddress}:{device.Port}/", cancellationToken);
             return html.Contains("flirLorex", StringComparison.OrdinalIgnoreCase)
                 || html.Contains("WEB SERVICE", StringComparison.OrdinalIgnoreCase);
@@ -462,25 +471,31 @@ public sealed class OnvifImagingControlAdapter(
             return false;
         }
 
-        foreach (var port in new[] { 8899, 8888, device.Port <= 0 ? 80 : device.Port })
+        var devicePort = device.Port > 0 ? device.Port : 0;
+        var ports = options.Value.OnvifProbePorts
+            .Append(devicePort)
+            .Where(p => p > 0)
+            .Distinct();
+        foreach (var port in ports)
         {
-            try
-            {
-                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
-                using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                cts.CancelAfter(TimeSpan.FromSeconds(2));
-                var xml = await PostSoapAsync(client, $"http://{device.IpAddress}:{port}/onvif/device_service",
+            // Fast brand-check across multiple ports — tighten to half of HttpTimeoutSeconds
+            // so the worst-case scan across 3 ports stays bounded even at slow LANs.
+            // NOTE: Do NOT 'tidy' the /2 divisor into a uniform per-class timeout; the tight
+            // bound is intentional for this multi-port brand-probing scan.
+            var probeTimeout = TimeSpan.FromSeconds(Math.Max(2, options.Value.HttpTimeoutSeconds / 2));
+            using var client = new HttpClient { Timeout = probeTimeout };
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            cts.CancelAfter(probeTimeout);
+            var xml = await ProbeExceptionSwallow.RunAsync(
+                () => PostSoapAsync(client, $"http://{device.IpAddress}:{port}/onvif/device_service",
                     """<tds:GetDeviceInformation xmlns:tds="http://www.onvif.org/ver10/device/wsdl"/>""",
-                    device, cts.Token);
-                if (xml?.Contains("Manufacturer", StringComparison.OrdinalIgnoreCase) == true)
-                {
-                    logger.LogDebug("ONVIF device service reachable on {Ip}:{Port}", device.IpAddress, port);
-                    return true;
-                }
-            }
-            catch (Exception ex)
+                    device, cts.Token),
+                logger,
+                $"ONVIF probe miss {device.IpAddress}:{port}");
+            if (xml?.Contains("Manufacturer", StringComparison.OrdinalIgnoreCase) == true)
             {
-                logger.LogDebug(ex, "ONVIF probe miss {Ip}:{Port}", device.IpAddress, port);
+                logger.LogDebug("ONVIF device service reachable on {Ip}:{Port}", device.IpAddress, port);
+                return true;
             }
         }
 
@@ -490,30 +505,32 @@ public sealed class OnvifImagingControlAdapter(
     public async Task<CapabilityMap> ProbeAsync(DeviceIdentity device, CancellationToken cancellationToken)
     {
         string? manufacturer = null, model = null, firmware = null, serial = null;
-        foreach (var port in new[] { 8899, 8888, 80 })
+        foreach (var port in options.Value.OnvifProbePorts)
         {
-            try
+            // Per-port ONVIF GetDeviceInformation query — use the full HttpTimeoutSeconds so
+            // each port attempt is properly patient.
+            using var client = new HttpClient
             {
-                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
-                var xml = await PostSoapAsync(client, $"http://{device.IpAddress}:{port}/onvif/device_service",
+                Timeout = TimeSpan.FromSeconds(Math.Max(2, options.Value.HttpTimeoutSeconds))
+            };
+            var xml = await ProbeExceptionSwallow.RunAsync(
+                () => PostSoapAsync(client, $"http://{device.IpAddress}:{port}/onvif/device_service",
                     """<tds:GetDeviceInformation xmlns:tds="http://www.onvif.org/ver10/device/wsdl"/>""",
-                    device, cancellationToken);
-                if (xml is null)
-                {
-                    continue;
-                }
-
-                manufacturer = Extract(xml, "Manufacturer") ?? manufacturer;
-                model = Extract(xml, "Model") ?? model;
-                firmware = Extract(xml, "FirmwareVersion") ?? firmware;
-                serial = Extract(xml, "SerialNumber") ?? serial;
-                if (manufacturer is not null)
-                {
-                    break;
-                }
-            }
-            catch
+                    device, cancellationToken),
+                logger,
+                $"ONVIF device-info probe miss {device.IpAddress}:{port}");
+            if (xml is null)
             {
+                continue;
+            }
+
+            manufacturer = Extract(xml, "Manufacturer") ?? manufacturer;
+            model = Extract(xml, "Model") ?? model;
+            firmware = Extract(xml, "FirmwareVersion") ?? firmware;
+            serial = Extract(xml, "SerialNumber") ?? serial;
+            if (manufacturer is not null)
+            {
+                break;
             }
         }
 

@@ -4,6 +4,7 @@ using BossCam.Core;
 using BossCam.Infrastructure;
 using BossCam.NativeBridge;
 using BossCam.Service.Hosted;
+using BossCam.Service.Security;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -25,7 +26,7 @@ else if (OperatingSystem.IsLinux())
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
+ConfigureCors(builder);
 builder.Services.AddBossCamInfrastructure(builder.Configuration);
 builder.Services.AddBossCamCore();
 builder.Services.AddHostedService<BossCamBootstrapWorker>();
@@ -35,9 +36,66 @@ var app = builder.Build();
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
+app.UseCors();
+
+// ----- Host-aware LAN gate wiring (post-build, post-config-merge) ----------
+// Reading IConfiguration AFTER builder.Build() ensures WebApplicationFactory
+// in-memory overrides + Linux appsettings overlays have been merged. Reading
+// at top-of-file would see only the JSON defaults and miss the test override.
+var finalLocalApiBaseUrl = app.Configuration["BossCam:LocalApiBaseUrl"] ?? localApiBaseUrl;
+var lanBound = BindAddressInspector.IsAnyNonLoopback(finalLocalApiBaseUrl);
+// Source order is intentional: documented primary source first (env var),
+// config fallback second so deployments using BossCam:LanAuthToken keep working.
+var lanEnvToken = Environment.GetEnvironmentVariable("BOSSCAM_LAN_TOKEN");
+var lanCfgToken = app.Configuration["BossCam:LanAuthToken"];
+var lanResolvedToken = !string.IsNullOrEmpty(lanEnvToken)
+    ? lanEnvToken
+    : (!string.IsNullOrEmpty(lanCfgToken) ? lanCfgToken : null);
+
+// Fail-fast: a non-loopback bind WITHOUT a token would expose the entire /api
+// surface and /swagger on the LAN with no authentication.
+if (lanBound && lanResolvedToken is null)
+{
+    throw new InvalidOperationException(
+        "BossCamService refuses to start: bound to a non-loopback interface " +
+        "(BossCam:LocalApiBaseUrl='" + finalLocalApiBaseUrl + "') but no LAN bearer " +
+        "token is configured.\n" +
+        "Generate one with:   openssl rand -hex 32\n" +
+        "Then export it:      BOSSCAM_LAN_TOKEN='<token>'\n" +
+        "Or rebind to loopback: BossCam:LocalApiBaseUrl='http://127.0.0.1:5317'.\n" +
+        "Without this protection the LAN could read /api/devices, /api/recordings, " +
+        "/api/devices/{id}/settings/write, and the Swagger UI/anonymously.");
+}
+
+if (lanResolvedToken is not null)
+{
+    if (!lanBound && !string.IsNullOrEmpty(lanEnvToken))
+    {
+        // Env var set but service still bound to loopback: token would never be
+        // checked. Warn loudly so an operator who sets BOSSCAM_LAN_TOKEN while
+        // bound to 127.0.0.1 doesn't silently believe they're protected.
+        app.Logger.LogWarning(
+            "BOSSCAM_LAN_TOKEN is set but the service is bound to a loopback address ('{Bind}'). " +
+            "The token is loaded but is only required when an interface-facing address is bound. " +
+            "To enforce auth, change BossCam:LocalApiBaseUrl to a non-loopback host (or set BOSSCAM_BIND).",
+            finalLocalApiBaseUrl);
+    }
+    app.UseLanBoundTokenGate(lanResolvedToken);
+}
+
 app.UseSwagger();
 app.UseSwaggerUI();
-app.UseCors();
+
+static void ConfigureCors(WebApplicationBuilder webBuilder)
+{
+    // ConfigureCors runs BEFORE the host-aware gate has resolved, so it can't yet
+    // know whether BOSSCAM_LAN_TOKEN will be set. Default dev mode (loopback bind)
+    // keeps the historical permissive policy; the host-aware gate below will tighten
+    // behaviour at request time (middleware rejects) and the operator can further
+    // restrict BossCam:AllowedOrigins if they need cross-origin browser access.
+    webBuilder.Services.AddCors(options => options.AddDefaultPolicy(
+        policy => policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
+}
 
 app.MapGet("/api/health", () => Results.Ok(new
 {

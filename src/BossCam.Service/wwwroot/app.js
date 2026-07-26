@@ -1,6 +1,7 @@
 (() => {
   const LS_ORDER = "bosscam.viewOrder";
   const LS_LAYOUT = "bosscam.viewLayout";
+  const LS_LAN_TOKEN = "bosscam.lanToken";
 
   const state = {
     devices: [],
@@ -8,6 +9,7 @@
     order: [], // device ids in display order
     layout: Number(localStorage.getItem(LS_LAYOUT) || 4),
     liveTimer: null,
+    liveRefreshEnabled: true,
     dirty: {},
     netPayload: null,
     imagePayload: null,
@@ -36,10 +38,46 @@
       .replaceAll('"', "&quot;");
 
   async function req(path, opts = {}) {
-    const res = await fetch(path, {
-      headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
-      ...opts,
-    });
+    const send = async () => {
+      const headers = { "Content-Type": "application/json", ...(opts.headers || {}) };
+      const token = localStorage.getItem(LS_LAN_TOKEN);
+      if (token && !path.startsWith("/api/auth/whoami")) headers["X-LAN-Token"] = token;
+      return await fetch(path, { headers, ...opts });
+    };
+    let res = await send();
+    if (res.status === 401 && path.startsWith("/api")) {
+      // LAN auth gate: prompt the operator once. Only persist the token AFTER the retry
+      // succeeds so a wrong entry isn't cached and re-sent on every subsequent request.
+      const entered =
+        typeof window !== "undefined" && window.prompt
+          ? window.prompt(
+              "LAN token required for " +
+                path +
+                ". Enter the token configured on the BossCamSuite host (Cancel to abort)."
+            )
+          : null;
+      if (entered && entered.trim()) {
+        const candidate = entered.trim();
+        const probe = await fetch(path, {
+          headers: {
+            "Content-Type": "application/json",
+            ...(opts.headers || {}),
+            "X-LAN-Token": candidate,
+          },
+          ...opts,
+        });
+        if (probe.ok) {
+          localStorage.setItem(LS_LAN_TOKEN, candidate);
+          res = probe;
+        } else {
+          localStorage.removeItem(LS_LAN_TOKEN);
+          res = probe;
+        }
+      } else {
+        // Caller will surface the 401 below; transparent to user code.
+        localStorage.removeItem(LS_LAN_TOKEN);
+      }
+    }
     if (!res.ok) {
       const text = await res.text();
       throw new Error(text || `${res.status} ${res.statusText}`);
@@ -232,18 +270,22 @@
   }
 
   function scheduleLiveRefresh() {
-    // Continuous MJPEG does not need interval polling.
+    // Continuous MJPEG streams drive per-tile frames; this legacy polling is only
+    // useful for the single Device-tab overview snapshot. Honor the visible
+    // #liveInterval control so 1s/2s/5s/10s picks actually take effect, and gate
+    // the whole timer on the #liveRefresh checkbox so a user can pause it.
     if (state.liveTimer) {
       clearInterval(state.liveTimer);
       state.liveTimer = null;
     }
-    // Optional: only refresh the single overview snap if that tab is open
-    if (state.liveTimer) return;
+    if (!state.liveRefreshEnabled) return;
+    if (!($("tab-overview") && $("tab-overview").classList.contains("active"))) return;
+    const ms = Number($("liveInterval") && $("liveInterval").value) || 2000;
     state.liveTimer = setInterval(() => {
-      if ($("tab-overview")?.classList.contains("active") && state.selectedId) {
+      if ($("tab-overview") && $("tab-overview").classList.contains("active") && state.selectedId) {
         loadSnapshotPreview();
       }
-    }, 2000);
+    }, ms);
   }
 
   async function loadDevices() {
@@ -778,7 +820,11 @@
     document.querySelectorAll("#layoutBtns button").forEach((b) => {
       b.onclick = () => setLayout(Number(b.dataset.layout));
     });
-    if ($("liveRefresh")) $("liveRefresh").onchange = () => { attachLiveStreams(); scheduleLiveRefresh(); };
+    if ($("liveRefresh")) $("liveRefresh").onchange = (e) => {
+      state.liveRefreshEnabled = !!e.target.checked;
+      attachLiveStreams();
+      scheduleLiveRefresh();
+    };
     if ($("liveInterval")) $("liveInterval").onchange = scheduleLiveRefresh;
     if ($("streamQuality")) $("streamQuality").onchange = () => { attachLiveStreams(); loadSnapshotPreview(); };
     $("btnResetOrder").onclick = () => {
@@ -918,7 +964,7 @@
     };
   }
 
-  async function boot() {
+  async  function boot() {
     if (![1, 2, 4, 5, 6, 7, 8].includes(state.layout)) state.layout = 4;
     bindTabs();
     bindActions();
@@ -930,10 +976,12 @@
     } catch {
       $("healthLine").textContent = "API unreachable";
     }
-    await loadStoragePaths();
-    await loadDevices();
-    await loadHighlights();
-    await refreshRec();
+    loadStoragePaths().catch(() => {});
+    loadDevices().catch((e) =>
+      $("healthLine").textContent = "Devices load failed: " + e.message
+    );
+    loadHighlights().catch(() => {});
+    refreshRec().catch(() => {});
     scheduleLiveRefresh();
   }
 

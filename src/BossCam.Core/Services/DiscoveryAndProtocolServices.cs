@@ -1,5 +1,7 @@
 using BossCam.Contracts;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace BossCam.Core;
 
@@ -7,11 +9,40 @@ public sealed class DiscoveryCoordinator(
     IEnumerable<IDiscoveryProvider> discoveryProviders,
     IEnumerable<IDeviceImportProvider> importProviders,
     IApplicationStore store,
+    IHostEnvironment environment,
+    IOptions<BossCamRuntimeOptions> options,
     ILogger<DiscoveryCoordinator> logger)
 {
     public async Task<IReadOnlyCollection<DeviceIdentity>> RunAsync(CancellationToken cancellationToken)
     {
         var all = new List<DeviceIdentity>();
+
+        // Offline / E2E gate. Three independent triggers, any of which engages the gate:
+        //   1. IHostEnvironment.IsDevelopment() (set by WebApplicationFactory.UseEnvironment or ASPNETCORE_ENVIRONMENT).
+        //   2. Explicit BossCamRuntimeOptions.DiscoveryOfflineMode = true (factory-set for tests).
+        //   3. BOSSCAM_E2E_LIVE=0 env var (matches scripts/run-exhaustive-ubuntu-e2e.sh export).
+        // The gate is only honoured while NONE of them is set when running in Development: a
+        // production shell (IsDevelopment==false, no flag, no env var) NEVER skips discovery.
+        var isDevelopment = environment.IsDevelopment();
+        var flagOffline = options.Value.DiscoveryOfflineMode;
+        var envOffline = string.Equals(
+            Environment.GetEnvironmentVariable("BOSSCAM_E2E_LIVE"),
+            "0",
+            StringComparison.OrdinalIgnoreCase);
+        if ((isDevelopment && (flagOffline || envOffline)) || (!isDevelopment && flagOffline))
+        {
+            all.AddRange(await store.GetDevicesAsync(cancellationToken));
+            if (flagOffline)
+            {
+                logger.LogInformation("DiscoveryCoordinator skipped providers: BossCam:DiscoveryOfflineMode=true.");
+            }
+            else
+            {
+                logger.LogInformation("DiscoveryCoordinator skipped providers: BOSSCAM_E2E_LIVE=0 (Development).");
+            }
+            return all;
+        }
+
         // Include existing inventory so discovery updates enrich instead of fragmenting identities.
         all.AddRange(await store.GetDevicesAsync(cancellationToken));
 

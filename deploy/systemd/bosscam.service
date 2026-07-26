@@ -11,7 +11,17 @@ WorkingDirectory=/opt/bosscam
 Environment=ASPNETCORE_ENVIRONMENT=Production
 Environment=DOTNET_ENVIRONMENT=Production
 Environment=BOSSCAM_FFMPEG_PATH=/usr/bin/ffmpeg
-Environment=BossCam__LocalApiBaseUrl=http://0.0.0.0:5317
+# SAFE DEFAULT: bind to loopback only. If you change this to 0.0.0.0 you MUST
+# also set BOSSCAM_LAN_TOKEN below (or via EnvironmentFile) — the service
+# refuses to start otherwise so the LAN cannot anonymously read /api/* or
+# /swagger without a token.
+Environment=BossCam__LocalApiBaseUrl=http://127.0.0.1:5317
+# Optional: require a LAN bearer token when the bind is non-loopback. Either
+# paste the token directly into the Environment=BOSSCAM_LAN_TOKEN= line (less
+# secure) or create /etc/bosscam/bosscam.env with `BOSSCAM_LAN_TOKEN=...` and
+# uncomment the EnvironmentFile line below. Generate with: openssl rand -hex 32
+#Environment=BOSSCAM_LAN_TOKEN=
+#EnvironmentFile=-/etc/bosscam/bosscam.env
 ExecStart=/usr/bin/dotnet /opt/bosscam/BossCam.Service.dll
 Restart=on-failure
 RestartSec=5

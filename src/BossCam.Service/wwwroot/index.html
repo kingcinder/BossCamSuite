@@ -80,8 +80,13 @@
                 <option value="main">HD RTSP main (heavy)</option>
               </select>
             </label>
-            <label class="inline-check" style="display:none"><input type="checkbox" id="liveRefresh" checked /> Live refresh</label>
-            <select id="liveInterval" style="display:none"><option value="2000" selected>2s</option></select>
+            <label class="inline-check"><input type="checkbox" id="liveRefresh" checked /> Live refresh</label>
+            <select id="liveInterval" title="Snapshot polling interval for the Device tab">
+              <option value="1000">1s</option>
+              <option value="2000" selected>2s</option>
+              <option value="5000">5s</option>
+              <option value="10000">10s</option>
+            </select>
             <button type="button" id="btnResetOrder">Reset order</button>
           </div>
           <p class="muted small">Continuous live streams (RTSP→MJPEG via ffmpeg). Drag title bar to rearrange. Click a tile to select for settings/record.</p>

@@ -10,8 +10,17 @@ public sealed class RecordingService(
     TransportBroker transportBroker,
     ILogger<RecordingService> logger)
 {
+    /// <summary>
+    /// Bookkeeping record describing a currently-running recording. Internal-only (exposed
+    /// to the test project via InternalsVisibleTo). Held in <see cref="_running"/> keyed
+    /// by job id so cleanup paths (StopAsync, process.Exited) can recover the bookkeeping
+    /// alongside the process. <see cref="ScriptPath"/> is nullable because the Windows
+    /// direct-ffmpeg branch never writes a helper script to /tmp.
+    /// </summary>
+    internal sealed record RunningRecording(RecordingJob Job, Process Process, string? ScriptPath);
+
     private readonly SemaphoreSlim _gate = new(1, 1);
-    private readonly Dictionary<Guid, (RecordingJob Job, Process Process)> _running = [];
+    private readonly Dictionary<Guid, RunningRecording> _running = [];
 
     public async Task<RecordingJob> StartAsync(RecordingStartRequest request, CancellationToken cancellationToken)
     {
@@ -72,10 +81,11 @@ public sealed class RecordingService(
         // MPEG-TS segments stay playable without a trailing moov atom (unlike mid-write MP4).
         var pattern = Path.Combine(profile.OutputDirectory, $"{device.Id:N}_%Y%m%d_%H%M%S.ts");
 
+        string? scriptPath = null;
         Process process;
         if (useSnapshotPipeline)
         {
-            process = StartSnapshotPipeline(device, sourceUrl!, pattern, Math.Max(5, profile.SegmentSeconds), ffmpegPath);
+            (process, scriptPath) = StartSnapshotPipeline(device, sourceUrl!, pattern, Math.Max(5, profile.SegmentSeconds), ffmpegPath);
         }
         else
         {
@@ -116,7 +126,7 @@ public sealed class RecordingService(
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            _running[started.Id] = (started, process);
+            _running[started.Id] = new RunningRecording(started, process, scriptPath);
         }
         finally
         {
@@ -128,9 +138,12 @@ public sealed class RecordingService(
             await _gate.WaitAsync(CancellationToken.None);
             try
             {
-                if (_running.Remove(started.Id, out _))
+                if (_running.Remove(started.Id, out var removed))
                 {
                     logger.LogWarning("Recording job exited: {JobId}", started.Id);
+                    // Clean up the helper script on spontaneous exit too (camera drop, EOF, signal)
+                    // so we don't leak /tmp/bosscam-rec-*.sh when nobody ever calls StopAsync.
+                    TryDeleteScript(removed.ScriptPath);
                 }
             }
             finally
@@ -153,8 +166,10 @@ public sealed class RecordingService(
     /// <summary>
     /// Polls JPEG snapshots and pipes them into ffmpeg segment writer.
     /// Reliable on 5523-W where /NetSDK/.../snapShot returns image/jpg.
+    /// Returns the spawned process and, on Linux/macOS, the bash script path so the
+    /// caller can clean up the helper script after the process exits.
     /// </summary>
-    private Process StartSnapshotPipeline(DeviceIdentity device, string snapshotUrl, string segmentPattern, int segmentSeconds, string ffmpegPath)
+    private (Process Process, string? ScriptPath) StartSnapshotPipeline(DeviceIdentity device, string snapshotUrl, string segmentPattern, int segmentSeconds, string ffmpegPath)
     {
         var fps = 2;
         var interval = "0.5";
@@ -175,6 +190,7 @@ public sealed class RecordingService(
         }
 
         Process process;
+        string? pipelineScriptPath = null;
         if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
         {
             var scriptPath = Path.Combine(Path.GetTempPath(), $"bosscam-rec-{device.Id:N}.sh");
@@ -201,6 +217,7 @@ public sealed class RecordingService(
                 .AppendLine();
             File.WriteAllText(scriptPath, script.ToString());
             try { Process.Start("chmod", $"+x {scriptPath}")?.WaitForExit(2000); } catch { }
+            pipelineScriptPath = scriptPath;
 
             process = new Process
             {
@@ -235,11 +252,16 @@ public sealed class RecordingService(
 
         if (!process.Start())
         {
+            // Roll back the helper script if launch failed so we don't leak it on /tmp.
+            if (pipelineScriptPath is not null)
+            {
+                TryDeleteScript(pipelineScriptPath);
+            }
             throw new InvalidOperationException($"Failed to start snapshot recording pipeline for {device.DisplayName}.");
         }
 
         _ = DrainProcessOutputAsync(process, process.Id);
-        return process;
+        return (process, pipelineScriptPath);
     }
 
     private static string BashQuote(string value)
@@ -384,12 +406,36 @@ public sealed class RecordingService(
                 logger.LogWarning(ex, "Failed to stop recording process {JobId}", jobId);
             }
 
+            // Clean up the bash pipeline script left on /tmp so we don't leak files across sessions.
+            // TryDeleteScript is null-tolerant; safe for direct-ffmpeg recordings that never wrote one.
+            TryDeleteScript(running.ScriptPath);
+
             _running.Remove(jobId);
             return running.Job with { IsRunning = false, StoppedAt = DateTimeOffset.UtcNow };
         }
         finally
         {
             _gate.Release();
+        }
+    }
+
+    private static void TryDeleteScript(string? scriptPath)
+    {
+        if (string.IsNullOrEmpty(scriptPath))
+        {
+            return;
+        }
+
+        try
+        {
+            if (File.Exists(scriptPath))
+            {
+                File.Delete(scriptPath);
+            }
+        }
+        catch
+        {
+            // best-effort /tmp cleanup; ignore IO failures during shutdown
         }
     }
 
@@ -412,7 +458,7 @@ public sealed class RecordingService(
         try
         {
             var entry = _running.Values.FirstOrDefault(item => item.Job.ProfileId == profileId && !item.Process.HasExited);
-            return entry.Job;
+            return entry?.Job;
         }
         finally
         {

@@ -5,6 +5,7 @@
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\src\BossCam.Service\BossCam.Service.csproj" />
     <ProjectReference Include="..\..\src\BossCam.Contracts\BossCam.Contracts.csproj" />
     <ProjectReference Include="..\..\src\BossCam.Core\BossCam.Core.csproj" />
     <ProjectReference Include="..\..\src\BossCam.Infrastructure\BossCam.Infrastructure.csproj" />

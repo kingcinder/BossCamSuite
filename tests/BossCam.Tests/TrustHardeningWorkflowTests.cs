@@ -2,6 +2,8 @@ using System.Text.Json.Nodes;
 using BossCam.Contracts;
 using BossCam.Core;
 using BossCam.Infrastructure.Persistence;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -45,6 +47,8 @@ public sealed class TrustHardeningWorkflowTests : IDisposable
             [new StubDiscoveryProvider(discoveredIpc)],
             [new StubImportProvider()],
             store,
+            new FakeHostEnvironment { EnvironmentName = Environments.Production },
+            Options.Create(new BossCamRuntimeOptions()),
             NullLogger<DiscoveryCoordinator>.Instance);
 
         _ = await coordinator.RunAsync(CancellationToken.None);
@@ -121,6 +125,21 @@ public sealed class TrustHardeningWorkflowTests : IDisposable
         public string Name => "StubDiscovery";
         public Task<IReadOnlyCollection<DeviceIdentity>> DiscoverAsync(CancellationToken cancellationToken)
             => Task.FromResult<IReadOnlyCollection<DeviceIdentity>>([device]);
+    }
+
+    /// <summary>
+    /// Minimal <see cref="IHostEnvironment"/> stub so unit tests can construct
+    /// <see cref="DiscoveryCoordinator"/> without spinning up a real host. Defaults to
+    /// <see cref="Environments.Production"/> so the discovery offline gate stays closed.
+    /// </summary>
+    private sealed class FakeHostEnvironment : IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = Environments.Production;
+        public string ApplicationName { get; set; } = "BossCamTests";
+        public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
+        public string WebRootPath { get; set; } = AppContext.BaseDirectory;
+        public IFileProvider WebRootFileProvider { get; set; } = new NullFileProvider();
     }
 
     private sealed class StubImportProvider : IDeviceImportProvider

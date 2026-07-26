@@ -35,7 +35,9 @@ public sealed class BossCamWebAppFactory : WebApplicationFactory<Program>
                 ["BossCam:DiscoveryTimeoutSeconds"] = "1",
                 ["BossCam:HttpTimeoutSeconds"] = "6",
                 ["BossCam:RecordingHousekeepingMinutes"] = "60",
-                ["BossCam:RecordingStartupReconcileDelaySeconds"] = "3600"
+                ["BossCam:RecordingStartupReconcileDelaySeconds"] = "3600",
+                ["BossCam:LanAuthToken"] = string.Empty,
+                ["BossCam:DiscoveryOfflineMode"] = "true"
             });
         });
     }
@@ -69,6 +71,13 @@ public static class E2EHelpers
 
     public static async Task<bool> IsReachableAsync(string ip, int port = 80, int timeoutMs = 1500)
     {
+        // Offline mode (BOSSCAM_E2E_LIVE=0): skip the TCP/HTTP probe entirely so the suite
+        // does not flake on multi-second connect timeouts against missing LAN hosts.
+        if (!LiveEnabled)
+        {
+            return false;
+        }
+
         try
         {
             using var cts = new CancellationTokenSource(timeoutMs);
