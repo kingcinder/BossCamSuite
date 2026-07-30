@@ -37,7 +37,10 @@ public sealed class LanAuthWebAppFactory : Microsoft.AspNetCore.Mvc.Testing.WebA
                 ["BossCam:HttpTimeoutSeconds"] = "6",
                 ["BossCam:RecordingHousekeepingMinutes"] = "60",
                 ["BossCam:RecordingStartupReconcileDelaySeconds"] = "3600",
-                ["BossCam:LanAuthToken"] = Token
+                ["BossCam:LanAuthToken"] = Token,
+                // E2E opt-out: see BossCamWebAppFactory.cs for the rationale.
+                ["BossCam:RateLimitEnabled"] = "false",
+                ["BossCam:StorageRoot"] = Path.Combine(TempRoot, "recordings")
             });
         });
     }

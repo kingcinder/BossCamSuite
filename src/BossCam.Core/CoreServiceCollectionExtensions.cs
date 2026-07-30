@@ -1,3 +1,5 @@
+using BossCam.Core.Services.Recording;
+using BossCam.Core.Utilities;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace BossCam.Core;
@@ -29,6 +31,33 @@ public static class CoreServiceCollectionExtensions
         services.AddSingleton<DeviceRegistrationService>();
         services.AddSingleton<NvrPlaybackService>();
         services.AddSingleton<FirmwareCatalogService>();
+
+        // Recording pipelines (refactor of P2 #12). RecordingService resolves the two
+        // implementations by mode via IRecordingPipelineResolver, so swapping either
+        // pipeline in tests doesn't require touching RecordingService itself.
+        services.AddSingleton<SnapshotRecordingPipeline>();
+        services.AddSingleton<DirectFfmpegRecordingPipeline>();
+        services.AddSingleton<IRecordingPipelineResolver, RecordingPipelineResolver>();
+
         return services;
     }
+}
+
+/// <summary>
+/// Lookup so <see cref="RecordingService"/> can pick a concrete recording pipeline by
+/// <see cref="IRecordingPipeline.Mode"/> without directly depending on
+/// <see cref="SnapshotRecordingPipeline"/> or <see cref="DirectFfmpegRecordingPipeline"/>.
+/// </summary>
+public interface IRecordingPipelineResolver
+{
+    SnapshotRecordingPipeline Snapshot { get; }
+    DirectFfmpegRecordingPipeline DirectFfmpeg { get; }
+}
+
+internal sealed class RecordingPipelineResolver(
+    SnapshotRecordingPipeline snapshot,
+    DirectFfmpegRecordingPipeline direct) : IRecordingPipelineResolver
+{
+    public SnapshotRecordingPipeline Snapshot { get; } = snapshot;
+    public DirectFfmpegRecordingPipeline DirectFfmpeg { get; } = direct;
 }

@@ -28,3 +28,6 @@ Thumbs.db
 *.ts
 *.mp4
 !tests/**/Fixtures/**
+
+# Windows shortcut artefacts — a .lnk was accidentally committed to root in 2026-04; never check these in.
+*.lnk

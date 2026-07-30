@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Text;
 using BossCam.Contracts;
+using BossCam.Core.Services.Recording;
+using BossCam.Core.Utilities;
 using Microsoft.Extensions.Logging;
 
 namespace BossCam.Core;
@@ -8,6 +10,7 @@ namespace BossCam.Core;
 public sealed class RecordingService(
     IApplicationStore store,
     TransportBroker transportBroker,
+    IRecordingPipelineResolver pipelines,
     ILogger<RecordingService> logger)
 {
     /// <summary>
@@ -83,32 +86,20 @@ public sealed class RecordingService(
 
         string? scriptPath = null;
         Process process;
+        var ctx = new RecordingPipelineContext(device, sourceUrl!, pattern, Math.Max(5, profile.SegmentSeconds), ffmpegPath,
+            Log: (msg, ex) => { if (ex is null) logger.LogDebug("{Pipeline} {Msg}", useSnapshotPipeline ? "snapshot" : "direct", msg); else logger.LogDebug(ex, "{Pipeline} {Msg}", useSnapshotPipeline ? "snapshot" : "direct", msg); });
+        RecordingHandle handle;
         if (useSnapshotPipeline)
         {
-            (process, scriptPath) = StartSnapshotPipeline(device, sourceUrl!, pattern, Math.Max(5, profile.SegmentSeconds), ffmpegPath);
+            handle = pipelines.Snapshot.Start(ctx);
         }
         else
         {
-            var args = BuildFfmpegArgs(sourceUrl!, pattern, Math.Max(5, profile.SegmentSeconds));
-            process = new Process
-            {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = ffmpegPath,
-                    Arguments = args,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardError = true,
-                    RedirectStandardOutput = true
-                },
-                EnableRaisingEvents = true
-            };
-            if (!process.Start())
-            {
-                throw new InvalidOperationException($"Failed to start ffmpeg for device {device.DisplayName}.");
-            }
-            _ = DrainProcessOutputAsync(process, process.Id);
+            handle = pipelines.DirectFfmpeg.Start(ctx);
         }
+        process = handle.Process;
+        scriptPath = handle.HelperScriptPath;
+        _ = DrainProcessOutputAsync(process, process.Id);
 
         var started = new RecordingJob
         {
@@ -392,23 +383,17 @@ public sealed class RecordingService(
                 return null;
             }
 
+            var handle = new RecordingHandle(running.Process, running.ScriptPath);
+            var startedSnapshot = running.ScriptPath is { Length: > 0 };
+            var pipeline = startedSnapshot ? (IRecordingPipeline)pipelines.Snapshot : pipelines.DirectFfmpeg;
             try
             {
-                if (!running.Process.HasExited)
-                {
-                    // entireProcessTree is required so bash pipeline children (curl/ffmpeg) die too.
-                    running.Process.Kill(entireProcessTree: true);
-                    running.Process.WaitForExit(8000);
-                }
+                await pipeline.StopAsync(handle, cancellationToken);
             }
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Failed to stop recording process {JobId}", jobId);
             }
-
-            // Clean up the bash pipeline script left on /tmp so we don't leak files across sessions.
-            // TryDeleteScript is null-tolerant; safe for direct-ffmpeg recordings that never wrote one.
-            TryDeleteScript(running.ScriptPath);
 
             _running.Remove(jobId);
             return running.Job with { IsRunning = false, StoppedAt = DateTimeOffset.UtcNow };

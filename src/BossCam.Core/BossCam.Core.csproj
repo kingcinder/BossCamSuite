@@ -6,4 +6,8 @@
     <ProjectReference Include="..\BossCam.Contracts\BossCam.Contracts.csproj" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Cross-platform DPAPI (Active on Windows; throws PlatformNotSupportedException on Linux/macOS at runtime, but the namespace imports compile cleanly on all platforms so the cipher can branch on OperatingSystem.IsWindows(). CompositePasswordCipher handles the throw site.) -->
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+  </ItemGroup>
 </Project>

@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using System.Threading.RateLimiting;
 using BossCam.Contracts;
 using BossCam.Core;
 using BossCam.Infrastructure;
@@ -27,6 +28,7 @@ else if (OperatingSystem.IsLinux())
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 ConfigureCors(builder);
+ConfigureRateLimiter(builder);
 builder.Services.AddBossCamInfrastructure(builder.Configuration);
 builder.Services.AddBossCamCore();
 builder.Services.AddHostedService<BossCamBootstrapWorker>();
@@ -36,7 +38,11 @@ var app = builder.Build();
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
-app.UseCors();
+// CORS + rate-limiter middleware are registered AFTER the host-aware gate
+// block below, once `lanBound` and `lanResolvedToken` have been resolved from
+// config + env. This ordering is mandatory: referencing those locals up here
+// would be a compile error (CS0841) and a semantic error (token-mode unknown).
+// See the CORS+rate-limiter wiring right before `app.UseSwagger()`.
 
 // ----- Host-aware LAN gate wiring (post-build, post-config-merge) ----------
 // Reading IConfiguration AFTER builder.Build() ensures WebApplicationFactory
@@ -83,18 +89,132 @@ if (lanResolvedToken is not null)
     app.UseLanBoundTokenGate(lanResolvedToken);
 }
 
+// CORS policy is selected after the host-aware gate has resolved the bind
+// mode and token-mode flag. Loopback-only deployment stays permissive; any
+// non-loopback bind that survives the fail-fast + has a token falls under
+// BossCam:AllowedOrigins (defaults to deny-all cross-origin in token mode).
+app.UseCors(lanBound && lanResolvedToken is not null ? "RestrictedTokenMode" : "PermissiveLoopback");
+app.UseRateLimiter();
+
 app.UseSwagger();
 app.UseSwaggerUI();
 
 static void ConfigureCors(WebApplicationBuilder webBuilder)
 {
-    // ConfigureCors runs BEFORE the host-aware gate has resolved, so it can't yet
-    // know whether BOSSCAM_LAN_TOKEN will be set. Default dev mode (loopback bind)
-    // keeps the historical permissive policy; the host-aware gate below will tighten
-    // behaviour at request time (middleware rejects) and the operator can further
-    // restrict BossCam:AllowedOrigins if they need cross-origin browser access.
-    webBuilder.Services.AddCors(options => options.AddDefaultPolicy(
-        policy => policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
+    // Two named CORS policies are registered up front; the host-aware gate below
+    // picks which to engage based on whether the service is bound non-loopback with
+    // a resolved LAN token:
+    //   - "PermissiveLoopback": historical dev-mode default (loose, allows ANY origin).
+    //   - "RestrictedTokenMode" : honour BossCam:AllowedOrigins. Empty list DENIES
+    //                            cross-origin outright — same-origin still works
+    //                            because browsers don't CORS-check same-origin.
+    // Punch-list rationale: the prior AllowAnyOrigin default leaked /api/health
+    // responses (OS / framework version / content-root / ffmpeg path) to any LAN
+    // browser visiting any origin. Token-mode removes that through-site-readability.
+    var allowedOrigins = webBuilder.Configuration.GetSection("BossCam:AllowedOrigins").Get<string[]>() ?? [];
+    webBuilder.Services.AddCors(options =>
+    {
+        options.AddPolicy("PermissiveLoopback", policy =>
+            policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod());
+        options.AddPolicy("RestrictedTokenMode", policy =>
+        {
+            if (allowedOrigins.Length == 0)
+            {
+                policy.SetIsOriginAllowed(_ => false).AllowAnyHeader().AllowAnyMethod();
+            }
+            else
+            {
+                policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod();
+            }
+        });
+    });
+}
+
+static void ConfigureRateLimiter(WebApplicationBuilder webBuilder)
+{
+    // Sliding-window per-endpoint rate limiter. Partition keys prefer the explicit
+    // {id:guid} route value when present (probe + snapshot have it; recordings-start
+    // doesn't) and fall back to RemoteIpAddress for cross-device endpoints. Tests
+    // opt out via BossCam:RateLimitEnabled=false in appsettings.Development.json
+    // overrides so tight retry loops in E2E tests don't trip the limiter.
+    //
+    // Punch-list rationale: ffmpeg spin-up + camera hardware round-trips cost
+    // 1-3s each; a buggy UI retry loop on the same device can effectively
+    // self-DoS the camera. The limiter is loose enough that an honest operator
+    // toggling between cameras doesn't notice — it gates accidental storms.
+    var rateLimitEnabled = webBuilder.Configuration.GetValue("BossCam:RateLimitEnabled", true);
+    if (!rateLimitEnabled)
+    {
+        return;
+    }
+
+    webBuilder.Services.AddRateLimiter(options =>
+    {
+        options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+        options.AddPolicy("probe", httpContext =>
+        {
+            var key = httpContext.Request.RouteValues["id"]?.ToString()
+                      ?? httpContext.Connection.RemoteIpAddress?.ToString()
+                      ?? "anon";
+            var permit = webBuilder.Configuration.GetValue("BossCam:RateLimitProbePerMinute", 6);
+            return RateLimitPartition.GetSlidingWindowLimiter(key, _ => new SlidingWindowRateLimiterOptions
+            {
+                PermitLimit = permit,
+                Window = TimeSpan.FromMinutes(1),
+                SegmentsPerWindow = 6,
+                QueueLimit = 0,
+                AutoReplenishment = true
+            });
+        });
+
+        options.AddPolicy("recordings-start", httpContext =>
+        {
+            var key = httpContext.Connection.RemoteIpAddress?.ToString() ?? "anon";
+            var permit = webBuilder.Configuration.GetValue("BossCam:RateLimitRecordingStartPerMinute", 10);
+            return RateLimitPartition.GetSlidingWindowLimiter(key, _ => new SlidingWindowRateLimiterOptions
+            {
+                PermitLimit = permit,
+                Window = TimeSpan.FromMinutes(1),
+                SegmentsPerWindow = 6,
+                QueueLimit = 0,
+                AutoReplenishment = true
+            });
+        });
+
+        options.AddPolicy("snapshot", httpContext =>
+        {
+            var key = httpContext.Request.RouteValues["id"]?.ToString()
+                      ?? httpContext.Connection.RemoteIpAddress?.ToString()
+                      ?? "anon";
+            var permit = webBuilder.Configuration.GetValue("BossCam:RateLimitSnapshotPerMinute", 30);
+            return RateLimitPartition.GetSlidingWindowLimiter(key, _ => new SlidingWindowRateLimiterOptions
+            {
+                PermitLimit = permit,
+                Window = TimeSpan.FromMinutes(1),
+                SegmentsPerWindow = 6,
+                QueueLimit = 0,
+                AutoReplenishment = true
+            });
+        });
+
+        // Logged-only (no enforcement) for /api/firmware/register — protects the
+        // audit trail against firmware-upload storms without disrupting legitimate
+        // operator flows. Limiter is intentionally weak; tightening would break
+        // multi-camera firmware-batch workflows.
+        options.AddPolicy("firmware-register", httpContext =>
+        {
+            var key = httpContext.Connection.RemoteIpAddress?.ToString() ?? "anon";
+            return RateLimitPartition.GetSlidingWindowLimiter(key, _ => new SlidingWindowRateLimiterOptions
+            {
+                PermitLimit = 60,
+                Window = TimeSpan.FromMinutes(1),
+                SegmentsPerWindow = 6,
+                QueueLimit = 0,
+                AutoReplenishment = true
+            });
+        });
+    });
 }
 
 app.MapGet("/api/health", () => Results.Ok(new
@@ -138,7 +258,7 @@ app.MapPost("/api/devices/{id:guid}/probe", async (Guid id, CapabilityProbeServi
 {
     var result = await probeService.ProbeAsync(id, ct);
     return result is null ? Results.NotFound() : Results.Ok(result);
-});
+}).RequireRateLimiting("probe");
 app.MapPost("/api/devices/{id:guid}/validation/run", async (Guid id, ValidationRunOptions? options, ProtocolValidationService validationService, CancellationToken ct) =>
 {
     var result = await validationService.ValidateDeviceAsync(id, options, ct);
@@ -272,7 +392,7 @@ app.MapGet("/api/devices/{id:guid}/snapshot", async (Guid id, IApplicationStore 
     // RTSP one-shot fallback removed: it exhausts camera RTSP sessions needed for live multi-view.
 
     return Results.StatusCode(StatusCodes.Status502BadGateway);
-});
+}).RequireRateLimiting("snapshot");
 
 app.MapGet("/api/devices/{id:guid}/live.ts", async (Guid id, string? quality, HttpContext http, LiveStreamService live, CancellationToken ct) =>
 {
@@ -482,7 +602,7 @@ static MediaStoragePaths LoadMediaStoragePaths()
 }
 
 app.MapGet("/api/storage/paths", () => Results.Ok(LoadMediaStoragePaths()));
-app.MapPost("/api/storage/paths", (MediaStoragePaths paths) =>
+app.MapPost("/api/storage/paths", (MediaStoragePaths paths, IOptions<BossCamRuntimeOptions> runtime) =>
 {
     if (string.IsNullOrWhiteSpace(paths.ContinuousRecordings)
         || string.IsNullOrWhiteSpace(paths.Highlights)
@@ -491,18 +611,75 @@ app.MapPost("/api/storage/paths", (MediaStoragePaths paths) =>
         return Results.BadRequest(new { error = "ContinuousRecordings, Highlights, and Snapshots paths are required." });
     }
 
-    var normalized = new MediaStoragePaths
+    var storageRoot = ResolveStorageRoot(runtime.Value.StorageRoot);
+    MediaStoragePaths normalized;
+    try
     {
-        ContinuousRecordings = Path.GetFullPath(paths.ContinuousRecordings.Trim()),
-        Highlights = Path.GetFullPath(paths.Highlights.Trim()),
-        Snapshots = Path.GetFullPath(paths.Snapshots.Trim())
-    };
+        normalized = NormalizeAndValidateStoragePaths(paths, storageRoot);
+    }
+    catch (InvalidOperationException ex)
+    {
+        // Punch-list rationale: leaked LAN token is equivalent to file-system
+        // write access at this endpoint; the allowlist prevents a leaked token
+        // from authoring media paths anywhere a marker cares to attack.
+        return Results.BadRequest(new { error = ex.Message });
+    }
+
     Directory.CreateDirectory(normalized.ContinuousRecordings);
     Directory.CreateDirectory(normalized.Highlights);
     Directory.CreateDirectory(normalized.Snapshots);
     File.WriteAllText(MediaStorageConfigPath(), System.Text.Json.JsonSerializer.Serialize(normalized, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
     return Results.Ok(normalized);
 });
+
+static string ResolveStorageRoot(string configuredRoot)
+{
+    if (!string.IsNullOrWhiteSpace(configuredRoot))
+    {
+        return Path.GetFullPath(configuredRoot.Trim());
+    }
+
+    // Default mirrors the BossCam:StorageRoot post-configure in
+    // InfrastructureServiceCollectionExtensions.PostConfigure so the operator
+    // can predict where their media lands when no config is set.
+    var dataRoot = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "BossCamSuite");
+    return Path.Combine(dataRoot, "recordings");
+}
+
+static MediaStoragePaths NormalizeAndValidateStoragePaths(MediaStoragePaths paths, string storageRoot)
+{
+    // Canonicalize the storage root once; Path.GetFullPath resolves `..` and
+    // relative components. Trim any trailing separators so prefix matching
+    // without the trailing slash treats /foo and /foo/ as the same directory.
+    var canonicalRoot = storageRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+    string Canonicalize(string field, string input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            throw new InvalidOperationException($"{field} path is required.");
+        }
+
+        var path = Path.GetFullPath(input.Trim());
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        if (!path.StartsWith(canonicalRoot, comparison))
+        {
+            throw new InvalidOperationException(
+                $"{field} path '{path}' is outside the configured storage root '{canonicalRoot}'. " +
+                "Configure BossCam:StorageRoot to widen the allowed region, or submit paths under it.");
+        }
+        return path;
+    }
+
+    return new MediaStoragePaths
+    {
+        ContinuousRecordings = Canonicalize(nameof(paths.ContinuousRecordings), paths.ContinuousRecordings),
+        Highlights = Canonicalize(nameof(paths.Highlights), paths.Highlights),
+        Snapshots = Canonicalize(nameof(paths.Snapshots), paths.Snapshots)
+    };
+}
 
 app.MapPost("/api/storage/save-snapshot/{id:guid}", async (Guid id, IApplicationStore store, CancellationToken ct) =>
 {
@@ -563,7 +740,7 @@ app.MapPost("/api/recordings/start", async (RecordingStartRequest request, Recor
     {
         return Results.BadRequest(new { error = ex.Message });
     }
-});
+}).RequireRateLimiting("recordings-start");
 app.MapPost("/api/recordings/start-all", async (bool? preferSubStream, RecordingService recordingService, CancellationToken ct) =>
     Results.Ok(await recordingService.StartAllAsync(preferSubStream ?? false, ct)));
 app.MapPost("/api/recordings/stop-all", async (RecordingService recordingService, CancellationToken ct) =>
@@ -710,16 +887,23 @@ app.MapGet("/api/devices/{id:guid}/native-fallback-assessment", async (Guid id, 
         AvailableLibraries = availableLibraries
     });
 });
-app.MapPost("/api/firmware/register", async (FirmwareRegisterRequest request, FirmwareCatalogService service, CancellationToken ct) =>
+app.MapPost("/api/firmware/register", async (FirmwareRegisterRequest request, HttpContext http, FirmwareCatalogService service, ILogger<Program> logger, CancellationToken ct) =>
 {
     if (string.IsNullOrWhiteSpace(request.FilePath) || !File.Exists(request.FilePath))
     {
         return Results.BadRequest(new { error = "FilePath must point to an existing firmware file." });
     }
 
+    // Punch-list: audit-log every firmware/register call. The FilePath is recorded
+    // as-is (no redaction) — a leaked LAN token is already the precondition for
+    // reaching this endpoint, and the operator needs enough context to investigate
+    // an unexpected upload. Caller IP is included to correlate with the LAN gate
+    // log if a token compromise is suspected.
+    logger.LogInformation("firmware/register callerIP={IP} path={Path}", http.Connection.RemoteIpAddress, request.FilePath);
+
     var result = await service.RegisterAsync(request.FilePath, ct);
     return Results.Ok(result);
-});
+}).RequireRateLimiting("firmware-register");
 app.MapGet("/api/firmware", async (FirmwareCatalogService service, CancellationToken ct) => Results.Ok(await service.GetAsync(ct)));
 
 // SPA fallback for operator console. Never swallow /api or /swagger with index.html.

@@ -37,7 +37,14 @@ public sealed class BossCamWebAppFactory : WebApplicationFactory<Program>
                 ["BossCam:RecordingHousekeepingMinutes"] = "60",
                 ["BossCam:RecordingStartupReconcileDelaySeconds"] = "3600",
                 ["BossCam:LanAuthToken"] = string.Empty,
-                ["BossCam:DiscoveryOfflineMode"] = "true"
+                ["BossCam:DiscoveryOfflineMode"] = "true",
+                // E2E opt-out fixtures: tests run tight scripted batches that
+                // would otherwise hit the per-endpoint rate limiter. Production
+                // (appsettings.json + Linux overlay) keeps RateLimitEnabled=true.
+                ["BossCam:RateLimitEnabled"] = "false",
+                // Storage-root validator: tests must submit paths inside the
+                // configured root or /api/storage/paths would 400 the override.
+                ["BossCam:StorageRoot"] = Path.Combine(TempRoot, "recordings")
             });
         });
     }

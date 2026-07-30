@@ -50,4 +50,35 @@ public sealed class BossCamRuntimeOptions
     /// reachable. Production must leave this false.
     /// </summary>
     public bool DiscoveryOfflineMode { get; set; }
+
+    /// <summary>
+    /// Optional override for the local-machine ciphertext key path. On Linux/macOS this is the
+    /// path of a 0600-permissioned AES-GCM keyfile (32 random bytes) backing <c>IPasswordCipher</c>.
+    /// Windows ignores this; DPAPI/ProtectedData with CurrentUser scope is used instead.
+    /// Defaults to <c>$XDG_DATA_HOME/BossCamSuite/secret.key</c> (Linux) or
+    /// <c>%LocalAppData%/BossCamSuite/secret.key</c> (macOS).
+    /// </summary>
+    public string SecretKeyPath { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Single absolute path that bounds <c>POST /api/storage/paths</c> submissions. Operator
+    /// must explicitly set this to redirect recordings to a NAS / disk other than the default.
+    /// Empty disables the override; default = LocalAppData/BossCamSuite/recordings.
+    /// </summary>
+    public string StorageRoot { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Toggles <c>AddRateLimiter</c>/<c>UseRateLimiter</c> middleware. Tests set this false
+    /// to permit tight retry loops; production should leave it true.
+    /// </summary>
+    public bool RateLimitEnabled { get; set; } = true;
+
+    /// <summary>Per-minute cap for /api/devices/{id}/probe. Each probe spins one or more HTTP + ONVIF round-trips.</summary>
+    public int RateLimitProbePerMinute { get; set; } = 6;
+
+    /// <summary>Per-minute cap for /api/recordings/start. Each start spawns an ffmpeg process tree.</summary>
+    public int RateLimitRecordingStartPerMinute { get; set; } = 10;
+
+    /// <summary>Per-minute cap for /api/devices/{id}/snapshot. Each snapshot is one or more HTTP GETs against the camera.</summary>
+    public int RateLimitSnapshotPerMinute { get; set; } = 30;
 }

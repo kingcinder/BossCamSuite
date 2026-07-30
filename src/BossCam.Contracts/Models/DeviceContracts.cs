@@ -84,7 +84,19 @@ public sealed record DeviceIdentity
     public string? HardwareModel { get; init; }
     public string? DeviceType { get; init; }
     public string? LoginName { get; init; }
+
+    /// <summary>
+    /// Plaintext password — used in-memory only. Marked <see cref="JsonIgnoreAttribute"/>
+    /// so the IApplicationStore persistence layer never writes plaintext to disk. The
+    /// at-rest shape is <see cref="PasswordCiphertext"/>, populated by the cipher (AES-GCM
+    /// keyfile on Linux/macOS, DPAPI CurrentUser on Windows) at save time. Load code
+    /// resolves <see cref="PasswordCiphertext"/> back to <see cref="Password"/> via
+    /// <c>IPasswordCipher.Decrypt</c> so consumers can keep reading <c>device.Password</c>
+    /// in-memory without each one needing cipher injection.
+    /// </summary>
+    [JsonIgnore]
     public string? Password { get; init; }
+
     public string? PasswordCiphertext { get; init; }
     public List<DeviceChannelMap> ChannelMap { get; init; } = [];
     public List<TransportProfile> TransportProfiles { get; init; } = [];

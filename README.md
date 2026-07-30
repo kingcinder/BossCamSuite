@@ -97,6 +97,26 @@ The CORS allowlist (`BossCam:AllowedOrigins`) defaults to empty in token mode �
 "BossCam": { "AllowedOrigins": [ "https://operator.lan.example" ] }
 ```
 
+### What a leaked LAN token can do (read this before sharing tokens)
+
+The LAN bearer token (`BOSSCAM_LAN_TOKEN`) gates `/api/*` and `/swagger/*` but the
+trust it represents is wide — the same token can mutate operator media
+storage and trigger firmware uploads. The endpoints below behave like a local
+filesystem write for anyone holding the token:
+
+| Endpoint | Power granted |
+|---|---|
+| `POST /api/storage/paths` | Redirects continuous-recordings / highlights / snapshots to any path **under** `BossCam:StorageRoot` (defaults to `~/.local/share/BossCamSuite/recordings`). Empty `BossCam:StorageRoot` falls back to the local default root — both are validated `Path.GetFullPath` + prefix-allowlisted. |
+| `POST /api/firmware/register` | Reads/uploads any firmware file the caller points it at (`File.Exists` check, then `FirmwareCatalogService.RegisterAsync`). Every call is `LogInformation`'d with caller IP + path for audit. Rate-limited at 60/min/IP. |
+| `POST /api/storage/save-snapshot/{id}` | Writes a JPEG under the configured snapshots root. |
+| `POST /api/devices/{id}/settings/write` | Issues an HTTP write against the camera firmware; an over-zealous caller can re-key the camera. |
+
+**Implication:** treat `BOSSCAM_LAN_TOKEN` like an SSH key to the operator
+machine. Rotation is `openssl rand -hex 32`, export the new value, and restart
+`BossCam.Service` so the in-memory copy refreshes. Logged usage of the
+firmware-register endpoint should reconcile against expected operator
+activity when investigating a token compromise.
+
 systemd install:
 
 ```bash

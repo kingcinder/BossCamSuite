@@ -2,17 +2,33 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using BossCam.Contracts;
 using BossCam.Core;
+using BossCam.Core.Security;
+using BossCam.Core.Utilities;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Options;
 
 namespace BossCam.Infrastructure.Persistence;
 
-public sealed class SqliteApplicationStore(IOptions<BossCamRuntimeOptions> options) : IApplicationStore
+public sealed class SqliteApplicationStore : IApplicationStore
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly IOptions<BossCamRuntimeOptions> _options;
+    private readonly IPasswordCipher? _cipher;
     private readonly JsonSerializerOptions _serializerOptions = CreateSerializerOptions();
 
-    private string DatabasePath => options.Value.DatabasePath;
+    /// <summary>Constructor used in production (DI supplies both options and the cipher).</summary>
+    public SqliteApplicationStore(IOptions<BossCamRuntimeOptions> options, IPasswordCipher cipher)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(cipher);
+        _options = options;
+        _cipher = cipher;
+    }
+
+    /// <summary>Di-less constructor for tests that don't need encryption.</summary>
+    public SqliteApplicationStore(IOptions<BossCamRuntimeOptions> options) : this(options, NoOpPasswordCipher.Instance) { }
+
+    private string DatabasePath => _options.Value.DatabasePath;
 
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
@@ -73,13 +89,19 @@ public sealed class SqliteApplicationStore(IOptions<BossCamRuntimeOptions> optio
             await connection.OpenAsync(cancellationToken);
             foreach (var device in devices)
             {
-                var key = BuildDedupeKey(device);
-                var payload = JsonSerializer.Serialize(device, _serializerOptions);
+                // Encrypt-at-rest: if the in-memory record carries a plaintext Password, mirror
+                // it into PasswordCiphertext via the cipher. The on-disk JSON omits Password
+                // because DeviceIdentity.Password is marked [JsonIgnore].
+                var ciphered = string.IsNullOrEmpty(device.Password)
+                    ? device
+                    : device with { PasswordCiphertext = _cipher.Encrypt(device.Password) };
+                var key = BuildDedupeKey(ciphered);
+                var payload = JsonSerializer.Serialize(ciphered, _serializerOptions);
                 var updated = DateTimeOffset.UtcNow.ToString("O");
 
                 await using var updateById = connection.CreateCommand();
                 updateById.CommandText = "UPDATE devices SET dedupe_key = $key, payload = $payload, updated_at = $updated WHERE id = $id";
-                updateById.Parameters.AddWithValue("$id", device.Id.ToString());
+                updateById.Parameters.AddWithValue("$id", ciphered.Id.ToString());
                 updateById.Parameters.AddWithValue("$key", key);
                 updateById.Parameters.AddWithValue("$payload", payload);
                 updateById.Parameters.AddWithValue("$updated", updated);
@@ -93,7 +115,7 @@ public sealed class SqliteApplicationStore(IOptions<BossCamRuntimeOptions> optio
                 // row id stale vs DeviceIdentity.Id inside JSON and broke GetDeviceAsync lookups.
                 await using var upsertByKey = connection.CreateCommand();
                 upsertByKey.CommandText = "INSERT INTO devices (id, dedupe_key, payload, updated_at) VALUES ($id, $key, $payload, $updated) ON CONFLICT(dedupe_key) DO UPDATE SET id = excluded.id, payload = excluded.payload, updated_at = excluded.updated_at";
-                upsertByKey.Parameters.AddWithValue("$id", device.Id.ToString());
+                upsertByKey.Parameters.AddWithValue("$id", ciphered.Id.ToString());
                 upsertByKey.Parameters.AddWithValue("$key", key);
                 upsertByKey.Parameters.AddWithValue("$payload", payload);
                 upsertByKey.Parameters.AddWithValue("$updated", updated);
@@ -107,25 +129,42 @@ public sealed class SqliteApplicationStore(IOptions<BossCamRuntimeOptions> optio
     }
 
     public async Task<IReadOnlyCollection<DeviceIdentity>> GetDevicesAsync(CancellationToken cancellationToken)
-        => await QueryPayloadListAsync<DeviceIdentity>("SELECT payload FROM devices ORDER BY updated_at DESC", null, cancellationToken);
+    {
+        var loaded = await QueryPayloadListAsync<DeviceIdentity>("SELECT payload FROM devices ORDER BY updated_at DESC", null, cancellationToken);
+        return loaded.Select(ResolvePlaintextPassword).ToList();
+    }
 
     public async Task<DeviceIdentity?> GetDeviceAsync(Guid id, CancellationToken cancellationToken)
-        => await QuerySinglePayloadAsync<DeviceIdentity>("SELECT payload FROM devices WHERE id = $id", parameters => parameters.AddWithValue("$id", id.ToString()), cancellationToken);
+    {
+        var loaded = await QuerySinglePayloadAsync<DeviceIdentity>("SELECT payload FROM devices WHERE id = $id", parameters => parameters.AddWithValue("$id", id.ToString()), cancellationToken);
+        return loaded is null ? null : ResolvePlaintextPassword(loaded);
+    }
+
+    /// <summary>
+    /// After deserialization, DeviceIdentity.Password is null (it's [JsonIgnore]d on disk) and
+    /// PasswordCiphertext holds the encrypted blob. Resolve back to plaintext in-memory so
+    /// legacy consumers keep reading <c>device.Password</c> without each one needing cipher
+    /// injection. NoOpPasswordCipher is the identity function so tests remain roundtrip-clean.
+    /// </summary>
+    private DeviceIdentity ResolvePlaintextPassword(DeviceIdentity device)
+        => string.IsNullOrEmpty(device.PasswordCiphertext)
+            ? device
+            : device with { Password = _cipher.Decrypt(device.PasswordCiphertext) };
 
     public async Task SaveCapabilityMapAsync(CapabilityMap capabilityMap, CancellationToken cancellationToken)
-        => await UpsertPayloadAsync("capability_maps", "device_id", capabilityMap.DeviceId.ToString(), capabilityMap, capabilityMap.CapturedAt, cancellationToken);
+        => await UpsertPayloadAsync(StoreTable.CapabilityMaps, capabilityMap.DeviceId.ToString(), capabilityMap, capabilityMap.CapturedAt, cancellationToken);
 
     public async Task<CapabilityMap?> GetCapabilityMapAsync(Guid deviceId, CancellationToken cancellationToken)
         => await QuerySinglePayloadAsync<CapabilityMap>("SELECT payload FROM capability_maps WHERE device_id = $id", parameters => parameters.AddWithValue("$id", deviceId.ToString()), cancellationToken);
 
     public async Task SaveSettingsSnapshotAsync(SettingsSnapshot snapshot, CancellationToken cancellationToken)
-        => await UpsertPayloadAsync("settings_snapshots", "device_id", snapshot.DeviceId.ToString(), snapshot, snapshot.CapturedAt, cancellationToken);
+        => await UpsertPayloadAsync(StoreTable.SettingsSnapshots, snapshot.DeviceId.ToString(), snapshot, snapshot.CapturedAt, cancellationToken);
 
     public async Task<SettingsSnapshot?> GetSettingsSnapshotAsync(Guid deviceId, CancellationToken cancellationToken)
         => await QuerySinglePayloadAsync<SettingsSnapshot>("SELECT payload FROM settings_snapshots WHERE device_id = $id", parameters => parameters.AddWithValue("$id", deviceId.ToString()), cancellationToken);
 
     public async Task AddAuditEntryAsync(WriteAuditEntry entry, CancellationToken cancellationToken)
-        => await InsertPayloadAsync("audit_entries", entry.Id.ToString(), entry, entry.Timestamp, cancellationToken, deviceId: entry.DeviceId.ToString());
+        => await InsertPayloadAsync(StoreTable.AuditEntries, entry.Id.ToString(), entry, entry.Timestamp, cancellationToken, deviceId: entry.DeviceId.ToString());
 
     public async Task<IReadOnlyCollection<WriteAuditEntry>> GetAuditEntriesAsync(Guid? deviceId, int limit, CancellationToken cancellationToken)
     {
@@ -141,7 +180,7 @@ public sealed class SqliteApplicationStore(IOptions<BossCamRuntimeOptions> optio
     {
         foreach (var manifest in manifests)
         {
-            await UpsertPayloadAsync("protocol_manifests", "manifest_id", manifest.ManifestId, manifest, DateTimeOffset.UtcNow, cancellationToken);
+            await UpsertPayloadAsync(StoreTable.ProtocolManifests, manifest.ManifestId, manifest, DateTimeOffset.UtcNow, cancellationToken);
         }
     }
 
@@ -182,7 +221,7 @@ public sealed class SqliteApplicationStore(IOptions<BossCamRuntimeOptions> optio
     {
         foreach (var transcript in transcripts)
         {
-            await InsertPayloadAsync("endpoint_transcripts", transcript.Id.ToString(), transcript, transcript.Timestamp, cancellationToken, deviceId: transcript.DeviceId.ToString(), endpoint: transcript.Endpoint, method: transcript.Method, adapterName: transcript.AdapterName);
+            await InsertPayloadAsync(StoreTable.EndpointTranscripts, transcript.Id.ToString(), transcript, transcript.Timestamp, cancellationToken, deviceId: transcript.DeviceId.ToString(), endpoint: transcript.Endpoint, method: transcript.Method, adapterName: transcript.AdapterName);
         }
     }
 
@@ -197,7 +236,7 @@ public sealed class SqliteApplicationStore(IOptions<BossCamRuntimeOptions> optio
     }
 
     public async Task SaveProbeSessionAsync(ProbeSession session, CancellationToken cancellationToken)
-        => await UpsertPayloadAsync("probe_sessions", "id", session.Id.ToString(), session, session.StartedAt, cancellationToken, deviceId: session.DeviceId.ToString());
+        => await UpsertPayloadAsync(StoreTable.ProbeSessions, session.Id.ToString(), session, session.StartedAt, cancellationToken, deviceId: session.DeviceId.ToString());
 
     public async Task<IReadOnlyCollection<ProbeSession>> GetProbeSessionsAsync(Guid? deviceId, int limit, CancellationToken cancellationToken)
     {
@@ -288,7 +327,7 @@ public sealed class SqliteApplicationStore(IOptions<BossCamRuntimeOptions> optio
         => await QueryPayloadListAsync<FirmwareCapabilityProfile>("SELECT payload FROM firmware_capability_profiles ORDER BY updated_at DESC", null, cancellationToken);
 
     public async Task SavePersistenceVerificationResultAsync(PersistenceVerificationResult result, CancellationToken cancellationToken)
-        => await InsertPayloadAsync("persistence_verification_results", result.Id.ToString(), result, result.Timestamp, cancellationToken, deviceId: result.DeviceId.ToString());
+        => await InsertPayloadAsync(StoreTable.PersistenceVerificationResults, result.Id.ToString(), result, result.Timestamp, cancellationToken, deviceId: result.DeviceId.ToString());
 
     public async Task<IReadOnlyCollection<PersistenceVerificationResult>> GetPersistenceVerificationResultsAsync(Guid deviceId, int limit, CancellationToken cancellationToken)
         => await QueryPayloadListAsync<PersistenceVerificationResult>($"SELECT payload FROM persistence_verification_results WHERE device_id = $id ORDER BY timestamp DESC LIMIT {Math.Max(1, limit)}", parameters => parameters.AddWithValue("$id", deviceId.ToString()), cancellationToken);
@@ -355,7 +394,7 @@ public sealed class SqliteApplicationStore(IOptions<BossCamRuntimeOptions> optio
     }
 
     public async Task AddFirmwareArtifactAsync(FirmwareArtifact artifact, CancellationToken cancellationToken)
-        => await InsertPayloadAsync("firmware_artifacts", artifact.Id.ToString(), artifact, artifact.AnalyzedAt, cancellationToken);
+        => await InsertPayloadAsync(StoreTable.FirmwareArtifacts, artifact.Id.ToString(), artifact, artifact.AnalyzedAt, cancellationToken);
 
     public async Task<IReadOnlyCollection<FirmwareArtifact>> GetFirmwareArtifactsAsync(CancellationToken cancellationToken)
         => await QueryPayloadListAsync<FirmwareArtifact>("SELECT payload FROM firmware_artifacts ORDER BY analyzed_at DESC", null, cancellationToken);
@@ -364,7 +403,7 @@ public sealed class SqliteApplicationStore(IOptions<BossCamRuntimeOptions> optio
     {
         foreach (var profile in profiles)
         {
-            await UpsertPayloadAsync("recording_profiles", "id", profile.Id.ToString(), profile, profile.UpdatedAt, cancellationToken, deviceId: profile.DeviceId.ToString());
+            await UpsertPayloadAsync(StoreTable.RecordingProfiles, profile.Id.ToString(), profile, profile.UpdatedAt, cancellationToken, deviceId: profile.DeviceId.ToString());
         }
     }
 
@@ -684,7 +723,7 @@ public sealed class SqliteApplicationStore(IOptions<BossCamRuntimeOptions> optio
             parameters => parameters.AddWithValue("$id", deviceId.ToString()),
             cancellationToken);
 
-    private async Task UpsertPayloadAsync<T>(string tableName, string keyColumn, string key, T payload, DateTimeOffset timestamp, CancellationToken cancellationToken, string? deviceId = null)
+    private async Task UpsertPayloadAsync<T>(StoreTable table, string key, T payload, DateTimeOffset timestamp, CancellationToken cancellationToken, string? deviceId = null)
     {
         await _gate.WaitAsync(cancellationToken);
         try
@@ -692,19 +731,10 @@ public sealed class SqliteApplicationStore(IOptions<BossCamRuntimeOptions> optio
             await using var connection = OpenConnection();
             await connection.OpenAsync(cancellationToken);
             await using var command = connection.CreateCommand();
-            var timestampColumn = tableName switch
-            {
-                "capability_maps" => "updated_at",
-                "settings_snapshots" => "updated_at",
-                "protocol_manifests" => "updated_at",
-                "recording_profiles" => "updated_at",
-                "probe_sessions" => "started_at",
-                _ => "updated_at"
-            };
-            var deviceIdClause = deviceId is null ? string.Empty : ", device_id = excluded.device_id";
-            var deviceIdInsert = deviceId is null ? string.Empty : ", device_id";
-            var deviceIdValues = deviceId is null ? string.Empty : ", $device_id";
-            command.CommandText = $"INSERT INTO {tableName} ({keyColumn}{deviceIdInsert}, payload, {timestampColumn}) VALUES ($key{deviceIdValues}, $payload, $timestamp) ON CONFLICT({keyColumn}) DO UPDATE SET payload = excluded.payload, {timestampColumn} = excluded.{timestampColumn}{deviceIdClause}";
+            // CommandText is produced entirely from the closed StoreTable enum and a
+            // caller-supplied flag (withDeviceId). No string interpolation of caller
+            // data ends up in the SQL structure.
+            command.CommandText = UpsertCommandText(table, withDeviceId: deviceId is not null);
             command.Parameters.AddWithValue("$key", key);
             if (deviceId is not null)
             {
@@ -720,7 +750,32 @@ public sealed class SqliteApplicationStore(IOptions<BossCamRuntimeOptions> optio
         }
     }
 
-    private async Task InsertPayloadAsync<T>(string tableName, string id, T payload, DateTimeOffset timestamp, CancellationToken cancellationToken, string? deviceId = null, string? endpoint = null, string? method = null, string? adapterName = null)
+    // Pre-written CommandText strings for every supported (StoreTable, deviceId-bearing)
+    // combination. The dispatch table covers EXACTLY the (table, withDeviceId) pairs that
+    // callers in this file actually use. Unsupported combinations throw — the punch list
+    // ("structurally impossible for a future caller to pass a variable table name") requires
+    // us to reject out-of-range enums loudly rather than silently composing unsafe SQL.
+    private static string UpsertCommandText(StoreTable table, bool withDeviceId)
+    {
+        return (table, withDeviceId) switch
+        {
+            (StoreTable.CapabilityMaps, false) => "INSERT INTO capability_maps (device_id, payload, updated_at) VALUES ($key, $payload, $timestamp) ON CONFLICT(device_id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at",
+            (StoreTable.SettingsSnapshots, false) => "INSERT INTO settings_snapshots (device_id, payload, updated_at) VALUES ($key, $payload, $timestamp) ON CONFLICT(device_id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at",
+            (StoreTable.ProtocolManifests, false) => "INSERT INTO protocol_manifests (manifest_id, payload, updated_at) VALUES ($key, $payload, $timestamp) ON CONFLICT(manifest_id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at",
+            (StoreTable.RecordingProfiles, false) => "INSERT INTO recording_profiles (id, payload, updated_at) VALUES ($key, $payload, $timestamp) ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at",
+            (StoreTable.RecordingProfiles, true) => "INSERT INTO recording_profiles (id, device_id, payload, updated_at) VALUES ($key, $device_id, $payload, $timestamp) ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at, device_id = excluded.device_id",
+            (StoreTable.ProbeSessions, false) => "INSERT INTO probe_sessions (id, payload, started_at) VALUES ($key, $payload, $timestamp) ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, started_at = excluded.started_at",
+            (StoreTable.ProbeSessions, true) => "INSERT INTO probe_sessions (id, device_id, payload, started_at) VALUES ($key, $device_id, $payload, $timestamp) ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, started_at = excluded.started_at, device_id = excluded.device_id",
+            _ => throw new InvalidOperationException(
+                $"UpsertCommandText has no (table={table}, withDeviceId={withDeviceId}) entry. " +
+                "Add a hard-coded pre-written CommandText literal for the new shape — this dispatch " +
+                "table is the structural guarantee that closes the P0 #5 SQL-identifier injection " +
+                "vector. Do NOT compose the CommandText via string interpolation of caller-supplied " +
+                "data; that reopens the injection path this enum was added to close.")
+        };
+    }
+
+    private async Task InsertPayloadAsync<T>(StoreTable table, string id, T payload, DateTimeOffset timestamp, CancellationToken cancellationToken, string? deviceId = null, string? endpoint = null, string? method = null, string? adapterName = null)
     {
         await _gate.WaitAsync(cancellationToken);
         try
@@ -728,17 +783,11 @@ public sealed class SqliteApplicationStore(IOptions<BossCamRuntimeOptions> optio
             await using var connection = OpenConnection();
             await connection.OpenAsync(cancellationToken);
             await using var command = connection.CreateCommand();
-            var timestampColumn = tableName switch
+            var identifier = SqlIdentifierMap.For(table);
+            var timestampColumn = identifier.TimestampColumn;
+            if (table == StoreTable.EndpointTranscripts)
             {
-                "audit_entries" => "timestamp",
-                "firmware_artifacts" => "analyzed_at",
-                "endpoint_transcripts" => "timestamp",
-                "persistence_verification_results" => "timestamp",
-                _ => "updated_at"
-            };
-            if (tableName.Equals("endpoint_transcripts", StringComparison.OrdinalIgnoreCase))
-            {
-                command.CommandText = $"INSERT OR REPLACE INTO {tableName} (id, device_id, endpoint, method, adapter_name, payload, {timestampColumn}) VALUES ($id, $device_id, $endpoint, $method, $adapter_name, $payload, $timestamp)";
+                command.CommandText = "INSERT OR REPLACE INTO endpoint_transcripts (id, device_id, endpoint, method, adapter_name, payload, timestamp) VALUES ($id, $device_id, $endpoint, $method, $adapter_name, $payload, $timestamp)";
                 command.Parameters.AddWithValue("$device_id", deviceId ?? string.Empty);
                 command.Parameters.AddWithValue("$endpoint", endpoint ?? string.Empty);
                 command.Parameters.AddWithValue("$method", method ?? "GET");
@@ -746,11 +795,11 @@ public sealed class SqliteApplicationStore(IOptions<BossCamRuntimeOptions> optio
             }
             else if (deviceId is null)
             {
-                command.CommandText = $"INSERT OR REPLACE INTO {tableName} (id, payload, {timestampColumn}) VALUES ($id, $payload, $timestamp)";
+                command.CommandText = InsertCommandText(table, withDeviceId: false);
             }
             else
             {
-                command.CommandText = $"INSERT OR REPLACE INTO {tableName} (id, device_id, payload, {timestampColumn}) VALUES ($id, $device_id, $payload, $timestamp)";
+                command.CommandText = InsertCommandText(table, withDeviceId: true);
                 command.Parameters.AddWithValue("$device_id", deviceId);
             }
             command.Parameters.AddWithValue("$id", id);
@@ -762,6 +811,21 @@ public sealed class SqliteApplicationStore(IOptions<BossCamRuntimeOptions> optio
         {
             _gate.Release();
         }
+    }
+
+    // Pre-written CommandText strings for every supported StoreTable / deviceId combination.
+    private static string InsertCommandText(StoreTable table, bool withDeviceId)
+    {
+        return (table, withDeviceId) switch
+        {
+            (StoreTable.AuditEntries, false) => "INSERT OR REPLACE INTO audit_entries (id, payload, timestamp) VALUES ($id, $payload, $timestamp)",
+            (StoreTable.AuditEntries, true) => "INSERT OR REPLACE INTO audit_entries (id, device_id, payload, timestamp) VALUES ($id, $device_id, $payload, $timestamp)",
+            (StoreTable.FirmwareArtifacts, false) => "INSERT OR REPLACE INTO firmware_artifacts (id, payload, analyzed_at) VALUES ($id, $payload, $timestamp)",
+            (StoreTable.FirmwareArtifacts, true) => "INSERT OR REPLACE INTO firmware_artifacts (id, device_id, payload, analyzed_at) VALUES ($id, $device_id, $payload, $timestamp)",
+            (StoreTable.PersistenceVerificationResults, false) => "INSERT OR REPLACE INTO persistence_verification_results (id, payload, timestamp) VALUES ($id, $payload, $timestamp)",
+            (StoreTable.PersistenceVerificationResults, true) => "INSERT OR REPLACE INTO persistence_verification_results (id, device_id, payload, timestamp) VALUES ($id, $device_id, $payload, $timestamp)",
+            _ => throw new ArgumentOutOfRangeException(nameof(table), table, "InsertCommandText has no entry for this StoreTable. Add it before using — endpoint_transcripts is handled separately in InsertPayloadAsync.")
+        };
     }
 
     private async Task<IReadOnlyCollection<T>> QueryPayloadListAsync<T>(string sql, Action<SqliteParameterCollection>? bind, CancellationToken cancellationToken)

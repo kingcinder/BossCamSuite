@@ -1,4 +1,5 @@
 using BossCam.Core;
+using BossCam.Core.Security;
 using BossCam.Infrastructure.Control;
 using BossCam.Infrastructure.Discovery;
 using BossCam.Infrastructure.Firmware;
@@ -38,6 +39,14 @@ public static class InfrastructureServiceCollectionExtensions
                 options.FirmwareArtifactDirectory = string.IsNullOrWhiteSpace(options.FirmwareArtifactDirectory)
                     ? Path.Combine(dataRoot, "firmware")
                     : options.FirmwareArtifactDirectory;
+                // StorageRoot is the post-configure default that /api/storage/paths validates
+                // submissions against. Empty here would land as "" in BossCamRuntimeOptions,
+                // forcing ResolveStorageRoot in Program.cs to re-derive $LocalAppData$/BossCamSuite/recordings
+                // — which is the same path but only by coincidence. Pin it here so test fixtures
+                // and the runtime path see the same value.
+                options.StorageRoot = string.IsNullOrWhiteSpace(options.StorageRoot)
+                    ? Path.Combine(dataRoot, "recordings")
+                    : options.StorageRoot;
                 if (string.IsNullOrWhiteSpace(options.IpcamSuiteDirectory) && OperatingSystem.IsWindows())
                 {
                     options.IpcamSuiteDirectory = @"C:\Program Files\IPCamSuite";
@@ -54,6 +63,12 @@ public static class InfrastructureServiceCollectionExtensions
             });
 
         services.AddSingleton<IApplicationStore, SqliteApplicationStore>();
+
+        // Cross-platform credential cipher. CompositePasswordCipher lazily generates a
+        // 0600-permissioned AES-GCM keyfile on Linux/macOS, or uses DPAPI CurrentUser on
+        // Windows. SqliteApplicationStore takes it via ctor injection to encrypt passwords
+        // on save and decrypt them transparently on load.
+        services.AddSingleton<IPasswordCipher, CompositePasswordCipher>();
         services.AddSingleton<IProtocolManifestProvider, JsonProtocolManifestProvider>();
         services.AddSingleton<IFirmwareArtifactAnalyzer, FirmwareArtifactAnalyzer>();
 

@@ -55,7 +55,9 @@ public static class LanBoundAuthFactories
                     ["BossCam:DiscoveryOfflineMode"] = "true",
                     // Token is sourced from the env var; config stays empty so we exercise
                     // the env-var priority path.
-                    ["BossCam:LanAuthToken"] = string.Empty
+                    ["BossCam:LanAuthToken"] = string.Empty,
+                    ["BossCam:RateLimitEnabled"] = "false",
+                    ["BossCam:StorageRoot"] = Path.Combine(TempRoot, "recordings")
                 });
             });
         }
@@ -124,7 +126,9 @@ public static class LanBoundAuthFactories
                     ["BossCam:RecordingHousekeepingMinutes"] = "60",
                     ["BossCam:RecordingStartupReconcileDelaySeconds"] = "3600",
                     ["BossCam:DiscoveryOfflineMode"] = "true",
-                    ["BossCam:LanAuthToken"] = Token
+                    ["BossCam:LanAuthToken"] = Token,
+                    ["BossCam:RateLimitEnabled"] = "false",
+                    ["BossCam:StorageRoot"] = Path.Combine(TempRoot, "recordings")
                 });
             });
         }
