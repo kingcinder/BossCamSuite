@@ -11,9 +11,44 @@
     6: 'layout-6', 7: 'layout-7', 8: 'layout-8',
   };
 
+  let fullscreenSupported = $state(typeof document !== 'undefined' && !!document.documentElement.requestFullscreen);
+
   function resetOrder() {
     appState.resetOrder();
     appState.showToast('View order reset');
+  }
+
+  // Full-screen mode (replaces WPF full-screen)
+  async function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      await document.documentElement.requestFullscreen();
+      appState.fullscreenEnabled = true;
+    } else {
+      await document.exitFullscreen();
+      appState.fullscreenEnabled = false;
+    }
+  }
+
+  // Desktop notifications via Web Notification API (replaces WPF OS toasts)
+  function requestNotify() {
+    if (!('Notification' in window)) {
+      appState.showToast('Notifications not supported in this browser', false);
+      return;
+    }
+    if (Notification.permission === 'granted') {
+      appState.notificationsEnabled = !appState.notificationsEnabled;
+      appState.showToast(appState.notificationsEnabled ? 'Notifications on' : 'Notifications off');
+    } else {
+      Notification.requestPermission().then(perm => {
+        appState.notificationsEnabled = perm === 'granted';
+        if (perm === 'granted') {
+          appState.showToast('Desktop notifications enabled');
+          new Notification('BossCamSuite', { body: 'Notifications are now active.' });
+        } else {
+          appState.showToast('Notification permission denied', false);
+        }
+      });
+    }
   }
 </script>
 
@@ -51,6 +86,16 @@
     </select>
 
     <button onclick={resetOrder} type="button">Reset order</button>
+
+    {#if fullscreenSupported}
+      <button onclick={toggleFullscreen} type="button" class:active={appState.fullscreenEnabled}>
+        {appState.fullscreenEnabled ? 'Exit fullscreen' : 'Fullscreen'}
+      </button>
+    {/if}
+
+    <button onclick={requestNotify} type="button" class:active={appState.notificationsEnabled}>
+      {'Notification' in window && Notification.permission === 'granted' ? (appState.notificationsEnabled ? '🔔 On' : '🔕 Off') : '🔔 Enable notifications'}
+    </button>
   </div>
   <p class="muted small">
     Continuous live streams (RTSP→MJPEG via ffmpeg). Drag title bar to rearrange. Click a tile to select for settings/record.

@@ -14,6 +14,7 @@
   import RecordPanel from './lib/components/RecordPanel.svelte';
   import HighlightsPanel from './lib/components/HighlightsPanel.svelte';
   import AdvancedPanel from './lib/components/AdvancedPanel.svelte';
+  import FirmwarePanel from './lib/components/FirmwarePanel.svelte';
 
   let appState = new AppState();
 
@@ -22,6 +23,82 @@
   let snapHint = $state('Select a camera or open View All.');
   let sourcesHtml = $state('');
   let identityHtml = $state('');
+  let fullscreenSupported = $state(typeof document !== 'undefined' && !!document.documentElement.requestFullscreen);
+
+  // ── Desktop notifications (Web Notification API) ──────────────
+  // Equivalent to WPF OS-level toast notifications.
+  function requestNotifyPermission() {
+    if (!('Notification' in window)) return;
+    if (Notification.permission !== 'granted') {
+      Notification.requestPermission().then(perm => {
+        appState.notificationsEnabled = perm === 'granted';
+        if (perm === 'granted') appState.showToast('Desktop notifications enabled');
+      });
+    } else {
+      appState.notificationsEnabled = true;
+      appState.showToast('Desktop notifications active');
+    }
+  }
+
+  // ── Fullscreen toggle (replaces WPF full-screen mode) ────────
+  async function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      await document.documentElement.requestFullscreen();
+      appState.fullscreenEnabled = true;
+    } else {
+      await document.exitFullscreen();
+      appState.fullscreenEnabled = false;
+    }
+  }
+
+  // ── Keyboard shortcuts (replaces WPF keyboard navigation) ────
+  function handleKeyboard(e: KeyboardEvent) {
+    // F11 / Escape: fullscreen toggle
+    if (e.key === 'F11') {
+      e.preventDefault();
+      toggleFullscreen();
+      return;
+    }
+
+    // Don't handle shortcuts while typing in inputs
+    if ((e.target as HTMLElement)?.tagName === 'INPUT' || (e.target as HTMLElement)?.tagName === 'TEXTAREA') return;
+
+    switch (e.key) {
+      case 'd': case 'D': // D = Discover
+        appState.activeTab = 'viewall';
+        document.dispatchEvent(new CustomEvent('bosscam:discover'));
+        break;
+      case 'v': case 'V': // V = View All
+        appState.activeTab = 'viewall';
+        break;
+      case 'o': case 'O': // O = Overview
+        appState.activeTab = 'overview';
+        break;
+      case 'i': case 'I': // I = Image
+        appState.activeTab = 'image';
+        break;
+      case 's': case 'S': // S = Stream
+        appState.activeTab = 'stream';
+        break;
+      case 'n': case 'N': // N = Network
+        appState.activeTab = 'network';
+        break;
+      case 'r': case 'R': // R = Record
+        appState.activeTab = 'record';
+        break;
+      case 'h': case 'H': // H = Highlights
+        appState.activeTab = 'highlights';
+        break;
+      case 'a': case 'A': // A = Advanced
+        appState.activeTab = 'advanced';
+        break;
+      case 'f': case 'F': // F = Firmware (only from Advanced tab)
+        if (appState.activeTab === 'advanced') {
+          // firmware section is inside advanced
+        }
+        break;
+    }
+  }
 
   $effect(() => {
     if (appState.selectedDeviceId && appState.activeTab === 'overview') {
@@ -112,6 +189,14 @@
     // If connection fails, the SPA degrades gracefully to HTTP-only mode.
     signalR.connect(appState);
 
+    document.addEventListener('bosscam:discover', () => {
+      api.discover().then(() => {
+        if (!signalR.connected) {
+          return api.devices().then(d => { appState.devices = d; appState.syncOrder(); });
+        }
+      }).catch(() => {});
+    });
+
     document.addEventListener('bosscam:save', () => saveChangesAction());
     document.addEventListener('bosscam:refresh-settings', () => {
       appState.imagePayload = null;
@@ -122,8 +207,17 @@
     });
     document.addEventListener('bosscam:snapshot', () => saveSnapshotAction());
 
+    // Listen for keyboard shortcuts globally
+    document.addEventListener('keydown', handleKeyboard);
+
+    // Track fullscreen changes
+    document.addEventListener('fullscreenchange', () => {
+      appState.fullscreenEnabled = !!document.fullscreenElement;
+    });
+
     return () => {
       signalR.disconnect();
+      document.removeEventListener('keydown', handleKeyboard);
     };
   });
 </script>
@@ -194,7 +288,13 @@
 
     {#if appState.activeTab === 'advanced'}
       <section class="panel active">
-        <AdvancedPanel />
+        <AdvancedPanel {appState} />
+      </section>
+    {/if}
+
+    {#if appState.activeTab === 'firmware'}
+      <section class="panel active">
+        <FirmwarePanel {appState} />
       </section>
     {/if}
   </main>
