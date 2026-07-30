@@ -1,18 +1,35 @@
 using System.Collections.ObjectModel;
-using System.Net.Http;
-using System.Net.Http.Json;
-using System.Text.Json;
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using BossCam.Contracts;
+using BossCam.Desktop.Avalonia.Services;
 
 namespace BossCam.Desktop.Avalonia.ViewModels;
 
 public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 {
-    private readonly HttpClient _http = new() { BaseAddress = new Uri("http://127.0.0.1:5317"), Timeout = TimeSpan.FromSeconds(10) };
+    private readonly IBossCamApiClient _api;
     private Timer? _liveTimer;
+
+    /// <summary>
+    /// Default constructor — creates a real <see cref="HttpBossCamApiClient"/>
+    /// pointing at http://127.0.0.1:5317. Used by App.axaml.cs in production.
+    /// </summary>
+    public MainWindowViewModel()
+        : this(new HttpBossCamApiClient())
+    {
+    }
+
+    /// <summary>
+    /// DI-friendly constructor. Accepts any <see cref="IBossCamApiClient"/>
+    /// implementation (real, wrapped, or test double).
+    /// </summary>
+    public MainWindowViewModel(IBossCamApiClient apiClient)
+    {
+        ArgumentNullException.ThrowIfNull(apiClient);
+        _api = apiClient;
+    }
 
     [ObservableProperty]
     private ObservableCollection<DeviceIdentity> _devices = [];
@@ -45,12 +62,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         try
         {
-            var devices = await _http.GetFromJsonAsync<List<DeviceIdentity>>("/api/devices");
-            if (devices is not null)
-            {
-                Devices = new ObservableCollection<DeviceIdentity>(devices);
-                StatusText = $"Loaded {devices.Count} device(s)";
-            }
+            var devices = await _api.GetDevicesAsync();
+            Devices = new ObservableCollection<DeviceIdentity>(devices);
+            StatusText = $"Loaded {devices.Count} device(s)";
         }
         catch (Exception ex)
         {
@@ -72,8 +86,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
         try
         {
-            var info = await _http.GetFromJsonAsync<JsonElement>($"/api/devices/{id}/live-info");
-            if (info.TryGetProperty("mainRtsp", out var main))
+            var info = await _api.GetLiveInfoAsync(id);
+            if (info.HasValue && info.Value.TryGetProperty("mainRtsp", out var main))
             {
                 DeviceInfoText += $"\nMain RTSP: {main}";
             }
@@ -84,20 +98,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _liveTimer?.Dispose();
         _liveTimer = new Timer(async _ =>
         {
-            try
+            var bytes = await _api.GetSnapshotAsync(id);
+            if (bytes is { Length: > 100 })
             {
-                using var res = await _http.GetAsync($"/api/devices/{id}/snapshot?t={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}");
-                if (res.IsSuccessStatusCode)
-                {
-                    var bytes = await res.Content.ReadAsByteArrayAsync();
-                    if (bytes.Length > 100)
-                    {
-                        using var ms = new MemoryStream(bytes);
-                        LiveFrame = new Bitmap(ms);
-                    }
-                }
+                using var ms = new MemoryStream(bytes);
+                LiveFrame = new Bitmap(ms);
             }
-            catch { /* polling failures are expected */ }
         }, null, 0, 2000);
     }
 
@@ -107,11 +113,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         if (SelectedDevice is null) return;
         try
         {
-            var res = await _http.PostAsJsonAsync($"/api/storage/save-snapshot/{SelectedDevice.Id}", "{ }");
-            if (res.IsSuccessStatusCode)
-            {
-                StatusText = "Snapshot saved";
-            }
+            var saved = await _api.SaveSnapshotAsync(SelectedDevice.Id);
+            StatusText = saved ? "Snapshot saved" : "Snapshot failed";
         }
         catch (Exception ex)
         {
@@ -122,6 +125,6 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         _liveTimer?.Dispose();
-        _http.Dispose();
+        _api.Dispose();
     }
 }
