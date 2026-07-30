@@ -358,7 +358,8 @@ public sealed class DahuaLorexControlAdapter(
 
         try
         {
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(Math.Max(2, options.Value.HttpTimeoutSeconds / 2)) };
+            using var client = httpClientFactory.CreateClient("probe");
+            client.Timeout = TimeSpan.FromSeconds(Math.Max(2, options.Value.HttpTimeoutSeconds / 2));
             var html = await client.GetStringAsync($"http://{device.IpAddress}:{device.Port}/", cancellationToken);
             return html.Contains("flirLorex", StringComparison.OrdinalIgnoreCase)
                 || html.Contains("WEB SERVICE", StringComparison.OrdinalIgnoreCase);
@@ -488,7 +489,8 @@ public sealed class OnvifImagingControlAdapter(
             // NOTE: Do NOT 'tidy' the /2 divisor into a uniform per-class timeout; the tight
             // bound is intentional for this multi-port brand-probing scan.
             var probeTimeout = TimeSpan.FromSeconds(Math.Max(2, options.Value.HttpTimeoutSeconds / 2));
-            using var client = new HttpClient { Timeout = probeTimeout };
+            using var client = httpClientFactory.CreateClient("onvif");
+            client.Timeout = probeTimeout;
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             cts.CancelAfter(probeTimeout);
             var xml = await ProbeExceptionSwallow.RunAsync(

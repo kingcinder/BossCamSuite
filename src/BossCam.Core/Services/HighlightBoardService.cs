@@ -253,6 +253,7 @@ public sealed record DeviceRegisterRequest
 
 public sealed class DeviceRegistrationService(
     IApplicationStore store,
+    IHttpClientFactory httpClientFactory,
     CapabilityProbeService probeService,
     ILogger<DeviceRegistrationService> logger)
 {
@@ -304,7 +305,8 @@ public sealed class DeviceRegistrationService(
         // Brand A: Juan / NetSDK
         try
         {
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(6) };
+            using var client = httpClientFactory.CreateClient("probe");
+            client.Timeout = TimeSpan.FromSeconds(6);
             using var httpRequest = new HttpRequestMessage(HttpMethod.Get, $"http://{request.IpAddress}:{port}/NetSDK/System/deviceInfo");
             var token = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{user}:{password}"));
             httpRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", token);
@@ -360,7 +362,8 @@ public sealed class DeviceRegistrationService(
             {
                 try
                 {
-                    using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+                    using var client = httpClientFactory.CreateClient("onvif");
+                    client.Timeout = TimeSpan.FromSeconds(5);
                     var soap = """
                         <?xml version="1.0" encoding="UTF-8"?>
                         <s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope">
@@ -431,7 +434,8 @@ public sealed class DeviceRegistrationService(
         {
             try
             {
-                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
+                using var client = httpClientFactory.CreateClient("probe");
+                client.Timeout = TimeSpan.FromSeconds(4);
                 var html = await client.GetStringAsync($"http://{request.IpAddress}:{port}/", cancellationToken);
                 if (html.Contains("flirLorex", StringComparison.OrdinalIgnoreCase) || html.Contains("WEB SERVICE", StringComparison.OrdinalIgnoreCase))
                 {
