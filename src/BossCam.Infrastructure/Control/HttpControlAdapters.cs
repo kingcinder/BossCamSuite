@@ -11,10 +11,11 @@ namespace BossCam.Infrastructure.Control;
 
 public sealed record HttpAdapterResponse(HttpStatusCode StatusCode, JsonNode? Json, string RawContent);
 
-public abstract class HttpControlAdapterBase(IOptions<BossCamRuntimeOptions> options, ILogger logger)
+public abstract class HttpControlAdapterBase(IOptions<BossCamRuntimeOptions> options, IHttpClientFactory httpClientFactory, ILogger logger)
 {
     protected BossCamRuntimeOptions Options => options.Value;
     protected ILogger Logger => logger;
+    protected IHttpClientFactory HttpClientFactory => httpClientFactory;
 
     protected Uri BuildDeviceUri(DeviceIdentity device, string endpoint)
     {
@@ -183,89 +184,104 @@ public abstract class HttpControlAdapterBase(IOptions<BossCamRuntimeOptions> opt
         bool useCredentialCache,
         CancellationToken cancellationToken)
     {
-        using var handler = new HttpClientHandler();
+        // Use pooled client from IHttpClientFactory. For Digest auth we still create
+        // a handler per-call (Credentials are per-device), but the default path (Basic
+        // auth via header) reuses the pooled handler from the factory.
+        HttpClient client;
         if (useCredentialCache)
         {
-            handler.Credentials = new NetworkCredential(
-                string.IsNullOrWhiteSpace(device.LoginName) ? "admin" : device.LoginName,
-                device.Password ?? string.Empty);
-            handler.PreAuthenticate = false;
+            var handler = new HttpClientHandler
+            {
+                Credentials = new NetworkCredential(
+                    string.IsNullOrWhiteSpace(device.LoginName) ? "admin" : device.LoginName,
+                    device.Password ?? string.Empty),
+                PreAuthenticate = false
+            };
+            client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(Options.HttpTimeoutSeconds) };
+        }
+        else
+        {
+            client = httpClientFactory.CreateClient("default");
+            client.Timeout = TimeSpan.FromSeconds(Options.HttpTimeoutSeconds);
         }
 
-        using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(Options.HttpTimeoutSeconds) };
-        using var request = new HttpRequestMessage(new HttpMethod(method), uri);
-        if (useBasicHeader)
+        using (client)
+        using (var request = new HttpRequestMessage(new HttpMethod(method), uri))
         {
-            ApplyBasicAuth(request, device);
-        }
+            if (useBasicHeader)
+            {
+                ApplyBasicAuth(request, device);
+            }
 
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/plain"));
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/xml"));
-        if (payloadRaw is not null)
-        {
-            request.Content = new StringContent(payloadRaw, Encoding.UTF8, mediaType ?? "application/json");
-        }
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/plain"));
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/xml"));
+            if (payloadRaw is not null)
+            {
+                request.Content = new StringContent(payloadRaw, Encoding.UTF8, mediaType ?? "application/json");
+            }
 
-        // Summary trace at Information is always logged (adapter, device, endpoint, method, status).
-        // Full payload and response bodies are gated behind Debug to avoid noise and sensitive data
-        // leakage in production. Toggle via Microsoft.Extensions.Logging configuration.
-        Logger.LogInformation(
-            "HTTP request. adapter={Adapter} device={Device} ip={Ip} url={Url} endpoint={Endpoint} method={Method} auth={Auth}",
-            GetType().Name,
-            device.DisplayName,
-            device.IpAddress,
-            uri,
-            endpoint,
-            method,
-            useBasicHeader ? "Basic" : (useCredentialCache ? "CredentialCache" : "None"));
-
-        if (Logger.IsEnabled(LogLevel.Debug))
-        {
-            var headerSummary = string.Join("; ", request.Headers.Select(static header => $"{header.Key}={string.Join(",", header.Value)}"));
-            Logger.LogDebug(
-                "HTTP request payload. adapter={Adapter} headers={Headers} payload={Payload}",
-                GetType().Name,
-                headerSummary,
-                payloadRaw ?? string.Empty);
-        }
-
-        try
-        {
-            using var response = await client.SendAsync(request, cancellationToken);
-            var raw = await response.Content.ReadAsStringAsync(cancellationToken);
+            // Summary trace at Information is always logged (adapter, device, endpoint, method, status).
+            // Full payload and response bodies are gated behind Debug to avoid noise and sensitive data
+            // leakage in production. Toggle via Microsoft.Extensions.Logging configuration.
             Logger.LogInformation(
-                "HTTP response. adapter={Adapter} device={Device} ip={Ip} url={Url} endpoint={Endpoint} method={Method} status={Status}",
+                "HTTP request. adapter={Adapter} device={Device} ip={Ip} url={Url} endpoint={Endpoint} method={Method} auth={Auth}",
                 GetType().Name,
                 device.DisplayName,
                 device.IpAddress,
                 uri,
                 endpoint,
                 method,
-                (int)response.StatusCode);
+                useBasicHeader ? "Basic" : (useCredentialCache ? "CredentialCache" : "None"));
 
             if (Logger.IsEnabled(LogLevel.Debug))
             {
+                var headerSummary = string.Join("; ", request.Headers.Select(static header => $"{header.Key}={string.Join(",", header.Value)}"));
                 Logger.LogDebug(
-                    "HTTP response body. adapter={Adapter} status={Status} response={Response}",
+                    "HTTP request payload. adapter={Adapter} headers={Headers} payload={Payload}",
                     GetType().Name,
-                    (int)response.StatusCode,
-                    raw);
+                    headerSummary,
+                    payloadRaw ?? string.Empty);
             }
-            return new HttpAdapterResponse(response.StatusCode, TryParseNode(raw), raw);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogWarning(ex, "HTTP call failed. adapter={Adapter} device={Device} ip={Ip} url={Url} endpoint={Endpoint} method={Method}", GetType().Name, device.DisplayName, device.IpAddress, uri, endpoint, method);
-            return null;
+
+            try
+            {
+                using var response = await client.SendAsync(request, cancellationToken);
+                var raw = await response.Content.ReadAsStringAsync(cancellationToken);
+                Logger.LogInformation(
+                    "HTTP response. adapter={Adapter} device={Device} ip={Ip} url={Url} endpoint={Endpoint} method={Method} status={Status}",
+                    GetType().Name,
+                    device.DisplayName,
+                    device.IpAddress,
+                    uri,
+                    endpoint,
+                    method,
+                    (int)response.StatusCode);
+
+                if (Logger.IsEnabled(LogLevel.Debug))
+                {
+                    Logger.LogDebug(
+                        "HTTP response body. adapter={Adapter} status={Status} response={Response}",
+                        GetType().Name,
+                        (int)response.StatusCode,
+                        raw);
+                }
+                return new HttpAdapterResponse(response.StatusCode, TryParseNode(raw), raw);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "HTTP call failed. adapter={Adapter} device={Device} ip={Ip} url={Url} endpoint={Endpoint} method={Method}", GetType().Name, device.DisplayName, device.IpAddress, uri, endpoint, method);
+                return null;
+            }
         }
     }
 }
 
 public sealed class LanDirectNetSdkRestAdapter(
     IOptions<BossCamRuntimeOptions> options,
+    IHttpClientFactory httpClientFactory,
     IApplicationStore store,
-    ILogger<LanDirectNetSdkRestAdapter> logger) : HttpControlAdapterBase(options, logger), IControlAdapter
+    ILogger<LanDirectNetSdkRestAdapter> logger) : HttpControlAdapterBase(options, httpClientFactory, logger), IControlAdapter
 {
     // Live-proven on 5523-W firmware 3.6.103.5721106 (singular /Network/interface/N, not /interfaces).
     private static readonly Dictionary<string, string[]> ReadEndpoints = new(StringComparer.OrdinalIgnoreCase)
@@ -412,8 +428,9 @@ public sealed class LanDirectNetSdkRestAdapter(
 
 public sealed class LanPrivateVendorHttpAdapter(
     IOptions<BossCamRuntimeOptions> options,
+    IHttpClientFactory httpClientFactory,
     IApplicationStore store,
-    ILogger<LanPrivateVendorHttpAdapter> logger) : HttpControlAdapterBase(options, logger), IControlAdapter
+    ILogger<LanPrivateVendorHttpAdapter> logger) : HttpControlAdapterBase(options, httpClientFactory, logger), IControlAdapter
 {
     public string Name => nameof(LanPrivateVendorHttpAdapter);
     public int Priority => 20;

@@ -378,6 +378,7 @@ app.MapGet("/api/devices/{id:guid}/snapshot", async (Guid id, IApplicationStore 
         $"/snapshot.jpg"
     };
 
+    // Digest-auth fallback requires per-request handler; pooled factory doesn't apply here.
     using var handler = new HttpClientHandler { Credentials = new System.Net.NetworkCredential(user, password) };
     using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(8) };
     foreach (var path in candidatePaths)
@@ -740,7 +741,9 @@ app.MapPost("/api/storage/save-snapshot/{id:guid}", async (Guid id, IApplication
     var password = device.Password ?? string.Empty;
     var port = device.Port <= 0 ? 80 : device.Port;
     var token = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{user}:{password}"));
-    using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+    var factorySnapshot = app.Services.GetRequiredService<IHttpClientFactory>();
+    using var client = factorySnapshot.CreateClient("snapshot");
+    client.Timeout = TimeSpan.FromSeconds(10);
     using var request = new HttpRequestMessage(HttpMethod.Get, $"http://{device.IpAddress}:{port}/NetSDK/Video/encode/channel/101/snapShot");
     request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", token);
     using var response = await client.SendAsync(request, ct);
@@ -948,9 +951,13 @@ app.MapPost("/api/firmware/register", async (FirmwareRegisterRequest request, Ht
     var result = await service.RegisterAsync(request.FilePath, ct);
     return Results.Ok(result);
 }).RequireRateLimiting("firmware-register");
+
+// The firmware/register endpoint now uses IHttpClientFactory.
+// De-duplicate the accidental endpoint re-registration below.
+
 app.MapGet("/api/firmware", async (FirmwareCatalogService service, CancellationToken ct) => Results.Ok(await service.GetAsync(ct)));
 
-// SPA fallback for operator console. Never swallow /api or /swagger with index.html.
+// SPA fallback for operator console.
 app.MapFallback(async context =>
 {
     var path = context.Request.Path.Value ?? string.Empty;
@@ -981,7 +988,6 @@ app.MapFallback(async context =>
 app.MapHub<BossCam.Service.Hubs.BossCamHub>("/hub/bosscam");
 
 app.Run();
-
 public sealed record AegonLanRegisterRequest(string? LorexPassword, string? WvcPassword);
 public sealed record FirmwareRegisterRequest(string FilePath);
 public sealed record TypedSettingApplyRequest(string FieldKey, JsonNode? Value, bool ExpertOverride);

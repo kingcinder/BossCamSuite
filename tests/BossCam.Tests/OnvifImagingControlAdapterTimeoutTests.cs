@@ -189,6 +189,7 @@ public sealed class OnvifImagingControlAdapterTimeoutTests : IClassFixture<Black
                 HttpTimeoutSeconds = httpTimeoutSeconds,
                 OnvifProbePorts = onvifProbePorts ?? TestPorts,
             }),
+            new NullHttpClientFactory(),
             NullLogger<OnvifImagingControlAdapter>.Instance);
 
     // Tiny between-probe settle: drains the LISTEN socket accept queue so the next adapter
@@ -235,6 +236,16 @@ public sealed class OnvifImagingControlAdapterTimeoutTests : IClassFixture<Black
 /// in <see cref="OnvifImagingControlAdapterTimeoutTests"/> via IClassFixture, so the bind/release
 /// lifecycle spans the whole test class rather than 5 back-to-back cycles.
 /// </summary>
+/// <summary>
+/// Lightweight <see cref="IHttpClientFactory"/> test double that returns a single-use
+/// <see cref="HttpClient"/> with default settings. Used by timeout tests where the factory
+/// is a constructor dependency but per-request handler configuration is not exercised.
+/// </summary>
+public sealed class NullHttpClientFactory : IHttpClientFactory
+{
+    public HttpClient CreateClient(string name) => new();
+}
+
 public sealed class BlackholeListenerFixture : IDisposable
 {
     public const int Port = 8899;

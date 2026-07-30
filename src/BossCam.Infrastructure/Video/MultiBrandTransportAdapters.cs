@@ -18,9 +18,13 @@ namespace BossCam.Infrastructure.Video;
 /// - Dahua/Lorex: rtsp://.../cam/realmonitor?channel=1&amp;subtype=0 (main), subtype=1 (sub)
 /// - WVC W5C / 631GA: ONVIF on :8899 + common RTSP candidates
 /// </summary>
+// CS9113: 'httpClientFactory' stored for future use in SoapAsync (Digest auth requires per-call handler).
+#pragma warning disable CS9113
 public sealed class MultiBrandHighResTransportAdapter(
     IOptions<BossCamRuntimeOptions> options,
+    IHttpClientFactory httpClientFactory,
     ILogger<MultiBrandHighResTransportAdapter> logger) : IVideoTransportAdapter
+#pragma warning restore CS9113
 {
     public string Name => nameof(MultiBrandHighResTransportAdapter);
     public TransportKind TransportKind => TransportKind.Rtsp;
@@ -214,7 +218,7 @@ public sealed class MultiBrandHighResTransportAdapter(
         return ProbeExceptionSwallow.RunAsync(
             async () =>
             {
-                using var handler = new HttpClientHandler
+                var handler = new HttpClientHandler
                 {
                     Credentials = new NetworkCredential(user, password),
                     PreAuthenticate = false
@@ -324,15 +328,15 @@ public enum CameraBrand
 // CS9107: primary-constructor parameter 'options' is captured into a hidden field for this
 // derived class AND passed to HttpControlAdapterBase, which stores its own copy. The two
 // references are the same IOptions<BossCamRuntimeOptions> instance, so there is no behavior
-// cost to the duplication. Accepted by Roslyn as an informational warning on the standard
-// primary-constructor-with-base-pass pattern; refactoring away would require a non-primary
-// constructor with explicit field duplication for no functional gain.
-#pragma warning disable CS9107
+// cost to the duplication.
+// CS9113: 'httpClientFactory' is passed to the base class but not directly read in this body.
+#pragma warning disable CS9107, CS9113
 public sealed class DahuaLorexControlAdapter(
     IOptions<BossCamRuntimeOptions> options,
-    ILogger<DahuaLorexControlAdapter> logger) : BossCam.Infrastructure.Control.HttpControlAdapterBase(options, logger), IControlAdapter
+    IHttpClientFactory httpClientFactory,
+    ILogger<DahuaLorexControlAdapter> logger) : BossCam.Infrastructure.Control.HttpControlAdapterBase(options, httpClientFactory, logger), IControlAdapter
 {
-#pragma warning restore CS9107
+#pragma warning restore CS9107, CS9113
     // options forwarded to HttpControlAdapterBase for timeout/config.
     public string Name => nameof(DahuaLorexControlAdapter);
     public int Priority => 25;
@@ -458,6 +462,7 @@ public sealed class DahuaLorexControlAdapter(
 /// </summary>
 public sealed class OnvifImagingControlAdapter(
     IOptions<BossCamRuntimeOptions> options,
+    IHttpClientFactory httpClientFactory,
     ILogger<OnvifImagingControlAdapter> logger) : IControlAdapter
 {
     public string Name => nameof(OnvifImagingControlAdapter);
@@ -509,10 +514,8 @@ public sealed class OnvifImagingControlAdapter(
         {
             // Per-port ONVIF GetDeviceInformation query — use the full HttpTimeoutSeconds so
             // each port attempt is properly patient.
-            using var client = new HttpClient
-            {
-                Timeout = TimeSpan.FromSeconds(Math.Max(2, options.Value.HttpTimeoutSeconds))
-            };
+            using var client = httpClientFactory.CreateClient("onvif");
+            client.Timeout = TimeSpan.FromSeconds(Math.Max(2, options.Value.HttpTimeoutSeconds));
             var xml = await ProbeExceptionSwallow.RunAsync(
                 () => PostSoapAsync(client, $"http://{device.IpAddress}:{port}/onvif/device_service",
                     """<tds:GetDeviceInformation xmlns:tds="http://www.onvif.org/ver10/device/wsdl"/>""",

@@ -93,6 +93,13 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<IVideoTransportAdapter, Kp2pAdapter>();
         services.AddSingleton<IVideoTransportAdapter, LinkVisionAdapter>();
 
+        // IHttpClientFactory for pooled connection lifecycle. Named clients allow
+        // per-service timeout configuration without per-call handler creation.
+        services.AddHttpClient("probe", client => { client.Timeout = TimeSpan.FromSeconds(8); });
+        services.AddHttpClient("snapshot", client => { client.Timeout = TimeSpan.FromSeconds(8); });
+        services.AddHttpClient("onvif", client => { client.Timeout = TimeSpan.FromSeconds(8); });
+        services.AddHttpClient("default", client => { client.Timeout = TimeSpan.FromSeconds(8); });
+
         return services;
     }
 }

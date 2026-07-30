@@ -13,7 +13,7 @@ namespace BossCam.Infrastructure.Video;
 /// Bubble live HTTP <c>/bubble/live?ch=1&amp;stream=0</c> (content-type video/bubble).
 /// Snapshot JPEG <c>/NetSDK/Video/encode/channel/101/snapShot</c>.
 /// </summary>
-public sealed class StreamDescriptorAdapter(IOptions<BossCamRuntimeOptions> options) : IVideoTransportAdapter
+public sealed class StreamDescriptorAdapter(IOptions<BossCamRuntimeOptions> options, IHttpClientFactory httpClientFactory) : IVideoTransportAdapter
 {
     public string Name => nameof(StreamDescriptorAdapter);
     public TransportKind TransportKind => TransportKind.LanRest;
@@ -113,7 +113,8 @@ public sealed class StreamDescriptorAdapter(IOptions<BossCamRuntimeOptions> opti
             });
         }
 
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(options.Value.HttpTimeoutSeconds) };
+        using var client = httpClientFactory.CreateClient("default");
+        client.Timeout = TimeSpan.FromSeconds(options.Value.HttpTimeoutSeconds);
         try
         {
             var endpoint = $"http://{device.IpAddress}:{port}/NetSDK/Stream/channel/0";

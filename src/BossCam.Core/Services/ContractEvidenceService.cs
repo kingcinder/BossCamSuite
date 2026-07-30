@@ -10,6 +10,21 @@ public sealed class ContractEvidenceService(
     IEndpointContractCatalog catalog,
     ILogger<ContractEvidenceService> logger) : IContractEvidenceService
 {
+    /// <summary>
+    /// Maximum age of a fixture before it is eligible for cleanup. Default 90 days.
+    /// </summary>
+    public TimeSpan FixtureMaxAge { get; init; } = TimeSpan.FromDays(90);
+
+    /// <summary>
+    /// Maximum number of fixtures to retain per device. Default 2000.
+    /// </summary>
+    public int FixtureMaxPerDevice { get; init; } = 2000;
+
+    /// <summary>
+    /// Maximum total fixtures across all devices. Default 10000.
+    /// </summary>
+    public int FixtureMaxTotal { get; init; } = 10000;
+
     public async Task<IReadOnlyCollection<EndpointContractFixture>> PromoteFromTranscriptsAsync(Guid deviceId, string exportRoot, CancellationToken cancellationToken)
     {
         var device = await store.GetDeviceAsync(deviceId, cancellationToken);

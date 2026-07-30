@@ -12,6 +12,7 @@ namespace BossCam.Infrastructure.Control;
 
 public sealed class OwnedRemoteCommandAdapter(
     IOptions<BossCamRuntimeOptions> options,
+    IHttpClientFactory httpClientFactory,
     IApplicationStore store,
     ILogger<OwnedRemoteCommandAdapter> logger) : IControlAdapter
 {
@@ -169,7 +170,8 @@ public sealed class OwnedRemoteCommandAdapter(
             return new RemoteCommandResult { Success = false, Message = "BossCam:RemoteCommandEndpoint is not configured.", Response = JsonNode.Parse(JsonSerializer.Serialize(envelope)) };
         }
 
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(options.Value.HttpTimeoutSeconds) };
+        using var client = httpClientFactory.CreateClient("default");
+        client.Timeout = TimeSpan.FromSeconds(options.Value.HttpTimeoutSeconds);
         using var request = new HttpRequestMessage(HttpMethod.Post, options.Value.RemoteCommandEndpoint);
         request.Content = new StringContent(JsonSerializer.Serialize(envelope), Encoding.UTF8);
         request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
