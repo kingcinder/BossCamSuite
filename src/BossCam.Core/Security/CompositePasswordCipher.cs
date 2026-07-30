@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Text;
 using BossCam.Core;
@@ -54,7 +55,10 @@ public sealed class CompositePasswordCipher : IPasswordCipher
             return "v1:" + EncryptWithKeyfile(plaintext);
         }
 
+        // _useKeyfile is false only on Windows, so the following call is safe.
+#pragma warning disable CA1416
         return "v2:" + EncryptWithDpapi(plaintext);
+#pragma warning restore CA1416
     }
 
     public string Decrypt(string ciphertext)
@@ -72,7 +76,10 @@ public sealed class CompositePasswordCipher : IPasswordCipher
 
         if (ciphertext.StartsWith("v2:", StringComparison.Ordinal))
         {
+            // v2: prefix is only produced on Windows (DPAPI).
+#pragma warning disable CA1416
             return DecryptWithDpapi(ciphertext[3..]);
+#pragma warning restore CA1416
         }
 
         // Legacy plaintext — return verbatim so pre-cipher rows still load.
@@ -114,6 +121,7 @@ public sealed class CompositePasswordCipher : IPasswordCipher
         return Encoding.UTF8.GetString(plain);
     }
 
+    [SupportedOSPlatform("windows")]
     private static string EncryptWithDpapi(string plaintext)
     {
         var entropy = SHA256.HashData(Salt);
@@ -121,6 +129,7 @@ public sealed class CompositePasswordCipher : IPasswordCipher
         return Convert.ToBase64String(protectedBytes);
     }
 
+    [SupportedOSPlatform("windows")]
     private static string DecryptWithDpapi(string base64)
     {
         var entropy = SHA256.HashData(Salt);
@@ -150,7 +159,9 @@ public sealed class CompositePasswordCipher : IPasswordCipher
             File.WriteAllText(_keyfilePath, Convert.ToBase64String(_keyfileKey));
             try
             {
+#pragma warning disable CA1416 // SetUnixFileMode is unsupported on Windows but guarded by _useKeyfile flag
                 File.SetUnixFileMode(_keyfilePath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+#pragma warning restore CA1416
             }
             catch (PlatformNotSupportedException)
             {

@@ -1,0 +1,27 @@
+version: "3.8"
+
+services:
+  bosscam:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: bosscamsuite:latest
+    container_name: bosscam
+    restart: unless-stopped
+    ports:
+      - "5317:5317"
+    environment:
+      - BOSSCAM_BIND=0.0.0.0
+      - BOSSCAM_PORT=5317
+      # Generate with: openssl rand -hex 32
+      # - BOSSCAM_LAN_TOKEN=<your-token-here>
+      # - BOSSCAM_FFMPEG_PATH=/usr/bin/ffmpeg
+      # - BOSSCAM_E2E_LIVE=0
+    volumes:
+      # Persist recordings, snapshots, SQLite DB, and cipher keyfile
+      - bosscam_data:/root/.local/share/BossCamSuite
+    # Optional: mount a local storage root at a specific path
+    # - /mnt/nas/recordings:/recordings
+
+volumes:
+  bosscam_data:

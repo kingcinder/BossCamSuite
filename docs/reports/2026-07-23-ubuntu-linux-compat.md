@@ -1,5 +1,9 @@
 # 2026-07-23 Ubuntu Linux compatibility
 
+> **Note (July 2026):** BossCamSuite has since been split into separate Linux and Windows editions.
+> The Windows edition lives at [github.com/kingcinder/BossCam-Suite---Windows-Edition](https://github.com/kingcinder/BossCam-Suite---Windows-Edition).
+> This repo is the Linux/Ubuntu edition only.
+
 ## Goal
 Make BossCamSuite fully usable on Ubuntu without Windows/WPF.
 

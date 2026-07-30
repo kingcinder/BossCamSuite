@@ -31,3 +31,6 @@ Thumbs.db
 
 # Windows shortcut artefacts — a .lnk was accidentally committed to root in 2026-04; never check these in.
 *.lnk
+
+# Svelte / Vite management UI (build output lands in wwwroot — tracked)
+src/BossCam.ManagementUI/node_modules/

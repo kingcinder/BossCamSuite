@@ -12,6 +12,7 @@ public sealed class HighlightBoardService(
     IApplicationStore store,
     TransportBroker transportBroker,
     RecordingService recordingService,
+    IBossCamEventBroadcaster broadcaster,
     ILogger<HighlightBoardService> logger)
 {
     private readonly object _lock = new();
@@ -70,7 +71,9 @@ public sealed class HighlightBoardService(
         }
 
         logger.LogInformation("Highlight selected device={DeviceId} index={Index}", deviceId, idx);
-        return await GetStateAsync(cancellationToken);
+        var state = await GetStateAsync(cancellationToken);
+        _ = broadcaster.HighlightStateChangedAsync(state, cancellationToken);
+        return state;
     }
 
     public async Task<HighlightBoardState> FlipAsync(int direction, CancellationToken cancellationToken)
@@ -89,7 +92,9 @@ public sealed class HighlightBoardService(
         }
 
         logger.LogInformation("Highlight flipped direction={Direction} index={Index}", direction, _selectedIndex);
-        return await GetStateAsync(cancellationToken);
+        var state = await GetStateAsync(cancellationToken);
+        _ = broadcaster.HighlightStateChangedAsync(state, cancellationToken);
+        return state;
     }
 
     public async Task<HighlightBoardState> SetPreferredStreamAsync(string preferredStream, CancellationToken cancellationToken)
@@ -106,7 +111,9 @@ public sealed class HighlightBoardService(
             _preferredStream = preferredStream;
         }
 
-        return await GetStateAsync(cancellationToken);
+        var state = await GetStateAsync(cancellationToken);
+        _ = broadcaster.HighlightStateChangedAsync(state, cancellationToken);
+        return state;
     }
 
     public async Task<IReadOnlyCollection<RecordingJob>> RecordSelectedAsync(CancellationToken cancellationToken)

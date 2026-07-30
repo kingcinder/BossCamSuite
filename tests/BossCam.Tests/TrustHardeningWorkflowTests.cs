@@ -47,6 +47,7 @@ public sealed class TrustHardeningWorkflowTests : IDisposable
             [new StubDiscoveryProvider(discoveredIpc)],
             [new StubImportProvider()],
             store,
+            NullBossCamEventBroadcaster.Instance,
             new FakeHostEnvironment { EnvironmentName = Environments.Production },
             Options.Create(new BossCamRuntimeOptions()),
             NullLogger<DiscoveryCoordinator>.Instance);

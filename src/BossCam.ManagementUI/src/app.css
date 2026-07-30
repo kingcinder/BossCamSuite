@@ -1,0 +1,23 @@
+:root {
+  --bg: #050506;
+  --panel: #120e10ee;
+  --border: #ff5a1f88;
+  --accent: #ff6a1f;
+  --text: #f2f4f7;
+  --muted: #c9b7ad;
+  --ok: #3ecf8e;
+  --bad: #ff6b6b;
+  --radius: 12px;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); }
+button, input, select, textarea { font: inherit; color: inherit; }
+a { color: var(--accent); }
+
+/* Scrollbar styling */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: #0a0708; }
+::-webkit-scrollbar-thumb { background: #ff5a1f55; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #ff6a1f88; }

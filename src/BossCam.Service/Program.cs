@@ -25,6 +25,22 @@ else if (OperatingSystem.IsLinux())
     builder.Host.UseSystemd();
 }
 
+// SignalR hub for real-time push events to the Svelte SPA.
+builder.Services.AddSignalR()
+    .AddHubOptions<BossCam.Service.Hubs.BossCamHub>(options =>
+    {
+        // 30 s keep-alive pings keep the WebSocket alive through
+        // NAT / reverse-proxy idle timeouts; clients reconnect on
+        // disconnect automatically via @microsoft/signalr retry policy.
+        options.KeepAliveInterval = TimeSpan.FromSeconds(30);
+        options.ClientTimeoutInterval = TimeSpan.FromSeconds(60);
+        // Message size — recording job payloads are small (<100 KB),
+        // device lists likewise. 128 KB is generous headroom.
+        options.MaximumReceiveMessageSize = 128 * 1024;
+    });
+// IBossCamEventBroadcaster lives in BossCam.Core; the implementation is in BossCam.Service.Hubs.
+builder.Services.AddSingleton<BossCam.Core.IBossCamEventBroadcaster, BossCam.Service.Hubs.BossCamEventBroadcaster>();
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 ConfigureCors(builder);
@@ -911,7 +927,8 @@ app.MapFallback(async context =>
 {
     var path = context.Request.Path.Value ?? string.Empty;
     if (path.StartsWith("/api", StringComparison.OrdinalIgnoreCase)
-        || path.StartsWith("/swagger", StringComparison.OrdinalIgnoreCase))
+        || path.StartsWith("/swagger", StringComparison.OrdinalIgnoreCase)
+        || path.StartsWith("/hub", StringComparison.OrdinalIgnoreCase))
     {
         context.Response.StatusCode = StatusCodes.Status404NotFound;
         context.Response.ContentType = "application/json";
@@ -931,6 +948,9 @@ app.MapFallback(async context =>
     context.Response.ContentType = "text/html; charset=utf-8";
     await context.Response.SendFileAsync(index);
 });
+
+// SignalR hub for the Svelte SPA real-time events.
+app.MapHub<BossCam.Service.Hubs.BossCamHub>("/hub/bosscam");
 
 app.Run();
 

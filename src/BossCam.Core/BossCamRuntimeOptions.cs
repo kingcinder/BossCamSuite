@@ -4,11 +4,13 @@ public sealed class BossCamRuntimeOptions
 {
     public string ProtocolAssetsPath { get; set; } = string.Empty;
     public string DatabasePath { get; set; } = string.Empty;
-    /// <summary>Optional Windows OEM install dir; unused on pure Linux LAN/NetSDK operation.</summary>
+    /// <summary>Windows OEM install dir for NativeBridge interop. Defaults to empty on Linux
+    /// (the Windows edition at github.com/kingcinder/BossCam-Suite---Windows-Edition populates this).</summary>
     public string IpcamSuiteDirectory { get; set; } = OperatingSystem.IsWindows()
         ? @"C:\Program Files\IPCamSuite"
         : string.Empty;
-    /// <summary>Optional Windows OEM install dir; unused on pure Linux LAN/NetSDK operation.</summary>
+    /// <summary>Windows OEM install dir for EseeCloud P2P transport. Defaults to empty on Linux
+    /// (the Windows edition at github.com/kingcinder/BossCam-Suite---Windows-Edition populates this).</summary>
     public string EseeCloudDirectory { get; set; } = OperatingSystem.IsWindows()
         ? @"C:\Program Files (x86)\EseeCloud"
         : string.Empty;

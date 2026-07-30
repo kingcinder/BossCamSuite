@@ -13,7 +13,7 @@ public sealed class SqliteApplicationStore : IApplicationStore
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly IOptions<BossCamRuntimeOptions> _options;
-    private readonly IPasswordCipher? _cipher;
+    private readonly IPasswordCipher _cipher;
     private readonly JsonSerializerOptions _serializerOptions = CreateSerializerOptions();
 
     /// <summary>Constructor used in production (DI supplies both options and the cipher).</summary>

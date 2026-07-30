@@ -11,6 +11,7 @@ public sealed class RecordingService(
     IApplicationStore store,
     TransportBroker transportBroker,
     IRecordingPipelineResolver pipelines,
+    IBossCamEventBroadcaster broadcaster,
     ILogger<RecordingService> logger)
 {
     /// <summary>
@@ -132,6 +133,10 @@ public sealed class RecordingService(
                 if (_running.Remove(started.Id, out var removed))
                 {
                     logger.LogWarning("Recording job exited: {JobId}", started.Id);
+                    // Push recording stopped to all connected SPA clients.
+                    _ = broadcaster.RecordingJobStoppedAsync(
+                        removed.Job with { IsRunning = false, StoppedAt = DateTimeOffset.UtcNow },
+                        CancellationToken.None);
                     // Clean up the helper script on spontaneous exit too (camera drop, EOF, signal)
                     // so we don't leak /tmp/bosscam-rec-*.sh when nobody ever calls StopAsync.
                     TryDeleteScript(removed.ScriptPath);
@@ -142,6 +147,9 @@ public sealed class RecordingService(
                 _gate.Release();
             }
         };
+
+        // Push recording started to all connected SPA clients.
+        _ = broadcaster.RecordingJobStartedAsync(started, cancellationToken);
 
         logger.LogInformation(
             "Recording started. job={JobId} device={Device} source={Source} pattern={Pattern} mode={Mode}",
@@ -396,7 +404,10 @@ public sealed class RecordingService(
             }
 
             _running.Remove(jobId);
-            return running.Job with { IsRunning = false, StoppedAt = DateTimeOffset.UtcNow };
+            var stopped = running.Job with { IsRunning = false, StoppedAt = DateTimeOffset.UtcNow };
+            // Push recording stopped to all connected SPA clients.
+            _ = broadcaster.RecordingJobStoppedAsync(stopped, CancellationToken.None);
+            return stopped;
         }
         finally
         {

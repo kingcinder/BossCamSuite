@@ -9,6 +9,7 @@ public sealed class DiscoveryCoordinator(
     IEnumerable<IDiscoveryProvider> discoveryProviders,
     IEnumerable<IDeviceImportProvider> importProviders,
     IApplicationStore store,
+    IBossCamEventBroadcaster broadcaster,
     IHostEnvironment environment,
     IOptions<BossCamRuntimeOptions> options,
     ILogger<DiscoveryCoordinator> logger)
@@ -72,6 +73,10 @@ public sealed class DiscoveryCoordinator(
 
         var merged = Merge(all).Values.ToList();
         await store.UpsertDevicesAsync(merged, cancellationToken);
+
+        // Push the updated device list to all connected SPA clients.
+        _ = broadcaster.DevicesChangedAsync(merged, cancellationToken);
+
         return merged;
     }
 
