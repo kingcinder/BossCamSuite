@@ -2,6 +2,7 @@
   import { AppState } from '../store';
   import { api } from '../api';
   import SettingsEditor from './SettingsEditor.svelte';
+  import MotionGridEditor from './MotionGridEditor.svelte';
 
   let { appState }: { appState: AppState } = $props();
   let isLoading = $state(true);
@@ -87,6 +88,8 @@
   </div>
   <p class="muted small">{statusText}</p>
 </div>
+
+<MotionGridEditor {appState} />
 
 <style>
   .card {

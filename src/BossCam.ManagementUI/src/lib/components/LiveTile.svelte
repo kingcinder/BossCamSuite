@@ -85,6 +85,35 @@
       appState.showToast(String(e), false);
     }
   }
+
+  // ── Picture-in-Picture (Document PiP API) ──────────────────────
+  let pipSupported = $state(typeof document !== 'undefined' && 'pictureInPictureEnabled' in document && document.pictureInPictureEnabled);
+  let imgEl: HTMLImageElement | undefined = $state();
+
+  async function togglePip() {
+    if (!imgEl) return;
+    if (document.pictureInPictureElement) {
+      await document.exitPictureInPicture();
+      appState.pipDeviceId = null;
+    } else {
+      try {
+        await imgEl.requestPictureInPicture();
+        appState.pipDeviceId = device.id;
+      } catch (e: unknown) {
+        appState.showToast('PiP failed: ' + String(e), false);
+      }
+    }
+  }
+
+  // Listen for PiP leave events
+  $effect(() => {
+    if (!imgEl) return;
+    function onLeave() {
+      appState.pipDeviceId = null;
+    }
+    imgEl.addEventListener('leavepictureinpicture', onLeave);
+    return () => imgEl.removeEventListener('leavepictureinpicture', onLeave);
+  });
 </script>
 
 <div
@@ -117,6 +146,7 @@
         decoding="async"
         onload={onStreamLoad}
         onerror={onStreamError}
+        bind:this={imgEl}
       />
     {/key}
     {#if streamFailed}
@@ -127,6 +157,11 @@
     <button onclick={select} type="button">Select</button>
     <button onclick={snap} type="button">Snapshot</button>
     <button onclick={startRec} type="button">Record</button>
+    {#if pipSupported}
+      <button onclick={togglePip} type="button" class:active={appState.pipDeviceId === device.id}>
+        {appState.pipDeviceId === device.id ? '⏹ PiP' : '📺 PiP'}
+      </button>
+    {/if}
   </div>
 </div>
 
