@@ -73,13 +73,39 @@ public sealed class LanAuthE2ETests : IClassFixture<LanAuthWebAppFactory>
         _factory = factory;
         _client = factory.CreateClient();
     }
+    public static IEnumerable<object[]> OpenPathsData()
+    {
+        // Static paths that must always be served without a token.
+        yield return ["/"];
+        yield return ["/index.html"];
+        yield return ["/api/health"];
+
+        // SPA-bundled assets live under /assets/ with content-hashed filenames.
+        // Discover them at test-time so the test doesn't break on rebuild.
+        var webRoot = Path.Combine(
+            AppContext.BaseDirectory,
+            "..", "..", "..", "..", "..",
+            "src", "BossCam.Service", "wwwroot");
+        var assetsDir = Path.Combine(webRoot, "assets");
+        if (Directory.Exists(assetsDir))
+        {
+            foreach (var file in Directory.EnumerateFiles(assetsDir))
+            {
+                var relative = "/assets/" + Path.GetFileName(file);
+                yield return [relative];
+            }
+        }
+
+        // Also check favicon if it exists.
+        var favicon = Path.Combine(webRoot, "favicon.svg");
+        if (File.Exists(favicon))
+        {
+            yield return ["/favicon.svg"];
+        }
+    }
+
     [Theory]
-    [InlineData("/")]
-    [InlineData("/index.html")]
-    [InlineData("/app.js")]
-    [InlineData("/app.css")]
-    [InlineData("/favicon.svg")]
-    [InlineData("/api/health")]
+    [MemberData(nameof(OpenPathsData))]
     public async Task Open_Paths_Do_Not_Require_Token(string path)
     {
         var res = await _client.GetAsync(path);

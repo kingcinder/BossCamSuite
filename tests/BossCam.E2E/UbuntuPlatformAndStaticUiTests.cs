@@ -41,12 +41,38 @@ public sealed class UbuntuPlatformAndStaticUiTests : IClassFixture<BossCamWebApp
         Assert.True(File.Exists(_factory.DatabasePath) || true); // may be created lazily on first store init
     }
 
+    public static IEnumerable<object[]> ServedAssetPaths()
+    {
+        // Core HTML entry points.
+        yield return ["/"];
+        yield return ["/index.html"];
+
+        // SPA-bundled assets live under /assets/ with content-hashed filenames.
+        // Discover them at test-time so the test adapts to rebuilds.
+        var webRoot = Path.Combine(
+            AppContext.BaseDirectory,
+            "..", "..", "..", "..", "..",
+            "src", "BossCam.Service", "wwwroot");
+        var assetsDir = Path.Combine(webRoot, "assets");
+        if (Directory.Exists(assetsDir))
+        {
+            foreach (var file in Directory.EnumerateFiles(assetsDir))
+            {
+                var relative = "/assets/" + Path.GetFileName(file);
+                yield return [relative];
+            }
+        }
+
+        // Check favicon if it exists.
+        var favicon = Path.Combine(webRoot, "favicon.svg");
+        if (File.Exists(favicon))
+        {
+            yield return ["/favicon.svg"];
+        }
+    }
+
     [Theory]
-    [InlineData("/")]
-    [InlineData("/index.html")]
-    [InlineData("/app.css")]
-    [InlineData("/app.js")]
-    [InlineData("/favicon.svg")]
+    [MemberData(nameof(ServedAssetPaths))]
     public async Task Operator_Static_Assets_Are_Served(string path)
     {
         var res = await _client.GetAsync(path);
