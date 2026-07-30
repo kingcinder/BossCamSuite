@@ -88,9 +88,26 @@ internal sealed class LanBoundTokenGate
             }
         }
 
-        // Intentionally do NOT accept tokens in query strings: they leak via
-        // referer headers, browser history, server access logs, and any web
-        // analytics pings.
+        // SignalR negotiate/WebSocket upgrade: when the JS client uses
+        // accessTokenFactory, @microsoft/signalr appends ?access_token=<token>
+        // to the negotiate request and the subsequent WebSocket upgrade.
+        // This is the standard SignalR transport mechanism — the token is
+        // never in a referer or server log because the browser never navigates
+        // to a URL containing it. Accept it ONLY for /hub/ paths.
+        var path = context.Request.Path.Value ?? string.Empty;
+        if (path.StartsWith("/hub/", StringComparison.OrdinalIgnoreCase))
+        {
+            var qsToken = context.Request.Query["access_token"].FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(qsToken))
+            {
+                presented = qsToken.Trim();
+                return true;
+            }
+        }
+
+        // Intentionally do NOT accept tokens in query strings for non-SignalR paths:
+        // they leak via referer headers, browser history, server access logs, and any
+        // web analytics pings.
 
         presented = string.Empty;
         return false;

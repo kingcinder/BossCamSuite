@@ -103,6 +103,35 @@ Open paths (always accessible): `/api/health`, `/`, `/index.html`.
 
 ---
 
+## Windows-Only Features (unavailable on this Linux edition)
+
+The following capabilities require Windows-native binaries (DLLs) and are **not available** on this Linux/Ubuntu edition:
+
+| Feature | Requires | Windows-only because |
+|---------|----------|---------------------|
+| **WPF Desktop app** | `src/BossCam.Desktop/` | Avalonia replaced WPF on Linux; see `src/BossCam.Desktop.Avalonia/` for the cross-platform equivalent |
+| **IPCamSuite import provider** | `C:\Program Files\IPCamSuite\MAINSET.INI` | INI-file parser reads the Windows OEM install directory; degrades to empty result set on Linux |
+| **EseeCloud import provider** | `C:\Program Files (x86)\EseeCloud\cms_data.db` | SQLite database reader for the Windows EseeCloud client; degrades to empty result set on Linux |
+| **NativeFallbackAdapter** | `NetSdk.dll`, `EseeCloud P2P` DLLs | NativeBridge probes for Windows OEM DLLs via P/Invoke; `NativeInteropProbe` returns zero results on Linux |
+| **DPAPI password cipher** | Windows Data Protection API | `CompositePasswordCipher` falls back to AES-GCM keyfile (`~/.local/share/BossCamSuite/secret.key`) |
+| **Windows Service hosting** | `Microsoft.Extensions.Hosting.WindowsServices` | `Program.cs` falls back to `UseSystemd()` on Linux |
+
+All other features (recordings, live streaming, probe runner, SignalR real-time events, REST API, Svelte SPA, ONVIF discovery) work identically on both platforms.
+
+---
+
+## Password Security Model
+
+Device passwords are handled in a three-layer security model:
+
+1. **In-memory (plaintext):** `DeviceIdentity.Password` is available for camera HTTP Basic auth. Marked `[JsonIgnore]` — never serialized to disk or transmitted over SignalR/Swagger.
+2. **At-rest (encrypted):** `DeviceIdentity.PasswordCiphertext` stores an AES-GCM encrypted blob (Linux) or DPAPI-protected blob (Windows). Written by `SqliteApplicationStore` on each save, decrypted back to `Password` on each load.
+3. **Over-the-wire (SignalR):** The `PasswordCiphertext` is encrypted and requires the local host keyfile (`secret.key`) to decrypt. While theoretically safe to transmit, the SPA does not use this field — consumers should rely on `Password` (in-memory only).
+
+The keyfile at `~/.local/share/BossCamSuite/secret.key` is created with `0600` permissions on first cipher use. Protect this file the same way you would an SSH private key.
+
+---
+
 ## Docker
 
 A multi-stage Dockerfile is provided for containerized deployment.
@@ -115,6 +144,8 @@ sudo docker compose run -e BOSSCAM_LAN_TOKEN=$(openssl rand -hex 32) -p 5317:531
 echo 'BOSSCAM_LAN_TOKEN=<your-token>' > .env
 sudo docker compose up -d
 ```
+
+> **Note for Docker users:** The container uses the AES-GCM keyfile cipher. The `secret.key` is generated inside the container on first use — mount `/home/app/.local/share/BossCamSuite/` as a volume to persist it across container restarts.
 
 ---
 

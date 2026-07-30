@@ -207,33 +207,51 @@ public abstract class HttpControlAdapterBase(IOptions<BossCamRuntimeOptions> opt
             request.Content = new StringContent(payloadRaw, Encoding.UTF8, mediaType ?? "application/json");
         }
 
-        var headerSummary = string.Join("; ", request.Headers.Select(static header => $"{header.Key}={string.Join(",", header.Value)}"));
+        // Summary trace at Information is always logged (adapter, device, endpoint, method, status).
+        // Full payload and response bodies are gated behind Debug to avoid noise and sensitive data
+        // leakage in production. Toggle via Microsoft.Extensions.Logging configuration.
         Logger.LogInformation(
-            "HTTP request trace. adapter={Adapter} device={Device} ip={Ip} url={Url} endpoint={Endpoint} method={Method} auth={Auth} headers={Headers} payload={Payload}",
+            "HTTP request. adapter={Adapter} device={Device} ip={Ip} url={Url} endpoint={Endpoint} method={Method} auth={Auth}",
             GetType().Name,
             device.DisplayName,
             device.IpAddress,
             uri,
             endpoint,
             method,
-            useBasicHeader ? "Basic" : (useCredentialCache ? "CredentialCache" : "None"),
-            headerSummary,
-            payloadRaw ?? string.Empty);
+            useBasicHeader ? "Basic" : (useCredentialCache ? "CredentialCache" : "None"));
+
+        if (Logger.IsEnabled(LogLevel.Debug))
+        {
+            var headerSummary = string.Join("; ", request.Headers.Select(static header => $"{header.Key}={string.Join(",", header.Value)}"));
+            Logger.LogDebug(
+                "HTTP request payload. adapter={Adapter} headers={Headers} payload={Payload}",
+                GetType().Name,
+                headerSummary,
+                payloadRaw ?? string.Empty);
+        }
 
         try
         {
             using var response = await client.SendAsync(request, cancellationToken);
             var raw = await response.Content.ReadAsStringAsync(cancellationToken);
             Logger.LogInformation(
-                "HTTP response trace. adapter={Adapter} device={Device} ip={Ip} url={Url} endpoint={Endpoint} method={Method} status={Status} response={Response}",
+                "HTTP response. adapter={Adapter} device={Device} ip={Ip} url={Url} endpoint={Endpoint} method={Method} status={Status}",
                 GetType().Name,
                 device.DisplayName,
                 device.IpAddress,
                 uri,
                 endpoint,
                 method,
-                (int)response.StatusCode,
-                raw);
+                (int)response.StatusCode);
+
+            if (Logger.IsEnabled(LogLevel.Debug))
+            {
+                Logger.LogDebug(
+                    "HTTP response body. adapter={Adapter} status={Status} response={Response}",
+                    GetType().Name,
+                    (int)response.StatusCode,
+                    raw);
+            }
             return new HttpAdapterResponse(response.StatusCode, TryParseNode(raw), raw);
         }
         catch (Exception ex)
