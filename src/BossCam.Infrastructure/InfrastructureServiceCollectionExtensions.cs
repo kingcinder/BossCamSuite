@@ -78,6 +78,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<IDiscoveryProvider, HiChipMulticastDiscoveryProvider>();
         services.AddSingleton<IDiscoveryProvider, DvrBroadcastDiscoveryProvider>();
         services.AddSingleton<IDiscoveryProvider, OnvifDiscoveryProvider>();
+        services.AddSingleton<IDiscoveryProvider, SubnetScanDiscoveryProvider>();
 
         services.AddSingleton<IControlAdapter, LanDirectNetSdkRestAdapter>();
         services.AddSingleton<IControlAdapter, LanPrivateVendorHttpAdapter>();

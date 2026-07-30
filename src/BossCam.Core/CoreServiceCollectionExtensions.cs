@@ -31,6 +31,8 @@ public static class CoreServiceCollectionExtensions
         services.AddSingleton<DeviceRegistrationService>();
         services.AddSingleton<NvrPlaybackService>();
         services.AddSingleton<FirmwareCatalogService>();
+        services.AddSingleton<TransportFailoverService>();
+        services.AddSingleton<ConnectionDiagnosticService>();
 
         // Recording pipelines (refactor of P2 #12). RecordingService resolves the two
         // implementations by mode via IRecordingPipelineResolver, so swapping either

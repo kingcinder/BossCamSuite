@@ -107,6 +107,8 @@ public interface IApplicationStore
     Task<IReadOnlyCollection<RecordingProfile>> GetRecordingProfilesAsync(Guid? deviceId, CancellationToken cancellationToken);
     Task SaveRecordingSegmentsAsync(IEnumerable<RecordingSegment> segments, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<RecordingSegment>> GetRecordingSegmentsAsync(Guid? deviceId, int limit, CancellationToken cancellationToken);
+    Task SaveRecordingJobsAsync(IEnumerable<RecordingJob> jobs, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<RecordingJob>> GetRecordingJobsAsync(Guid? deviceId, CancellationToken cancellationToken);
     Task SaveSemanticWriteObservationsAsync(IEnumerable<SemanticWriteObservation> observations, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<SemanticWriteObservation>> GetSemanticWriteObservationsAsync(Guid? deviceId, int limit, CancellationToken cancellationToken);
     Task SaveFieldConstraintProfilesAsync(IEnumerable<FieldConstraintProfile> profiles, CancellationToken cancellationToken);
@@ -123,4 +125,19 @@ public interface IApplicationStore
     Task<IReadOnlyCollection<GroupedApplyProfile>> GetGroupedApplyProfilesAsync(Guid? deviceId, string? firmwareFingerprint, CancellationToken cancellationToken);
     Task SaveGroupedRetestResultsAsync(IEnumerable<GroupedUnsupportedRetestResult> results, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<GroupedUnsupportedRetestResult>> GetGroupedRetestResultsAsync(Guid deviceId, int limit, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Persist device connectivity snapshot so it survives restarts.
+    /// </summary>
+    Task SaveDeviceConnectivitySnapshotAsync(DeviceConnectivitySnapshot snapshot, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Load the most recent connectivity snapshot for a device.
+    /// </summary>
+    Task<DeviceConnectivitySnapshot?> GetDeviceConnectivitySnapshotAsync(Guid deviceId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Load connectivity snapshots for all known devices.
+    /// </summary>
+    Task<IReadOnlyCollection<DeviceConnectivitySnapshot>> GetAllDeviceConnectivitySnapshotsAsync(CancellationToken cancellationToken);
 }

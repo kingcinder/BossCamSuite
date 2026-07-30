@@ -70,6 +70,39 @@ public sealed record TransportProfile
     public Dictionary<string, string> Metadata { get; init; } = [];
 }
 
+/// <summary>
+/// Connectivity health status for a camera device.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum ConnectivityStatus
+{
+    /// <summary>No connectivity data yet, or device just registered.</summary>
+    Unknown,
+    /// <summary>All transports (RTSP + HTTP API) are reachable and responding.</summary>
+    Healthy,
+    /// <summary>At least one transport is reachable, but degraded (e.g. HTTP works, RTSP doesn't).</summary>
+    Degraded,
+    /// <summary>No transport is reachable; connectivity lost.</summary>
+    Offline
+}
+
+/// <summary>
+/// Snapshot of a device's connectivity health, updated by <c>ConnectivityWatchdogWorker</c>.
+/// </summary>
+public sealed record DeviceConnectivitySnapshot
+{
+    public Guid DeviceId { get; init; }
+    public ConnectivityStatus Status { get; init; } = ConnectivityStatus.Unknown;
+    /// <summary>Which transports were tested and their individual results.</summary>
+    public Dictionary<string, bool> TransportResults { get; init; } = [];
+    /// <summary>When the last check was performed.</summary>
+    public DateTimeOffset LastCheckedAt { get; init; } = DateTimeOffset.UtcNow;
+    /// <summary>Human-readable summary of the last diagnostic run.</summary>
+    public string? LastDiagnosticSummary { get; init; }
+    /// <summary>Optional reconnect actions that were attempted and their results.</summary>
+    public Dictionary<string, string> ReconnectAttempts { get; init; } = [];
+}
+
 public sealed record DeviceIdentity
 {
     public Guid Id { get; init; } = Guid.NewGuid();

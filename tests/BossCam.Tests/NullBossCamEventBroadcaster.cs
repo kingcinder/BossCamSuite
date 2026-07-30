@@ -26,4 +26,13 @@ internal sealed class NullBossCamEventBroadcaster : IBossCamEventBroadcaster
 
     public Task SnapshotSavedAsync(Guid deviceId, string path, long bytes, CancellationToken ct = default)
         => Task.CompletedTask;
+
+    public Task DiscoveryProgressAsync(int devicesFound, string provider, bool complete, string? error, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    public Task ProbeProgressAsync(Guid deviceId, string stage, int endpointsVerified, bool complete, string? error, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    public Task ConnectivityChangedAsync(DeviceConnectivitySnapshot snapshot, CancellationToken ct = default)
+        => Task.CompletedTask;
 }

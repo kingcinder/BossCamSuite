@@ -6,6 +6,7 @@
   const tabs = [
     { id: 'viewall', label: 'View All' },
     { id: 'overview', label: 'Device' },
+    { id: 'features', label: 'Features' },
     { id: 'image', label: 'Image' },
     { id: 'stream', label: 'Stream' },
     { id: 'network', label: 'Network' },

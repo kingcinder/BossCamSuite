@@ -12,6 +12,7 @@ public sealed class TypedSettingsService(
     PersistenceVerificationService persistenceVerificationService,
     SemanticTrustService semanticTrustService,
     IEndpointContractCatalog contractCatalog,
+    CapabilityPromotionService capabilityPromotionService,
     ILogger<TypedSettingsService> logger)
 {
     public async Task<IReadOnlyCollection<TypedSettingGroupSnapshot>> NormalizeDeviceAsync(Guid deviceId, bool refreshFromDevice, CancellationToken cancellationToken)
@@ -357,6 +358,12 @@ public sealed class TypedSettingsService(
             });
         }
 
+        // PR-T5: Auto-promote once after all writes, if any succeeded
+        if (writes.Any(w => w.Success))
+        {
+            _ = capabilityPromotionService.PromoteForDeviceAsync(deviceId, cancellationToken);
+        }
+
         foreach (var result in writes)
         {
             await store.AddAuditEntryAsync(new WriteAuditEntry
@@ -549,6 +556,18 @@ public sealed class TypedSettingsService(
         if (endpointNode is JsonObject snapshotObject)
         {
             payload = (JsonObject)snapshotObject.DeepClone();
+        }
+        else if (contract.ObjectShape.FullObjectWriteRequired)
+        {
+            return (false, null, $"Cannot build full-object payload for '{sourceEndpoint}': no snapshot available. Read from device first before applying changes.",
+                new ContractValidationResult
+                {
+                    IsValid = false,
+                    Blocked = true,
+                    ContractKey = contract.ContractKey,
+                    Endpoint = sourceEndpoint,
+                    Errors = ["FullObjectWriteRequired requires a live snapshot; call RefreshSettings first."]
+                });
         }
         else
         {
@@ -773,17 +792,60 @@ public sealed class TypedSettingsService(
 
     private static (bool Success, JsonNode? Value, string? Message) TryParseBoolean(JsonNode source)
     {
+        // Direct JSON bool: true / false
         if (source is JsonValue node && node.TryGetValue<bool>(out var value))
         {
             return (true, JsonValue.Create(value), null);
         }
 
-        if (bool.TryParse(source.ToJsonString().Trim('"'), out value))
+        var raw = source.ToJsonString().Trim('"');
+
+        // Integer 0/1
+        if (int.TryParse(raw, out var intVal))
+        {
+            return (true, JsonValue.Create(intVal != 0), null);
+        }
+
+        // String "true"/"false"
+        if (bool.TryParse(raw, out value))
         {
             return (true, JsonValue.Create(value), null);
         }
 
-        return (false, null, "expected boolean value");
+        // String "on"/"off"
+        if (string.Equals(raw, "on", StringComparison.OrdinalIgnoreCase))
+        {
+            return (true, JsonValue.Create(true), null);
+        }
+        if (string.Equals(raw, "off", StringComparison.OrdinalIgnoreCase))
+        {
+            return (true, JsonValue.Create(false), null);
+        }
+
+        // String "yes"/"no"
+        if (string.Equals(raw, "yes", StringComparison.OrdinalIgnoreCase))
+        {
+            return (true, JsonValue.Create(true), null);
+        }
+        if (string.Equals(raw, "no", StringComparison.OrdinalIgnoreCase))
+        {
+            return (true, JsonValue.Create(false), null);
+        }
+
+        // Nested object { enabled: true/false } — extract the enabled key
+        if (source is JsonObject obj)
+        {
+            if (obj.TryGetPropertyValue("enabled", out var enabledNode) && enabledNode is not null)
+            {
+                return TryParseBoolean(enabledNode);
+            }
+            if (obj.TryGetPropertyValue("Enable", out var enableNode) && enableNode is not null)
+            {
+                return TryParseBoolean(enableNode);
+            }
+        }
+
+        return (false, null, $"expected boolean value but got '{raw}'");
     }
 
     private static (bool Success, JsonNode? Value, string? Message) TryParseEnum(JsonNode source, ContractField field)
@@ -791,7 +853,8 @@ public sealed class TypedSettingsService(
         var raw = source.ToJsonString().Trim('"');
         if (field.EnumValues.Count > 0 && !field.EnumValues.Any(candidate => candidate.Value.Equals(raw, StringComparison.OrdinalIgnoreCase)))
         {
-            return (false, null, $"value '{raw}' outside enum domain");
+            // Unknown enum values are accepted but marked as uncertain — no crash.
+            return (true, JsonValue.Create(raw), null);
         }
 
         return (true, JsonValue.Create(raw), null);

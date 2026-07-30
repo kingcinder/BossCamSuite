@@ -59,6 +59,59 @@ public static class ApiRecordingsEndpoints
         app.MapPost("/api/recordings/export", async (ClipExportRequest request, RecordingService recordingService, CancellationToken ct) =>
             Results.Ok(await recordingService.ExportClipAsync(request, ct)));
 
+        // PR-R3: Download a clip by path (must be under storage root for safety)
+        app.MapGet("/api/recordings/download", async (string path, IOptions<BossCamRuntimeOptions> runtime, CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return Results.BadRequest(new { error = "path query parameter is required." });
+            }
+
+            // Resolve storage root inline (same logic as ApiStorageEndpoints.ResolveStorageRoot)
+            string storageRoot;
+            if (!string.IsNullOrWhiteSpace(runtime.Value.StorageRoot))
+            {
+                storageRoot = Path.GetFullPath(runtime.Value.StorageRoot.Trim());
+            }
+            else
+            {
+                var dataRoot = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "BossCamSuite");
+                storageRoot = Path.Combine(dataRoot, "recordings");
+            }
+
+            var fullPath = Path.GetFullPath(path.Trim());
+            var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+            if (!fullPath.StartsWith(Path.GetFullPath(storageRoot), comparison))
+            {
+                return Results.StatusCode(403);
+            }
+
+            if (!File.Exists(fullPath))
+            {
+                return Results.NotFound();
+            }
+
+            var fileName = Path.GetFileName(fullPath);
+            var contentType = Path.GetExtension(fullPath).ToLowerInvariant() switch
+            {
+                ".mp4" => "video/mp4",
+                ".ts" => "video/mp2t",
+                ".mkv" => "video/x-matroska",
+                _ => "application/octet-stream"
+            };
+            return Results.File(fullPath, contentType, fileName);
+        });
+
+        app.MapPost("/api/recordings/stall-check", async (RecordingService recordingService, IOptions<BossCamRuntimeOptions> options, CancellationToken ct) =>
+        {
+            var timeout = options.Value.StallTimeoutSeconds;
+            var autoRestart = options.Value.StallAutoRestart;
+            var stalled = await recordingService.CheckStalledJobsAsync(timeout, autoRestart, ct);
+            return Results.Ok(new { checked = true, stalled = stalled.Count, autoRestart, stalled });
+        });
+
         app.MapPost("/api/recordings/reconcile", async (RecordingService recordingService, CancellationToken ct) =>
             Results.Ok(await recordingService.ReconcileAutoStartAsync(ct)));
 

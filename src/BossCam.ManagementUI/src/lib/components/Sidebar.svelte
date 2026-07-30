@@ -8,6 +8,7 @@
   let quickIp = $state('');
   let quickPass = $state('');
   let connected = $state(false);
+  let scanEnabled = $state(false);
 
   // Poll the SignalR connection state every 2 s for the indicator dot.
   // The singleton BossCamSignalR.connected is a plain boolean set by
@@ -19,6 +20,15 @@
     return () => clearInterval(iv);
   });
 
+  // Monitoring effect: reset discovery status to idle after 10s from last 'complete' signal
+  $effect(() => {
+    const status = appState.discoveryStatus;
+    if (status?.complete) {
+      const timer = setTimeout(() => { appState.discoveryStatus = null; }, 10_000);
+      return () => clearTimeout(timer);
+    }
+  });
+
   async function discover() {
     try {
       await api.discover();
@@ -28,9 +38,26 @@
         appState.devices = await api.devices();
         appState.syncOrder();
       }
-      appState.showToast('Discovery complete');
+      if (!appState.discoveryStatus?.complete) {
+        appState.showToast('Discovery complete');
+      }
     } catch (e: unknown) {
       appState.showToast(String(e), false);
+    }
+  }
+
+  async function scanSubnet() {
+    scanEnabled = true;
+    try {
+      await api.discover();
+    } catch (e: unknown) {
+      appState.showToast(String(e), false);
+    } finally {
+      scanEnabled = false;
+      if (!signalRClient.connected) {
+        appState.devices = await api.devices();
+        appState.syncOrder();
+      }
     }
   }
 
@@ -96,10 +123,28 @@
   </div>
 
   <div class="toolbar">
-    <button onclick={discover} type="button">Discover</button>
+    <button onclick={discover} type="button" disabled={!connected && scanEnabled}>Discover</button>
+    <button onclick={scanSubnet} type="button" disabled={scanEnabled}>
+      {scanEnabled ? 'Scanning…' : 'Scan subnet'}
+    </button>
     <button onclick={refresh} type="button">Refresh</button>
     <button onclick={registerAegon} type="button" class="accent">Register LAN</button>
   </div>
+
+  <!-- Discovery progress indicator -->
+  {#if appState.discoveryStatus && !appState.discoveryStatus.complete}
+    <div class="scan-progress">
+      <div class="scan-bar">
+        <div class="scan-fill"></div>
+      </div>
+      <p class="muted small">
+        Scanning {appState.discoveryStatus.provider}… {appState.discoveryStatus.devicesFound} found
+        {#if appState.discoveryStatus.error}
+          · error: {appState.discoveryStatus.error}
+        {/if}
+      </p>
+    </div>
+  {/if}
 
   <label class="field">
     <span>Quick add IP</span>
@@ -186,4 +231,30 @@
   }
   .signal-dot.live { background: #3ecf8e; box-shadow: 0 0 6px #3ecf8e88; }
   .signal-dot.dead { background: #ff6b6b; }
+
+  .scan-progress {
+    background: #0e0a0b;
+    border: 1px solid #ff5a1f33;
+    border-radius: 8px;
+    padding: 8px 10px;
+  }
+  .scan-bar {
+    height: 4px;
+    background: #2a150f;
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 4px;
+  }
+  .scan-fill {
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(90deg, #ff7a2f, #ffb06a, #ff7a2f);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: 2px;
+  }
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
 </style>

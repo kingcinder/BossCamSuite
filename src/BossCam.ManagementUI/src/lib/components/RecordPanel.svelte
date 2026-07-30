@@ -1,12 +1,14 @@
 <script lang="ts">
   import { AppState } from '../store';
   import { api } from '../api';
+  import type { RecordingJob } from '../types';
 
   let { appState }: { appState: AppState } = $props();
   let pathContinuous = $state('');
   let pathHighlights = $state('');
   let pathSnapshots = $state('');
   let pathStatus = $state('');
+  let stopLoading = $state<string | null>(null);
 
   // Auto-refresh recording jobs when SignalR pushes job events.
   // Also refresh on tab switch (existing $effect behavior).
@@ -71,24 +73,10 @@
     savePaths();
   }
 
-  async function ensurePath(prefill: string): Promise<string> {
-    let p = prefill || prompt('Enter server folder path:') || '';
-    if (!p.trim()) throw new Error('Folder path required');
-    return p.trim();
-  }
-
   async function startAllRec() {
     try {
-      const path = await ensurePath(pathContinuous);
-      for (const d of appState.devices) {
-        try {
-          await api.recordingStart({
-            deviceId: d.id,
-            outputDirectory: `${path}/${(d.ipAddress || d.id).replace(/\\./g, '_')}`,
-          });
-        } catch { /* skip individual failures */ }
-      }
-      appState.showToast('Started recordings for registered cameras');
+      await api.recordingStartAll();
+      appState.showToast('Started recordings for all cameras');
       await refreshRec();
     } catch (e: unknown) {
       appState.showToast(String(e), false);
@@ -98,9 +86,9 @@
   async function refreshRec() {
     try {
       const jobs = await api.recordingJobs();
-      appState.recordingJobs = JSON.stringify(jobs, null, 2);
+      appState.recordingJobs = jobs;
     } catch (e: unknown) {
-      appState.recordingJobs = String(e);
+      appState.recordingJobs = [];
     }
     try {
       const idx = await api.recordingIndex(40);
@@ -112,9 +100,12 @@
 
   async function startSelectedRec() {
     if (!appState.selectedDeviceId) return;
+    if (!pathContinuous.trim()) {
+      appState.showToast('Set a continuous recordings folder path first', false);
+      return;
+    }
     try {
-      const path = await ensurePath(pathContinuous);
-      await api.recordingStart({ deviceId: appState.selectedDeviceId, outputDirectory: path });
+      await api.recordingStart({ deviceId: appState.selectedDeviceId, outputDirectory: pathContinuous.trim() });
       appState.showToast('Recording started');
       await refreshRec();
     } catch (e: unknown) {
@@ -125,11 +116,23 @@
   async function stopAllRec() {
     try {
       await api.recordingStopAll();
-      appState.showToast('Stopped recordings');
+      appState.showToast('Stopped all recordings');
       await refreshRec();
     } catch (e: unknown) {
       appState.showToast(String(e), false);
     }
+  }
+
+  async function stopJob(jobId: string) {
+    stopLoading = jobId;
+    try {
+      await api.recordingStop(jobId);
+      appState.showToast('Recording stopped');
+      await refreshRec();
+    } catch (e: unknown) {
+      appState.showToast(String(e), false);
+    }
+    stopLoading = null;
   }
 
   async function refreshIndex() {
@@ -140,6 +143,28 @@
     } catch (e: unknown) {
       appState.showToast(String(e), false);
     }
+  }
+
+  // ── Derived helpers ──────────────────────────────────────────
+  let runningJobs = $derived(appState.recordingJobs.filter(j => j.isRunning));
+  let stoppedJobs = $derived(appState.recordingJobs.filter(j => !j.isRunning));
+
+  function deviceName(id: string): string {
+    const d = appState.devices.find(d => d.id === id);
+    return d?.displayName || d?.ipAddress || id.slice(0, 8);
+  }
+
+  function duration(startedAt: string): string {
+    const start = new Date(startedAt).getTime();
+    const elapsed = Date.now() - start;
+    const mins = Math.floor(elapsed / 60000);
+    const secs = Math.floor((elapsed % 60000) / 1000);
+    return `${mins}:${String(secs).padStart(2, '0')}`;
+  }
+
+  function timeAgo(iso: string): string {
+    const d = new Date(iso);
+    return d.toLocaleTimeString();
   }
 </script>
 
@@ -177,16 +202,74 @@
 </div>
 
 <div class="card">
-  <h3>Recording <span class="muted small">(auto-refreshes via SignalR)</span></h3>
+  <h3>
+    Recording
+    <span class="muted small">· auto-refreshes via SignalR</span>
+    {#if runningJobs.length > 0}
+      <span class="badge-live">{runningJobs.length} active</span>
+    {/if}
+  </h3>
   <p class="muted">Continuous record uses the high-res main stream into the continuous folder.</p>
-  <div class="row gap wrap">
+  <div class="row gap wrap" style="margin-bottom:12px">
     <button onclick={startSelectedRec} type="button" class="accent" disabled={!appState.selectedDevice}>Start selected</button>
     <button onclick={startAllRec} type="button">Start all cameras</button>
-    <button onclick={stopAllRec} type="button">Stop all</button>
+    <button onclick={stopAllRec} type="button" disabled={runningJobs.length === 0}>Stop all</button>
     <button onclick={refreshIndex} type="button">Refresh index</button>
   </div>
-  <h4>Jobs</h4>
-  <pre class="code">{appState.recordingJobs}</pre>
+
+  {#if runningJobs.length > 0}
+    <h4>Active recordings <span class="badge-live">{runningJobs.length}</span></h4>
+    <div class="job-list">
+      {#each runningJobs as job (job.id)}
+        <div class="job-row live">
+          <div class="job-indicator"></div>
+          <div class="job-info">
+            <strong>{deviceName(job.deviceId)}</strong>
+            <span class="sub">{duration(job.startedAt)} · started {timeAgo(job.startedAt)}</span>
+          </div>
+          <div class="job-meta">
+            <span class="chip">{job.segmentSeconds}s segments</span>
+            {#if job.sourceUrl}
+              <span class="chip sub" title={job.sourceUrl}>src</span>
+            {/if}
+          </div>
+          <button
+            onclick={() => stopJob(job.id)}
+            type="button"
+            class="stop-btn"
+            disabled={stopLoading === job.id}
+          >
+            {stopLoading === job.id ? '⏳' : '⏹ Stop'}
+          </button>
+        </div>
+      {/each}
+    </div>
+  {:else}
+    <div class="empty-rec">
+      <p class="muted">No active recordings. Select a camera and click Start selected, or Start all cameras.</p>
+    </div>
+  {/if}
+
+  {#if stoppedJobs.length > 0}
+    <details class="stopped-section">
+      <summary>Stopped recordings ({stoppedJobs.length})</summary>
+      <div class="job-list">
+        {#each stoppedJobs as job (job.id)}
+          <div class="job-row stopped">
+            <div class="job-indicator stopped"></div>
+            <div class="job-info">
+              <strong>{deviceName(job.deviceId)}</strong>
+              <span class="sub">stopped {timeAgo(job.stoppedAt || job.startedAt)}</span>
+            </div>
+            <div class="job-meta">
+              <span class="chip">{job.segmentSeconds}s</span>
+            </div>
+          </div>
+        {/each}
+      </div>
+    </details>
+  {/if}
+
   <h4>Indexed segments</h4>
   <pre class="code">{appState.recordingIndex}</pre>
 </div>
@@ -201,9 +284,10 @@
     min-width: 0;
     overflow: hidden;
   }
-  .card h3, .card h4 { margin: 0 0 10px; }
+  .card h3, .card h4 { margin: 0 0 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .muted { color: var(--muted); font-size: .9rem; margin: 0; }
   .small { font-size: .82rem; }
+  .sub { color: var(--muted); font-size: .78rem; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .gap { gap: 10px; }
   .wrap { flex-wrap: wrap; }
@@ -248,4 +332,96 @@
     font-size: .82rem;
     border: 1px solid #ffffff12;
   }
+  .badge-live {
+    display: inline-block;
+    background: #1a3a1a;
+    color: #3ecf8e;
+    font-size: .75rem;
+    font-weight: 600;
+    padding: 1px 8px;
+    border-radius: 10px;
+  }
+  .job-list {
+    display: grid;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+  .job-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid #ff5a1f33;
+    background: #0a0809;
+    flex-wrap: wrap;
+  }
+  .job-row.live {
+    border-color: #3ecf8e44;
+    background: #0a120a;
+  }
+  .job-row.stopped {
+    opacity: 0.65;
+  }
+  .job-indicator {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #3ecf8e;
+    box-shadow: 0 0 6px #3ecf8e88;
+    flex-shrink: 0;
+    animation: pulse 2s infinite;
+  }
+  .job-indicator.stopped {
+    background: #666;
+    box-shadow: none;
+    animation: none;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  .job-info {
+    flex: 1;
+    min-width: 0;
+  }
+  .job-info strong { display: block; word-break: break-word; }
+  .job-meta {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .chip {
+    background: #1a1010;
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: .72rem;
+    color: var(--muted);
+  }
+  .stop-btn {
+    padding: 4px 10px;
+    font-size: .82rem;
+    border-color: #cf3e3e66;
+    color: #ff8f8f;
+  }
+  .stop-btn:hover:not(:disabled) { border-color: #cf3e3e; background: #3a1a1a; }
+  .empty-rec {
+    display: grid;
+    place-items: center;
+    min-height: 80px;
+    border: 2px dashed #ff5a1f33;
+    border-radius: 8px;
+    margin-bottom: 12px;
+    padding: 16px;
+  }
+  .stopped-section {
+    margin: 8px 0;
+  }
+  .stopped-section summary {
+    cursor: pointer;
+    color: var(--muted);
+    font-size: .85rem;
+    padding: 4px 0;
+  }
+  .stopped-section summary:hover { color: var(--text); }
 </style>

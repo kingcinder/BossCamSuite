@@ -86,6 +86,24 @@
     }
   }
 
+  async function stopRec() {
+    const job = appState.recordingJobs.find(j => j.deviceId === device.id && j.isRunning);
+    if (!job) {
+      appState.showToast('No active recording for this camera', false);
+      return;
+    }
+    try {
+      await api.recordingStop(job.id);
+      appState.showToast('Recording stopped');
+    } catch (e: unknown) {
+      appState.showToast(String(e), false);
+    }
+  }
+
+  // ── Recording status ─────────────────────────────────────────
+  let recordingJob = $derived(appState.recordingJobs.find(j => j.deviceId === device.id && j.isRunning));
+  let isRecording = $derived(!!recordingJob);
+
   // ── Picture-in-Picture (Document PiP API) ──────────────────────
   let pipSupported = $state(typeof document !== 'undefined' && 'pictureInPictureEnabled' in document && document.pictureInPictureEnabled);
   let imgEl: HTMLImageElement | undefined = $state();
@@ -130,9 +148,12 @@
   ondragleave={onDragLeave}
   ondrop={onDrop}
 >
-  <div class="view-tile-bar">
+  <div class="view-tile-bar" class:recording={isRecording}>
     <div>
-      <strong>{labelOf(device)}</strong>
+      <strong class:recording={isRecording}>
+        {#if isRecording}<span class="rec-dot"></span>{/if}
+        {labelOf(device)}
+      </strong>
       <div class="sub">{device.ipAddress || ''} · {device.hardwareModel || ''}</div>
     </div>
     <span class="sub">#{index + 1}</span>
@@ -156,7 +177,12 @@
   <div class="view-tile-actions">
     <button onclick={select} type="button">Select</button>
     <button onclick={snap} type="button">Snapshot</button>
-    <button onclick={startRec} type="button">Record</button>
+    {#if isRecording}
+      <button onclick={stopRec} type="button" class="stop">⏹ Stop rec</button>
+      <span class="rec-badge">● REC</span>
+    {:else}
+      <button onclick={startRec} type="button">Record</button>
+    {/if}
     {#if pipSupported}
       <button onclick={togglePip} type="button" class:active={appState.pipDeviceId === device.id}>
         {appState.pipDeviceId === device.id ? '⏹ PiP' : '📺 PiP'}
@@ -193,9 +219,28 @@
     background: #1a100ecc;
     font-size: .85rem;
     z-index: 1;
+    transition: background 0.3s;
   }
-  .view-tile-bar strong { word-break: break-word; }
+  .view-tile-bar.recording {
+    background: #1a1a0ecc;
+  }
+  .view-tile-bar strong { word-break: break-word; display: flex; align-items: center; gap: 4px; }
+  .view-tile-bar strong.recording { color: #ffb06a; }
   .view-tile-bar .sub { color: var(--muted); font-size: .78rem; }
+  .rec-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #ff3e3e;
+    box-shadow: 0 0 6px #ff3e3e88;
+    animation: rec-pulse 1.5s infinite;
+    flex-shrink: 0;
+  }
+  @keyframes rec-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
   .view-tile-media {
     flex: 1;
     min-height: 120px;
@@ -238,4 +283,18 @@
     font: inherit;
   }
   .view-tile-actions button:hover { border-color: #ffa33e; background: #331713; }
+  .view-tile-actions button.stop { border-color: #cf3e3e66; color: #ff8f8f; }
+  .view-tile-actions button.stop:hover { border-color: #cf3e3e; background: #3a1a1a; }
+  .rec-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: .72rem;
+    font-weight: 600;
+    color: #ff3e3e;
+    padding: 2px 6px;
+    border: 1px solid #ff3e3e44;
+    border-radius: 4px;
+    background: #3a1a1a66;
+  }
 </style>

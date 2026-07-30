@@ -81,6 +81,13 @@ public sealed class BossCamRuntimeOptions
     /// <summary>Per-minute cap for /api/recordings/start. Each start spawns an ffmpeg process tree.</summary>
     public int RateLimitRecordingStartPerMinute { get; set; } = 10;
 
+    /// <summary>PR-R4: Seconds of no segment growth before a recording job is considered stalled.
+    /// Default = 3× segment length (90s for 30s segments). Zero disables stall detection.</summary>
+    public int StallTimeoutSeconds { get; set; } = 90;
+
+    /// <summary>PR-R4: When true, stalled pipelines auto-restart once instead of staying stopped.</summary>
+    public bool StallAutoRestart { get; set; } = true;
+
     /// <summary>Per-minute cap for /api/devices/{id}/snapshot. Each snapshot is one or more HTTP GETs against the camera.</summary>
     public int RateLimitSnapshotPerMinute { get; set; } = 30;
 }

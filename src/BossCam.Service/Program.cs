@@ -43,6 +43,7 @@ builder.Services.AddBossCamInfrastructure(builder.Configuration);
 builder.Services.AddBossCamCore();
 builder.Services.AddHostedService<BossCamBootstrapWorker>();
 builder.Services.AddHostedService<RecordingLifecycleWorker>();
+builder.Services.AddHostedService<ConnectivityWatchdogWorker>();
 
 var app = builder.Build();
 
@@ -98,7 +99,8 @@ app.MapDevicesEndpoints()
    .MapStorageEndpoints()
    .MapDiagnosticsEndpoints()
    .MapFirmwareContractsProtocolsEndpoints()
-   .MapPlaybackEndpoints();
+   .MapPlaybackEndpoints()
+   .MapConnectivityEndpoints();
 
 // SPA fallback for operator console.
 app.MapFallback(async context =>

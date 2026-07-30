@@ -57,6 +57,7 @@ public sealed class SqliteApplicationStore : IApplicationStore
                 "CREATE TABLE IF NOT EXISTS firmware_artifacts (id TEXT PRIMARY KEY, payload TEXT NOT NULL, analyzed_at TEXT NOT NULL)",
                 "CREATE TABLE IF NOT EXISTS recording_profiles (id TEXT PRIMARY KEY, device_id TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL)",
                 "CREATE TABLE IF NOT EXISTS recording_segments (id TEXT PRIMARY KEY, device_id TEXT NOT NULL, profile_id TEXT NOT NULL, payload TEXT NOT NULL, indexed_at TEXT NOT NULL)",
+                "CREATE TABLE IF NOT EXISTS recording_jobs (id TEXT PRIMARY KEY, device_id TEXT NOT NULL, job_key TEXT NOT NULL, payload TEXT NOT NULL, started_at TEXT NOT NULL)",
                 "CREATE TABLE IF NOT EXISTS semantic_write_observations (id TEXT PRIMARY KEY, device_id TEXT NOT NULL, payload TEXT NOT NULL, timestamp TEXT NOT NULL)",
                 "CREATE TABLE IF NOT EXISTS field_constraint_profiles (constraint_key TEXT PRIMARY KEY, firmware_fingerprint TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL)",
                 "CREATE TABLE IF NOT EXISTS dependency_matrix_profiles (matrix_key TEXT PRIMARY KEY, firmware_fingerprint TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL)",
@@ -64,7 +65,8 @@ public sealed class SqliteApplicationStore : IApplicationStore
                 "CREATE TABLE IF NOT EXISTS image_behavior_maps (behavior_key TEXT PRIMARY KEY, device_id TEXT NOT NULL, firmware_fingerprint TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL)",
                 "CREATE TABLE IF NOT EXISTS image_writable_test_sets (device_id TEXT PRIMARY KEY, firmware_fingerprint TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL)",
                 "CREATE TABLE IF NOT EXISTS grouped_apply_profiles (profile_key TEXT PRIMARY KEY, device_id TEXT NOT NULL, firmware_fingerprint TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL)",
-                "CREATE TABLE IF NOT EXISTS grouped_retest_results (result_key TEXT PRIMARY KEY, device_id TEXT NOT NULL, firmware_fingerprint TEXT NOT NULL, payload TEXT NOT NULL, captured_at TEXT NOT NULL)"
+                "CREATE TABLE IF NOT EXISTS grouped_retest_results (result_key TEXT PRIMARY KEY, device_id TEXT NOT NULL, firmware_fingerprint TEXT NOT NULL, payload TEXT NOT NULL, captured_at TEXT NOT NULL)",
+                "CREATE TABLE IF NOT EXISTS device_connectivity_snapshots (device_id TEXT PRIMARY KEY, payload TEXT NOT NULL, last_checked_at TEXT NOT NULL)"
             };
 
             foreach (var text in commands)
@@ -476,6 +478,41 @@ public sealed class SqliteApplicationStore : IApplicationStore
         return await QueryPayloadListAsync<RecordingProfile>("SELECT payload FROM recording_profiles WHERE device_id = $id ORDER BY updated_at DESC", parameters => parameters.AddWithValue("$id", deviceId.Value.ToString()), cancellationToken);
     }
 
+    public async Task SaveRecordingJobsAsync(IEnumerable<RecordingJob> jobs, CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            await using var connection = OpenConnection();
+            await connection.OpenAsync(cancellationToken);
+            foreach (var job in jobs)
+            {
+                await using var command = connection.CreateCommand();
+                command.CommandText = "INSERT INTO recording_jobs (id, device_id, job_key, payload, started_at) VALUES ($id, $device_id, $job_key, $payload, $started_at) ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, started_at = excluded.started_at, device_id = excluded.device_id";
+                command.Parameters.AddWithValue("$id", job.Id.ToString());
+                command.Parameters.AddWithValue("$device_id", job.DeviceId.ToString());
+                command.Parameters.AddWithValue("$job_key", $"{job.DeviceId:N}:{job.ProfileId:N}");
+                command.Parameters.AddWithValue("$payload", JsonSerializer.Serialize(job, _serializerOptions));
+                command.Parameters.AddWithValue("$started_at", job.StartedAt.ToString("O"));
+                await command.ExecuteNonQueryAsync(cancellationToken);
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task<IReadOnlyCollection<RecordingJob>> GetRecordingJobsAsync(Guid? deviceId, CancellationToken cancellationToken)
+    {
+        if (deviceId is null)
+        {
+            return await QueryPayloadListAsync<RecordingJob>("SELECT payload FROM recording_jobs ORDER BY started_at DESC", null, cancellationToken);
+        }
+
+        return await QueryPayloadListAsync<RecordingJob>("SELECT payload FROM recording_jobs WHERE device_id = $id ORDER BY started_at DESC", parameters => parameters.AddWithValue("$id", deviceId.Value.ToString()), cancellationToken);
+    }
+
     public async Task SaveRecordingSegmentsAsync(IEnumerable<RecordingSegment> segments, CancellationToken cancellationToken)
     {
         await _gate.WaitAsync(cancellationToken);
@@ -780,6 +817,38 @@ public sealed class SqliteApplicationStore : IApplicationStore
         => await QueryPayloadListAsync<GroupedUnsupportedRetestResult>(
             $"SELECT payload FROM grouped_retest_results WHERE device_id = $id ORDER BY captured_at DESC LIMIT {Math.Max(1, limit)}",
             parameters => parameters.AddWithValue("$id", deviceId.ToString()),
+            cancellationToken);
+
+    public async Task SaveDeviceConnectivitySnapshotAsync(DeviceConnectivitySnapshot snapshot, CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            await using var connection = OpenConnection();
+            await connection.OpenAsync(cancellationToken);
+            await using var command = connection.CreateCommand();
+            command.CommandText = "INSERT INTO device_connectivity_snapshots (device_id, payload, last_checked_at) VALUES ($id, $payload, $last_checked_at) ON CONFLICT(device_id) DO UPDATE SET payload = excluded.payload, last_checked_at = excluded.last_checked_at";
+            command.Parameters.AddWithValue("$id", snapshot.DeviceId.ToString());
+            command.Parameters.AddWithValue("$payload", JsonSerializer.Serialize(snapshot, _serializerOptions));
+            command.Parameters.AddWithValue("$last_checked_at", snapshot.LastCheckedAt.ToString("O"));
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task<DeviceConnectivitySnapshot?> GetDeviceConnectivitySnapshotAsync(Guid deviceId, CancellationToken cancellationToken)
+        => await QuerySinglePayloadAsync<DeviceConnectivitySnapshot>(
+            "SELECT payload FROM device_connectivity_snapshots WHERE device_id = $id",
+            parameters => parameters.AddWithValue("$id", deviceId.ToString()),
+            cancellationToken);
+
+    public async Task<IReadOnlyCollection<DeviceConnectivitySnapshot>> GetAllDeviceConnectivitySnapshotsAsync(CancellationToken cancellationToken)
+        => await QueryPayloadListAsync<DeviceConnectivitySnapshot>(
+            "SELECT payload FROM device_connectivity_snapshots ORDER BY last_checked_at DESC",
+            null,
             cancellationToken);
 
     private async Task UpsertPayloadAsync<T>(StoreTable table, string key, T payload, DateTimeOffset timestamp, CancellationToken cancellationToken, string? deviceId = null)

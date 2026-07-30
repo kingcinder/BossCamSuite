@@ -35,4 +35,19 @@ public interface IBossCamEventBroadcaster
     /// Broadcast when a snapshot JPEG is saved to disk.
     /// </summary>
     Task SnapshotSavedAsync(Guid deviceId, string path, long bytes, CancellationToken ct = default);
+
+    /// <summary>
+    /// Broadcast discovery progress updates.
+    /// </summary>
+    Task DiscoveryProgressAsync(int devicesFound, string provider, bool complete, string? error, CancellationToken ct = default);
+
+    /// <summary>
+    /// Broadcast probe progress updates for a device.
+    /// </summary>
+    Task ProbeProgressAsync(Guid deviceId, string stage, int endpointsVerified, bool complete, string? error, CancellationToken ct = default);
+
+    /// <summary>
+    /// Broadcast a device connectivity state change.
+    /// </summary>
+    Task ConnectivityChangedAsync(DeviceConnectivitySnapshot snapshot, CancellationToken ct = default);
 }

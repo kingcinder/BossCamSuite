@@ -178,17 +178,7 @@ public sealed record RecordingProfile
     public DateTimeOffset UpdatedAt { get; init; } = DateTimeOffset.UtcNow;
 }
 
-public sealed record RecordingSegment
-{
-    public Guid Id { get; init; } = Guid.NewGuid();
-    public Guid DeviceId { get; init; }
-    public Guid ProfileId { get; init; }
-    public string FilePath { get; init; } = string.Empty;
-    public long SizeBytes { get; init; }
-    public DateTimeOffset StartTime { get; init; }
-    public DateTimeOffset EndTime { get; init; }
-    public DateTimeOffset IndexedAt { get; init; } = DateTimeOffset.UtcNow;
-}
+
 
 public sealed record RecordingStartRequest
 {
@@ -219,8 +209,28 @@ public sealed record RecordingJob
     public bool IsRunning { get; init; }
     public string? LastError { get; init; }
     public int? ProcessId { get; init; }
+    public string Mode { get; init; } = "direct";
+    public string? SourceRole { get; init; }
+    public string? DegradedReason { get; init; }
     public DateTimeOffset StartedAt { get; init; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? StoppedAt { get; init; }
+}
+
+public sealed record RecordingSegment
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid DeviceId { get; init; }
+    public Guid ProfileId { get; init; }
+    public string FilePath { get; init; } = string.Empty;
+    public long SizeBytes { get; init; }
+    public double DurationSec { get; init; }
+    public string StreamRole { get; init; } = "main";
+    public string Container { get; init; } = "ts";
+    public bool HasAudio { get; init; }
+    public Guid? JobId { get; init; }
+    public DateTimeOffset StartTime { get; init; }
+    public DateTimeOffset EndTime { get; init; }
+    public DateTimeOffset IndexedAt { get; init; } = DateTimeOffset.UtcNow;
 }
 
 public sealed record ClipExportRequest
@@ -235,6 +245,9 @@ public sealed record ClipExportResult
 {
     public bool Success { get; init; }
     public string OutputPath { get; init; } = string.Empty;
+    public long Bytes { get; init; }
+    public double DurationSec { get; init; }
+    public bool ReEncoded { get; init; }
     public string? Message { get; init; }
 }
 

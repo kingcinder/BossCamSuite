@@ -72,4 +72,44 @@ public sealed class BossCamEventBroadcaster(
             logger.LogDebug(ex, "SignalR broadcast SnapshotSaved failed");
         }
     }
+
+    public async Task DiscoveryProgressAsync(int devicesFound, string provider, bool complete, string? error, CancellationToken ct = default)
+    {
+        try
+        {
+            await hubContext.Clients.All.DiscoveryProgress(devicesFound, provider, complete, error);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogDebug(ex, "SignalR broadcast DiscoveryProgress failed");
+        }
+    }
+
+    public async Task ProbeProgressAsync(Guid deviceId, string stage, int endpointsVerified, bool complete, string? error, CancellationToken ct = default)
+    {
+        try
+        {
+            await hubContext.Clients.All.ProbeProgress(deviceId.ToString("N"), stage, endpointsVerified, complete, error);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogDebug(ex, "SignalR broadcast ProbeProgress failed");
+        }
+    }
+
+    public async Task ConnectivityChangedAsync(DeviceConnectivitySnapshot snapshot, CancellationToken ct = default)
+    {
+        try
+        {
+            await hubContext.Clients.All.ConnectivityChanged(
+                snapshot.DeviceId.ToString("N"),
+                snapshot.Status.ToString(),
+                snapshot.TransportResults,
+                snapshot.LastDiagnosticSummary);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogDebug(ex, "SignalR broadcast ConnectivityChanged failed");
+        }
+    }
 }

@@ -103,8 +103,9 @@
       const result = await api.persistenceVerify(appState.selectedDeviceId, persistenceEndpoint.trim());
       if (result) {
         persistenceResults = [result, ...persistenceResults];
-        persistenceStatus = `Check complete: ${result.status || result.notes || 'done'}`;
-        appState.showToast(`Persistence: ${result.status || 'done'}`);
+        const status = result.immediateStatus || result.persistenceStatus || result.notes || 'done';
+        persistenceStatus = `Check complete: ${status}`;
+        appState.showToast(`Persistence: ${status}`);
       } else {
         persistenceStatus = 'No result returned';
       }

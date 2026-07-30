@@ -25,4 +25,7 @@ public interface IBossCamHubClient
     Task RecordingJobStopped(RecordingJob job);
     Task HighlightStateChanged(HighlightBoardState state);
     Task SnapshotSaved(string deviceId, string path, long bytes);
+    Task DiscoveryProgress(int devicesFound, string provider, bool complete, string? error);
+    Task ProbeProgress(string deviceId, string stage, int endpointsVerified, bool complete, string? error);
+    Task ConnectivityChanged(string deviceId, string status, Dictionary<string, bool>? transportResults, string? lastDiagnosticSummary);
 }

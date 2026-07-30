@@ -16,6 +16,11 @@ public sealed class DiscoveryCoordinator(
 {
     public async Task<IReadOnlyCollection<DeviceIdentity>> RunAsync(CancellationToken cancellationToken)
     {
+        return await RunAsync(null, cancellationToken);
+    }
+
+    public async Task<IReadOnlyCollection<DeviceIdentity>> RunAsync(string? ipRangeOverride, CancellationToken cancellationToken)
+    {
         var all = new List<DeviceIdentity>();
 
         // Offline / E2E gate. Three independent triggers, any of which engages the gate:
@@ -63,11 +68,16 @@ public sealed class DiscoveryCoordinator(
         {
             try
             {
-                all.AddRange(await discoveryProvider.DiscoverAsync(cancellationToken));
+                // PR: Report discovery progress per provider
+                _ = broadcaster.DiscoveryProgressAsync(all.Count, discoveryProvider.Name, false, null, cancellationToken);
+                var found = await discoveryProvider.DiscoverAsync(cancellationToken);
+                all.AddRange(found);
+                _ = broadcaster.DiscoveryProgressAsync(all.Count, discoveryProvider.Name, true, null, cancellationToken);
             }
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Discovery provider {Provider} failed", discoveryProvider.Name);
+                _ = broadcaster.DiscoveryProgressAsync(all.Count, discoveryProvider.Name, true, ex.Message, cancellationToken);
             }
         }
 

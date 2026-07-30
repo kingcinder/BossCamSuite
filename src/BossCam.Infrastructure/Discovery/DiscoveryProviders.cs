@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
@@ -147,6 +148,166 @@ public sealed class OnvifDiscoveryProvider(IOptions<BossCamRuntimeOptions> optio
     }
 }
 
+/// <summary>
+/// Subnet IP range scanner — probes common camera HTTP ports across /24 subnets of
+/// local interfaces in parallel. Acts as a fallback when multicast discovery yields
+/// no results, or can be triggered explicitly via the "Scan subnet" SPA button.
+/// </summary>
+/// <remarks>
+/// Key design decisions:
+/// - Any HTTP response (including 401/400) counts as "device found" because cameras
+///   typically reject unauthenticated requests with 401 rather than refusing the connection.
+/// - Results are deduplicated by IP address; the first successful port wins (preferred
+///   port order: 80, 8080, 554, 8000, 8899, 8888).
+/// - Scanning uses Parallel.ForEachAsync with a concurrency limit of 50 to avoid
+///   overwhelming the local NIC while still finishing in reasonable time (~30s for /24).
+/// </remarks>
+public sealed class SubnetScanDiscoveryProvider(
+    IOptions<BossCamRuntimeOptions> options,
+    IHttpClientFactory httpClientFactory,
+    IBossCamEventBroadcaster? broadcaster = null) : IDiscoveryProvider
+{
+    public string Name => "SubnetScan";
+
+    public async Task<IReadOnlyCollection<DeviceIdentity>> DiscoverAsync(CancellationToken cancellationToken)
+    {
+        // Collect unique /24 subnet prefixes from local IPv4 addresses
+        var subnetPrefixes = new List<string>();
+        foreach (var localIp in DiscoveryHelpers.GetLocalIpv4Addresses())
+        {
+            var parts = localIp.ToString().Split('.');
+            if (parts.Length != 4) continue;
+            var prefix = $"{parts[0]}.{parts[1]}.{parts[2]}.";
+            if (!subnetPrefixes.Contains(prefix))
+                subnetPrefixes.Add(prefix);
+        }
+
+        // Scan a single IP:port, return DeviceIdentity if a device responded
+        async Task<DeviceIdentity?> TryProbeAsync(string ip, int port, string subnetPrefix, CancellationToken ct)
+        {
+            try
+            {
+                // Use a short per-request timeout so the whole scan doesn't drag
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(options.Value.DiscoveryTimeoutSeconds));
+                using var linked = CancellationTokenSource.CreateLinkedTokenSource(cts.Token, ct);
+                using var client = httpClientFactory.CreateClient("probe");
+                // Any HTTP response at all indicates a device is listening here
+                using var response = await client.GetAsync($"http://{ip}:{port}/NetSDK/System/deviceInfo", linked.Token);
+
+                // Accept any HTTP response (even 401/400/403) as "device present"
+                // Only connection refused / timeout means nothing there
+                return new DeviceIdentity
+                {
+                    IpAddress = ip,
+                    Port = port,
+                    DeviceType = "IPC",
+                    Name = $"Scanned {ip}:{port}",
+                    TransportProfiles =
+                    [
+                        new TransportProfile { Kind = TransportKind.LanRest, Address = $"http://{ip}:{port}", Rank = 10 }
+                    ],
+                    Metadata = new Dictionary<string, string>
+                    {
+                        ["scanned"] = "true",
+                        ["statusCode"] = $"{(int)response.StatusCode}"
+                    }
+                };
+            }
+            catch (HttpRequestException)
+            {
+                return null; // Connection refused or DNS failure
+            }
+            catch (TaskCanceledException)
+            {
+                return null; // Timeout
+            }
+            catch (OperationCanceledException)
+            {
+                return null;
+            }
+        }
+
+        // Deduplication: try preferred ports in order, keep the first success per IP
+        var probePorts = new[] { 80, 8080, 554, 8000, 8899, 8888 };
+        var bestPortPerIp = new ConcurrentDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var ipLock = new object();
+        var totalProbes = subnetPrefixes.Count * 254 * probePorts.Length;
+        var completed = 0;
+        var lastReportedPct = 0;
+
+        void ReportProgress()
+        {
+            if (broadcaster == null) return;
+            var pct = totalProbes > 0 ? (int)(completed * 100.0 / totalProbes) : 0;
+            if (pct - lastReportedPct >= 5 || pct == 100)
+            {
+                lastReportedPct = pct;
+                _ = broadcaster.DiscoveryProgressAsync(bestPortPerIp.Count, Name, pct == 100, null);
+            }
+        }
+
+        foreach (var subnetPrefix in subnetPrefixes)
+        {
+            // Generate all IP:port combinations for this subnet
+            var probes = new List<(string ip, int port)>();
+            foreach (var port in probePorts)
+                for (var host = 1; host <= 254; host++)
+                    probes.Add(($"{subnetPrefix}{host}", port));
+
+            // Scan in parallel with concurrency limit
+            var parallelOptions = new ParallelOptions
+            {
+                MaxDegreeOfParallelism = 50,
+                CancellationToken = cancellationToken
+            };
+
+            await Parallel.ForEachAsync(probes, parallelOptions, async (probe, ct) =>
+            {
+                var (ip, port) = probe;
+                var device = await TryProbeAsync(ip, port, subnetPrefix, ct);
+                if (device != null)
+                {
+                    // Deduplicate: only keep the first (highest-priority port) response per IP
+                    bestPortPerIp.TryAdd(ip, port);
+                }
+
+                lock (ipLock)
+                {
+                    completed++;
+                    if (completed % 50 == 0)
+                        ReportProgress();
+                }
+            });
+
+            // Final progress for this subnet
+            if (broadcaster != null)
+            {
+                _ = broadcaster.DiscoveryProgressAsync(bestPortPerIp.Count, Name, false, null);
+            }
+        }
+
+        // Build final device list: one per unique IP, using the recorded best port
+        var devices = new List<DeviceIdentity>();
+        foreach (var kvp in bestPortPerIp)
+        {
+            devices.Add(new DeviceIdentity
+            {
+                IpAddress = kvp.Key,
+                Port = kvp.Value,
+                DeviceType = "IPC",
+                Name = $"Scanned {kvp.Key}:{kvp.Value}",
+                TransportProfiles =
+                [
+                    new TransportProfile { Kind = TransportKind.LanRest, Address = $"http://{kvp.Key}:{kvp.Value}", Rank = 10 }
+                ],
+                Metadata = new Dictionary<string, string> { ["scanned"] = "true" }
+            });
+        }
+
+        return devices;
+    }
+}
+
 internal static class DiscoveryHelpers
 {
     public static IReadOnlyList<IPAddress> GetLocalIpv4Addresses()
@@ -230,4 +391,3 @@ internal static class DiscoveryHelpers
         return null;
     }
 }
-

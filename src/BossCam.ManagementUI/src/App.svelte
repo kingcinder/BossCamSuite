@@ -11,6 +11,7 @@
   import ImagePanel from './lib/components/ImagePanel.svelte';
   import StreamPanel from './lib/components/StreamPanel.svelte';
   import NetworkPanel from './lib/components/NetworkPanel.svelte';
+  import FeaturesPanel from './lib/components/FeaturesPanel.svelte';
   import RecordPanel from './lib/components/RecordPanel.svelte';
   import HighlightsPanel from './lib/components/HighlightsPanel.svelte';
   import AdvancedPanel from './lib/components/AdvancedPanel.svelte';
@@ -71,6 +72,9 @@
       case 'v': case 'V': // V = View All
         appState.activeTab = 'viewall';
         break;
+      case 'f': case 'F': // F = Features
+        appState.activeTab = 'features';
+        break;
       case 'o': case 'O': // O = Overview
         appState.activeTab = 'overview';
         break;
@@ -92,7 +96,7 @@
       case 'a': case 'A': // A = Advanced
         appState.activeTab = 'advanced';
         break;
-      case 'f': case 'F': // F = Firmware (only from Advanced tab)
+      case 'x': case 'X': // X = Firmware (only from Advanced tab)
         if (appState.activeTab === 'advanced') {
           // firmware section is inside advanced
         }
@@ -170,24 +174,45 @@
     document.dispatchEvent(new CustomEvent('bosscam:save-trigger', { detail: { tab: appState.activeTab } }));
   }
 
-  onMount(async () => {
-    try {
-      const h = await api.health();
-      appState.healthInfo = `API ok · ${h.platform || ''} · ${h.timestamp || ''}`;
-    } catch {
-      appState.healthInfo = 'API unreachable';
-    }
+  onMount(() => {
+    // Start async initialization without making onMount itself async
+    (async () => {
+      try {
+        const h = await api.health();
+        appState.healthInfo = `API ok · ${h.platform || ''} · ${h.timestamp || ''}`;
+      } catch {
+        appState.healthInfo = 'API unreachable';
+      }
 
-    try {
-      appState.devices = await api.devices();
-      appState.syncOrder();
-    } catch (e: unknown) {
-      appState.healthInfo = 'Devices load failed: ' + String(e);
-    }
+      try {
+        appState.devices = await api.devices();
+        appState.syncOrder();
+      } catch (e: unknown) {
+        appState.healthInfo = 'Devices load failed: ' + String(e);
+      }
 
-    // Connect to SignalR for real-time push events.
-    // If connection fails, the SPA degrades gracefully to HTTP-only mode.
-    signalR.connect(appState);
+      // Fetch initial connectivity snapshots for all devices
+      try {
+        const snapshots = await api.connectivityAll();
+        const map: Record<string, { status: string; transportResults?: Record<string, boolean>; lastCheckedAt?: string }> = {};
+        for (const snap of snapshots || []) {
+          map[snap.deviceId] = {
+            status: snap.status,
+            transportResults: snap.transportResults || undefined,
+            lastCheckedAt: snap.lastCheckedAt,
+          };
+        }
+        if (Object.keys(map).length > 0) {
+          appState.connectivitySnapshots = map;
+        }
+      } catch {
+        // Connectivity snapshots are optional; degrade gracefully
+      }
+
+      // Connect to SignalR for real-time push events.
+      // If connection fails, the SPA degrades gracefully to HTTP-only mode.
+      signalR.connect(appState);
+    })();
 
     document.addEventListener('bosscam:discover', () => {
       api.discover().then(() => {
@@ -253,6 +278,12 @@
             <ul class="plain">{@html sourcesHtml}</ul>
           </div>
         </div>
+      </section>
+    {/if}
+
+    {#if appState.activeTab === 'features'}
+      <section class="panel active">
+        <FeaturesPanel appState={appState} />
       </section>
     {/if}
 

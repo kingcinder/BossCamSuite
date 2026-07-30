@@ -7,6 +7,7 @@ namespace BossCam.Core;
 public sealed class CapabilityProbeService(
     IEnumerable<IControlAdapter> controlAdapters,
     IApplicationStore store,
+    IBossCamEventBroadcaster broadcaster,
     ILogger<CapabilityProbeService> logger)
 {
     public async Task<CapabilityMap?> ProbeAsync(Guid deviceId, CancellationToken cancellationToken)
@@ -18,8 +19,13 @@ public sealed class CapabilityProbeService(
     public async Task<CapabilityMap> ProbeAsync(DeviceIdentity device, CancellationToken cancellationToken)
     {
         CapabilityMap? combined = null;
-        foreach (var adapter in controlAdapters.OrderBy(static adapter => adapter.Priority))
+        var adapterList = controlAdapters.OrderBy(static adapter => adapter.Priority).ToList();
+        var verifiedCount = 0;
+        for (var i = 0; i < adapterList.Count; i++)
         {
+            var adapter = adapterList[i];
+            _ = broadcaster.ProbeProgressAsync(device.Id, adapter.Name, verifiedCount, false, null, cancellationToken);
+
             bool canHandle;
             try
             {
@@ -28,11 +34,13 @@ public sealed class CapabilityProbeService(
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Adapter {Adapter} capability check failed for {Device}", adapter.Name, device.DisplayName);
+                _ = broadcaster.ProbeProgressAsync(device.Id, adapter.Name, verifiedCount, false, ex.Message, cancellationToken);
                 continue;
             }
 
             if (!canHandle)
             {
+                _ = broadcaster.ProbeProgressAsync(device.Id, adapter.Name, verifiedCount, false, "Cannot handle device", cancellationToken);
                 continue;
             }
 
@@ -40,12 +48,17 @@ public sealed class CapabilityProbeService(
             {
                 var map = await adapter.ProbeAsync(device, cancellationToken);
                 combined = Merge(combined, map);
+                verifiedCount++;
+                _ = broadcaster.ProbeProgressAsync(device.Id, adapter.Name, verifiedCount, false, null, cancellationToken);
             }
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Adapter {Adapter} probe failed for {Device}", adapter.Name, device.DisplayName);
+                _ = broadcaster.ProbeProgressAsync(device.Id, adapter.Name, verifiedCount, false, ex.Message, cancellationToken);
             }
         }
+
+        _ = broadcaster.ProbeProgressAsync(device.Id, "Complete", verifiedCount, true, null, cancellationToken);
 
         combined ??= new CapabilityMap
         {
@@ -384,6 +397,7 @@ public sealed class SettingsService(
 public sealed class TransportBroker(
     IEnumerable<IVideoTransportAdapter> transportAdapters,
     IApplicationStore store,
+    TransportFailoverService? failoverService,
     ILogger<TransportBroker> logger)
 {
     public async Task<IReadOnlyCollection<VideoSourceDescriptor>> GetSourcesAsync(Guid deviceId, CancellationToken cancellationToken)
@@ -407,11 +421,24 @@ public sealed class TransportBroker(
             }
         }
 
-        return sources
+        var deduped = sources
             .OrderBy(static source => source.Rank)
             .GroupBy(static source => $"{source.Kind}:{source.Url}", StringComparer.OrdinalIgnoreCase)
             .Select(static group => group.First())
             .ToList();
+
+        // When primary adapters yield nothing, try the aggressive failover fallback
+        if (deduped.Count == 0 && failoverService is not null && device.IpAddress is not null)
+        {
+            logger.LogInformation("Primary transport adapters found no sources for {Device}; using TransportFailoverService", device.DisplayName);
+            var fallback = await failoverService.ResolveBestSourceAsync(deviceId, "main", cancellationToken);
+            if (fallback is not null)
+            {
+                deduped.Add(fallback);
+            }
+        }
+
+        return deduped;
     }
 
     public async Task<PreviewSession?> StartPreviewAsync(Guid deviceId, CancellationToken cancellationToken)

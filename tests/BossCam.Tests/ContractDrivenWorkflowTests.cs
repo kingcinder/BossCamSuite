@@ -381,7 +381,7 @@ public sealed class ContractDrivenWorkflowTests : IDisposable
         };
         await store.SaveRecordingProfilesAsync([profile], CancellationToken.None);
 
-        var broker = new TransportBroker([new NoSourceVideoAdapter()], store, NullLogger<TransportBroker>.Instance);
+        var broker = new TransportBroker([new NoSourceVideoAdapter()], store, null, NullLogger<TransportBroker>.Instance);
         var recording = new RecordingService(store, broker, new TestRecordingPipelineResolver(), NullBossCamEventBroadcaster.Instance, NullLogger<RecordingService>.Instance);
         var indexed = await recording.RefreshIndexAsync(device.Id, CancellationToken.None);
 
@@ -420,7 +420,7 @@ public sealed class ContractDrivenWorkflowTests : IDisposable
         };
         await store.SaveRecordingProfilesAsync([profile], CancellationToken.None);
 
-        var broker = new TransportBroker([new NoSourceVideoAdapter()], store, NullLogger<TransportBroker>.Instance);
+        var broker = new TransportBroker([new NoSourceVideoAdapter()], store, null, NullLogger<TransportBroker>.Instance);
         var recording = new RecordingService(store, broker, new TestRecordingPipelineResolver(), NullBossCamEventBroadcaster.Instance, NullLogger<RecordingService>.Instance);
         var result = await recording.RunHousekeepingAsync(device.Id, CancellationToken.None);
 
@@ -447,7 +447,7 @@ public sealed class ContractDrivenWorkflowTests : IDisposable
         };
         await store.SaveRecordingProfilesAsync([profile], CancellationToken.None);
 
-        var broker = new TransportBroker([new RtspSourceVideoAdapter()], store, NullLogger<TransportBroker>.Instance);
+        var broker = new TransportBroker([new RtspSourceVideoAdapter()], store, null, NullLogger<TransportBroker>.Instance);
         var recording = new RecordingService(store, broker, new TestRecordingPipelineResolver(), NullBossCamEventBroadcaster.Instance, NullLogger<RecordingService>.Instance);
         var started = await recording.ReconcileAutoStartAsync(CancellationToken.None);
 

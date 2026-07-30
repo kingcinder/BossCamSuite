@@ -12,29 +12,81 @@ public sealed class RecordingLifecycleWorker(
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // PR-R1: Startup reconcile — reconcile persisted jobs + auto-start profiles
         try
         {
             await Task.Delay(TimeSpan.FromSeconds(Math.Max(1, options.Value.RecordingStartupReconcileDelaySeconds)), stoppingToken);
-            var started = await recordingService.ReconcileAutoStartAsync(stoppingToken);
-            logger.LogInformation("Recording reconcile started {Count} job(s)", started.Count);
+            var reconciled = await recordingService.ReconcilePersistedJobsAsync(stoppingToken);
+            var autoStarted = await recordingService.ReconcileAutoStartAsync(stoppingToken);
+            var running = reconciled.Count(static j => j.IsRunning);
+            logger.LogInformation("Recording reconcile: {Total} jobs ({Running} running), {Auto} auto-started", reconciled.Count, running, autoStarted.Count);
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Recording startup reconcile failed.");
         }
 
-        using var timer = new PeriodicTimer(TimeSpan.FromMinutes(Math.Max(1, options.Value.RecordingHousekeepingMinutes)));
+        // PR-R9: Cycle ticks — housekeeping, index refresh, stall checks
+        var cycleMinutes = Math.Max(1, options.Value.RecordingHousekeepingMinutes);
+        var stallTimeoutSeconds = options.Value.StallTimeoutSeconds > 0 ? options.Value.StallTimeoutSeconds : cycleMinutes * 60 / 2;
+
+        using var timer = new PeriodicTimer(TimeSpan.FromMinutes(cycleMinutes));
         while (await timer.WaitForNextTickAsync(stoppingToken))
         {
+            // PR-R5: Automatic retention housekeeping
             try
             {
-                _ = await recordingService.RefreshIndexAsync(null, stoppingToken);
                 var result = await recordingService.RunHousekeepingAsync(null, stoppingToken);
-                logger.LogInformation("Recording housekeeping checked={Checked} deleted={Deleted} bytes={Bytes}", result.ProfilesChecked, result.FilesDeleted, result.BytesDeleted);
+                if (result.FilesDeleted > 0)
+                {
+                    logger.LogInformation("Recording housekeeping checked={Checked} deleted={Deleted} bytes={Bytes}", result.ProfilesChecked, result.FilesDeleted, result.BytesDeleted);
+                }
             }
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Recording housekeeping iteration failed.");
+            }
+
+            // PR-R2: Incremental index refresh
+            try
+            {
+                var indexed = await recordingService.RefreshIndexAsync(null, stoppingToken);
+                if (indexed.Count > 0)
+                {
+                    logger.LogDebug("Recording index refresh produced {Count} segment(s)", indexed.Count);
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Recording index refresh failed.");
+            }
+
+            // PR-R4: Periodic stall check
+            try
+            {
+                var stalled = await recordingService.CheckStalledJobsAsync(options.Value.StallTimeoutSeconds, options.Value.StallAutoRestart, stoppingToken);
+                if (stalled.Count > 0)
+                {
+                    logger.LogWarning("Stall check: {Count} stalled job(s) handled", stalled.Count);
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Stall check iteration failed.");
+            }
+
+            // PR-R9: Reconcile auto-start profiles (catches missed start events)
+            try
+            {
+                var started = await recordingService.ReconcileAutoStartAsync(stoppingToken);
+                if (started.Count > 0)
+                {
+                    logger.LogInformation("Recording reconcile started {Count} job(s)", started.Count);
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Recording reconcile failed.");
             }
         }
     }
