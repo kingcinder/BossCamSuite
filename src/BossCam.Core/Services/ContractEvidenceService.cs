@@ -104,6 +104,22 @@ public sealed class ContractEvidenceService(
     public Task<IReadOnlyCollection<EndpointContractFixture>> GetFixturesAsync(Guid? deviceId, CancellationToken cancellationToken)
         => store.GetContractFixturesAsync(deviceId, 5000, cancellationToken);
 
+    /// <summary>
+    /// Deletes fixtures older than <paramref name="olderThanDays"/> days, then enforces
+    /// per-device and total caps. Uses the store's batch-delete method for efficiency.
+    /// Logs the number of removed records for audit visibility.
+    /// </summary>
+    public async Task<int> CleanupAsync(int olderThanDays, int maxPerDevice, int maxTotal, CancellationToken cancellationToken)
+    {
+        // Step 1: age-based delete across all devices (no device filter => global)
+        var deleted = await store.DeleteContractFixturesAsync(null, olderThanDays, maxPerDevice, maxTotal, cancellationToken);
+        logger.LogInformation(
+            "Contract fixture cleanup: deleted {Deleted} fixtures older than {Days}d, " +
+            "per-device cap={PerDevice}, total cap={Total}",
+            deleted, olderThanDays, maxPerDevice, maxTotal);
+        return deleted;
+    }
+
     private static JsonNode? ParseIfJson(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw))

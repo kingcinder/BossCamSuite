@@ -36,6 +36,10 @@ public interface IContractEvidenceService
 {
     Task<IReadOnlyCollection<EndpointContractFixture>> PromoteFromTranscriptsAsync(Guid deviceId, string exportRoot, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<EndpointContractFixture>> GetFixturesAsync(Guid? deviceId, CancellationToken cancellationToken);
+    /// <summary>
+    /// Cleans up contract fixtures by age and count limits.
+    /// </summary>
+    Task<int> CleanupAsync(int olderThanDays, int maxPerDevice, int maxTotal, CancellationToken cancellationToken);
 }
 
 public interface IControlAdapter
@@ -91,6 +95,12 @@ public interface IApplicationStore
     Task<IReadOnlyCollection<EndpointContract>> GetEndpointContractsAsync(CancellationToken cancellationToken);
     Task SaveContractFixturesAsync(IEnumerable<EndpointContractFixture> fixtures, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<EndpointContractFixture>> GetContractFixturesAsync(Guid? deviceId, int limit, CancellationToken cancellationToken);
+    /// <summary>
+    /// Deletes contract fixtures older than <paramref name="olderThanDays"/> days, then
+    /// reduces total per-device to <paramref name="maxPerDevice"/> and total across all
+    /// devices to <paramref name="maxTotal"/>. Returns the number of rows removed.
+    /// </summary>
+    Task<int> DeleteContractFixturesAsync(Guid? deviceId, int olderThanDays, int maxPerDevice, int maxTotal, CancellationToken cancellationToken);
     Task AddFirmwareArtifactAsync(FirmwareArtifact artifact, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<FirmwareArtifact>> GetFirmwareArtifactsAsync(CancellationToken cancellationToken);
     Task SaveRecordingProfilesAsync(IEnumerable<RecordingProfile> profiles, CancellationToken cancellationToken);

@@ -542,6 +542,12 @@ app.MapPost("/api/contracts/fixtures/promote/{deviceId:guid}", async (Guid devic
     Results.Ok(await evidenceService.PromoteFromTranscriptsAsync(deviceId, request.ExportRoot, ct)));
 app.MapGet("/api/contracts/fixtures", async (Guid? deviceId, IContractEvidenceService evidenceService, CancellationToken ct) =>
     Results.Ok(await evidenceService.GetFixturesAsync(deviceId, ct)));
+app.MapPost("/api/contracts/fixtures/cleanup", async (ContractFixtureCleanupRequest request, IContractEvidenceService evidenceService, CancellationToken ct) =>
+    Results.Ok(await evidenceService.CleanupAsync(
+        request.OlderThanDays,
+        request.MaxPerDevice,
+        request.MaxTotal,
+        ct)));
 app.MapGet("/api/devices/{id:guid}/semantic/history", async (Guid id, int? limit, SemanticTrustService semanticTrustService, CancellationToken ct) =>
     Results.Ok(await semanticTrustService.GetSemanticHistoryAsync(id, limit ?? 300, ct)));
 app.MapGet("/api/devices/{id:guid}/constraints", async (Guid id, IApplicationStore store, SemanticTrustService semanticTrustService, CancellationToken ct) =>
@@ -994,6 +1000,7 @@ public sealed record TypedSettingApplyRequest(string FieldKey, JsonNode? Value, 
 public sealed record TypedSettingBatchApplyRequest(IReadOnlyCollection<TypedFieldChange> Changes, bool ExpertOverride);
 public sealed record PersistenceFieldVerifyRequest(string FieldKey, JsonNode? Value, bool RebootForVerification, bool ExpertOverride);
 public sealed record ContractFixturePromotionRequest(string ExportRoot);
+public sealed record ContractFixtureCleanupRequest(int OlderThanDays = 90, int MaxPerDevice = 2000, int MaxTotal = 10000);
 public sealed record ImageTruthSweepRequest(bool IncludeBehaviorMapping, bool RefreshFromDevice, string? ExportRoot);
 
 // Expose entry point for WebApplicationFactory / E2E host.

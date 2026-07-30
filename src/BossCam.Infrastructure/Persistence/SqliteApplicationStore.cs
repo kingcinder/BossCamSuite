@@ -393,6 +393,65 @@ public sealed class SqliteApplicationStore : IApplicationStore
         return await QueryPayloadListAsync<EndpointContractFixture>($"SELECT payload FROM contract_fixtures WHERE device_id = $id ORDER BY captured_at DESC LIMIT {Math.Max(1, limit)}", parameters => parameters.AddWithValue("$id", deviceId.Value.ToString()), cancellationToken);
     }
 
+    public async Task<int> DeleteContractFixturesAsync(Guid? deviceId, int olderThanDays, int maxPerDevice, int maxTotal, CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            await using var connection = OpenConnection();
+            await connection.OpenAsync(cancellationToken);
+            var cutoff = DateTimeOffset.UtcNow.AddDays(-olderThanDays).ToString("O");
+            var totalDeleted = 0;
+
+            // Step 1: Delete fixtures older than the cutoff.
+            await using var ageCmd = connection.CreateCommand();
+            if (deviceId is not null)
+            {
+                ageCmd.CommandText = "DELETE FROM contract_fixtures WHERE device_id = $device_id AND captured_at < $cutoff";
+                ageCmd.Parameters.AddWithValue("$device_id", deviceId.Value.ToString());
+            }
+            else
+            {
+                ageCmd.CommandText = "DELETE FROM contract_fixtures WHERE captured_at < $cutoff";
+            }
+            ageCmd.Parameters.AddWithValue("$cutoff", cutoff);
+            totalDeleted += await ageCmd.ExecuteNonQueryAsync(cancellationToken);
+
+            // Step 2: Enforce total limit (count oldest, delete excess).
+            await using var countCmd = connection.CreateCommand();
+            countCmd.CommandText = deviceId is null
+                ? "SELECT COUNT(*) FROM contract_fixtures"
+                : "SELECT COUNT(*) FROM contract_fixtures WHERE device_id = $device_id";
+            if (deviceId is not null)
+            {
+                countCmd.Parameters.AddWithValue("$device_id", deviceId.Value.ToString());
+            }
+            var count = (long?)(await countCmd.ExecuteScalarAsync(cancellationToken)) ?? 0;
+            var limit = deviceId is null ? maxTotal : maxPerDevice;
+            if (count > limit)
+            {
+                var excess = count - limit;
+                await using var excessCmd = connection.CreateCommand();
+                if (deviceId is not null)
+                {
+                    excessCmd.CommandText = $"DELETE FROM contract_fixtures WHERE device_id = $device_id AND rowid IN (SELECT rowid FROM contract_fixtures WHERE device_id = $device_id ORDER BY captured_at ASC LIMIT {excess})";
+                    excessCmd.Parameters.AddWithValue("$device_id", deviceId.Value.ToString());
+                }
+                else
+                {
+                    excessCmd.CommandText = $"DELETE FROM contract_fixtures WHERE rowid IN (SELECT rowid FROM contract_fixtures ORDER BY captured_at ASC LIMIT {excess})";
+                }
+                totalDeleted += await excessCmd.ExecuteNonQueryAsync(cancellationToken);
+            }
+
+            return totalDeleted;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     public async Task AddFirmwareArtifactAsync(FirmwareArtifact artifact, CancellationToken cancellationToken)
         => await InsertPayloadAsync(StoreTable.FirmwareArtifacts, artifact.Id.ToString(), artifact, artifact.AnalyzedAt, cancellationToken);
 

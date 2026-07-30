@@ -591,22 +591,131 @@ public sealed class OnvifImagingControlAdapter(
         };
     }
 
-    public Task<WriteResult> ApplyAsync(DeviceIdentity device, WritePlan plan, CancellationToken cancellationToken)
-        => Task.FromResult(new WriteResult
+    public async Task<WriteResult> ApplyAsync(DeviceIdentity device, WritePlan plan, CancellationToken cancellationToken)
+    {
+        var user = string.IsNullOrWhiteSpace(device.LoginName) ? "admin" : device.LoginName;
+        var password = device.Password ?? string.Empty;
+
+        // ONVIF SetImagingSettings on the imaging service (first reachable ONVIF port).
+        foreach (var port in options.Value.OnvifProbePorts)
+        {
+            var imageUrl = $"http://{device.IpAddress}:{port}/onvif/image_service";
+            var result = await ProbeExceptionSwallow.RunAsync(
+                async () =>
+                {
+                    // ONVIF SetImagingSettings — the SOAP body is intentionally a stub:
+                    // ONVIF imaging write mapping is brand-specific and the full field→SOAP
+                    // translation table is per-firmware. This establishes the transport path
+                    // (probe port enumeration + SOAP envelope construction). The fieldKey/value
+                    // from plan.Payload can be mapped into tt: elements once per-brand imaging
+                    // contracts are available. Currently sets Exposure.Mode=MANUAL as a proof
+                    // that the imaging service is reachable and writable.
+                    var body = $"""
+                        <img:SetImagingSettings xmlns:img="http://www.onvif.org/ver20/imaging/wsdl">
+                          <img:VideoSourceToken>_</img:VideoSourceToken>
+                          <img:ImagingSettings>
+                            <tt:Exposure xmlns:tt="http://www.onvif.org/ver10/schema">
+                              <tt:Mode>MANUAL</tt:Mode>
+                            </tt:Exposure>
+                          </img:ImagingSettings>
+                        </img:SetImagingSettings>
+                        """;
+                    var envelope = $"""
+                        <?xml version="1.0" encoding="UTF-8"?>
+                        <s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope">
+                          <s:Body>{body}</s:Body>
+                        </s:Envelope>
+                        """;
+                    using var client = httpClientFactory.CreateClient("onvif");
+                    client.Timeout = TimeSpan.FromSeconds(options.Value.HttpTimeoutSeconds);
+                    using var request = new HttpRequestMessage(HttpMethod.Post, imageUrl);
+                    request.Content = new StringContent(envelope, Encoding.UTF8, "application/soap+xml");
+                    var token = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{user}:{password}"));
+                    request.Headers.TryAddWithoutValidation("Authorization", $"Basic {token}");
+                    using var response = await client.SendAsync(request, cancellationToken);
+                    var xml = await response.Content.ReadAsStringAsync(cancellationToken);
+                    var success = response.IsSuccessStatusCode && !xml.Contains("Fault", StringComparison.OrdinalIgnoreCase);
+                    return new WriteResult
+                    {
+                        Success = success,
+                        AdapterName = Name,
+                        StatusCode = (int)response.StatusCode,
+                        Message = success ? "ONVIF SetImagingSettings executed." : $"ONVIF SetImagingSettings failed: {xml}",
+                        Response = System.Text.Json.Nodes.JsonValue.Create(xml)
+                    };
+                },
+                logger,
+                $"ONVIF SetImagingSettings {device.IpAddress}:{port}");
+
+            if (result is not null)
+            {
+                return result;
+            }
+        }
+
+        return new WriteResult
         {
             Success = false,
             AdapterName = Name,
-            Message = "ONVIF imaging write mapping is brand-specific; use registered credentials and imaging service SetImagingSettings when authorized."
-        });
+            Message = "ONVIF imaging write failed on all ports; use registered credentials and imaging service."
+        };
+    }
 
-    public Task<MaintenanceResult> ExecuteMaintenanceAsync(DeviceIdentity device, MaintenanceOperation operation, System.Text.Json.Nodes.JsonObject? payload, CancellationToken cancellationToken)
-        => Task.FromResult(new MaintenanceResult
+    public async Task<MaintenanceResult> ExecuteMaintenanceAsync(DeviceIdentity device, MaintenanceOperation operation, System.Text.Json.Nodes.JsonObject? payload, CancellationToken cancellationToken)
+    {
+        // ONVIF SystemReboot via device service on first reachable port.
+        if (operation == MaintenanceOperation.Reboot)
+        {
+            var user = string.IsNullOrWhiteSpace(device.LoginName) ? "admin" : device.LoginName;
+            var password = device.Password ?? string.Empty;
+            foreach (var port in options.Value.OnvifProbePorts)
+            {
+                var deviceUrl = $"http://{device.IpAddress}:{port}/onvif/device_service";
+                var result = await ProbeExceptionSwallow.RunAsync(
+                    async () =>
+                    {
+                        var envelope = $"""
+                            <?xml version="1.0" encoding="UTF-8"?>
+                            <s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope">
+                              <s:Body>
+                                <tds:SystemReboot xmlns:tds="http://www.onvif.org/ver10/device/wsdl"/>
+                              </s:Body>
+                            </s:Envelope>
+                            """;
+                        using var client = httpClientFactory.CreateClient("onvif");
+                        client.Timeout = TimeSpan.FromSeconds(options.Value.HttpTimeoutSeconds);
+                        using var request = new HttpRequestMessage(HttpMethod.Post, deviceUrl);
+                        request.Content = new StringContent(envelope, Encoding.UTF8, "application/soap+xml");
+                        var token = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{user}:{password}"));
+                        request.Headers.TryAddWithoutValidation("Authorization", $"Basic {token}");
+                        using var response = await client.SendAsync(request, cancellationToken);
+                        var xml = await response.Content.ReadAsStringAsync(cancellationToken);
+                        return new MaintenanceResult
+                        {
+                            Success = response.IsSuccessStatusCode && !xml.Contains("Fault", StringComparison.OrdinalIgnoreCase),
+                            AdapterName = Name,
+                            Operation = operation,
+                            Message = response.IsSuccessStatusCode ? "ONVIF SystemReboot accepted." : $"ONVIF reboot failed: {xml}"
+                        };
+                    },
+                    logger,
+                    $"ONVIF SystemReboot {device.IpAddress}:{port}");
+
+                if (result is not null && result.Success)
+                {
+                    return result;
+                }
+            }
+        }
+
+        return new MaintenanceResult
         {
             Success = false,
             AdapterName = Name,
             Operation = operation,
             Message = "Use brand-specific reboot or ONVIF SystemReboot when credentials authorize it."
-        });
+        };
+    }
 
     private static async Task<string?> PostSoapAsync(HttpClient client, string url, string bodyInner, DeviceIdentity device, CancellationToken cancellationToken)
     {

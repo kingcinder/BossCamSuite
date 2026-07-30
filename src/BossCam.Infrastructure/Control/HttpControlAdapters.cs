@@ -173,6 +173,52 @@ public abstract class HttpControlAdapterBase(IOptions<BossCamRuntimeOptions> opt
         request.Headers.Authorization = new AuthenticationHeaderValue("Basic", credential);
     }
 
+    /// <summary>
+    /// Wraps <see cref="SendAsync"/> in a <see cref="ControlResult{T}"/> so callers
+    /// can pattern-match on success/failure with structured error codes instead of
+    /// checking for null. Use this in adapter public methods that return a result.
+    /// </summary>
+    protected async Task<ControlResult<HttpAdapterResponse>> SendWithResultAsync(
+        DeviceIdentity device, string endpoint, string method, System.Text.Json.Nodes.JsonObject? payload,
+        CancellationToken cancellationToken, string? mediaType = null)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            var response = await SendAsync(device, endpoint, method, payload, cancellationToken, mediaType);
+            sw.Stop();
+            if (response is null)
+            {
+                return ControlResult<HttpAdapterResponse>.Fail(
+                    "no-response",
+                    $"No HTTP response from {endpoint} on {device.DisplayName}.",
+                    response?.StatusCode is null ? null : (int)response.StatusCode)
+                    with { DurationMs = sw.ElapsedMilliseconds };
+            }
+
+            if (!IsSemanticSuccess(response))
+            {
+                return ControlResult<HttpAdapterResponse>.Fail(
+                    "semantic-failure",
+                    $"Semantic failure from {endpoint} on {device.DisplayName}: {response.RawContent}",
+                    (int)response.StatusCode)
+                    with { DurationMs = sw.ElapsedMilliseconds };
+            }
+
+            return ControlResult<HttpAdapterResponse>.Ok(
+                response,
+                $"{endpoint} succeeded on {device.DisplayName}.",
+                (int)response.StatusCode)
+                with { DurationMs = sw.ElapsedMilliseconds };
+        }
+        catch (Exception ex)
+        {
+            sw.Stop();
+            return ControlResult<HttpAdapterResponse>.FromException(ex, "request-exception")
+                with { DurationMs = sw.ElapsedMilliseconds };
+        }
+    }
+
     private async Task<HttpAdapterResponse?> SendOnceAsync(
         DeviceIdentity device,
         Uri uri,
