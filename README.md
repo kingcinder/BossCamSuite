@@ -190,6 +190,21 @@ sudo systemctl status bosscam
 
 ---
 
+## Avalonia Desktop App
+
+A cross-platform desktop UI is available at `src/BossCam.Desktop.Avalonia/` using [Avalonia UI](https://www.avaloniaui.net/) 11.1. It provides device browsing, live MJPEG preview (via snapshot polling), and snapshot capture — all talking to the local `BossCam.Service` instance over HTTP.
+
+**First restore requires internet access** — Avalonia 11.1 has ~15 transitive NuGet dependencies (~70 MB total):
+
+```bash
+dotnet restore src/BossCam.Desktop.Avalonia/BossCam.Desktop.Avalonia.csproj
+dotnet run --project src/BossCam.Desktop.Avalonia/BossCam.Desktop.Avalonia.csproj
+```
+
+> **Why it's in the solution if restore needs internet?** The project is listed in `BossCamSuite.Linux.sln` so it appears in IDEs and future CI pipelines. If `dotnet restore` from the solution root takes too long in your environment, target the Avalonia project directly as shown above. Once restored, the project builds as part of the full solution with `dotnet build BossCamSuite.Linux.sln`.
+
+---
+
 ## Project Structure
 
 ```
@@ -212,6 +227,7 @@ BossCamSuite-main/
 │   ├── BossCam.Core/             # Business logic & services
 │   ├── BossCam.Infrastructure/   # SQLite, discovery, control adapters
 │   ├── BossCam.Contracts/        # Shared DTOs & models
+│   ├── BossCam.Desktop.Avalonia/ # Cross-platform desktop app (Avalonia UI)
 │   ├── BossCam.ProbeRunner/      # CLI probe tool
 │   └── BossCam.NativeBridge/     # Native DLL interop
 ├── tests/

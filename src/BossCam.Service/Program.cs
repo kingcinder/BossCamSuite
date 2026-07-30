@@ -460,6 +460,34 @@ app.MapGet("/api/devices/{id:guid}/live.mjpeg", async (Guid id, string? quality,
     }
 });
 
+// Live fMP4 stream (WebRTC-equivalent via MediaSource Extensions in the browser).
+// Transcodes RTSP → fragmented MP4 with ffmpeg; the browser feeds it into a <video>
+// element via MSE for hardware-accelerated low-latency playback.
+app.MapGet("/api/devices/{id:guid}/live.mp4", async (Guid id, string? quality, HttpContext http, LiveStreamService live, CancellationToken ct) =>
+{
+    http.Response.ContentType = "video/mp4";
+    http.Response.Headers.CacheControl = "no-cache, no-store";
+    http.Response.Headers["X-Accel-Buffering"] = "no";
+    http.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpResponseBodyFeature>()?.DisableBuffering();
+    try
+    {
+        await http.Response.StartAsync(ct);
+        await live.StreamFragmentedMp4Async(id, http.Response.Body, quality ?? "sub", ct);
+    }
+    catch (InvalidOperationException ex)
+    {
+        if (!http.Response.HasStarted)
+        {
+            http.Response.StatusCode = StatusCodes.Status400BadRequest;
+            await http.Response.WriteAsJsonAsync(new { error = ex.Message }, ct);
+        }
+    }
+    catch (OperationCanceledException)
+    {
+        // client hung up
+    }
+});
+
 app.MapGet("/api/devices/{id:guid}/live-info", async (Guid id, LiveStreamService live, CancellationToken ct) =>
 {
     try

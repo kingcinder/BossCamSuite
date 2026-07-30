@@ -165,4 +165,40 @@ public sealed class LinuxUiFeatureTests : IClassFixture<BossCamWebAppFactory>
         Assert.True((int)res.StatusCode is >= 200 and < 500,
             $"persistence results -> {(int)res.StatusCode}");
     }
+
+    // ── fMP4 live stream endpoint ────────────────────────────────
+
+    [Fact]
+    public async Task Fmp4_Stream_Sets_Correct_Content_Type()
+    {
+        // The fMP4 endpoint sets Content-Type: video/mp4 before starting ffmpeg.
+        // For a missing device, the response starts with 200 + video/mp4 headers
+        // then the stream fails silently (ffmpeg can't find the camera). The body
+        // will be empty or partial — what matters is the header is correct and the
+        // endpoint never produces an unhandled 500.
+        var id = Guid.Parse("00000000-0000-0000-0000-000000000099");
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var res = await _client.GetAsync($"/api/devices/{id}/live.mp4", cts.Token);
+
+        // Headers are sent before ffmpeg starts, so we get 200 or 400 even for missing devices.
+        // 200 = StartAsync completed before the exception; 400 = response hadn't started yet.
+        // Never a 500 — that would indicate an unhandled error in the streaming pipeline.
+        Assert.True((int)res.StatusCode is 200 or 400,
+            $"live.mp4 -> {(int)res.StatusCode}: {await res.Content.ReadAsStringAsync()}");
+        Assert.Equal("video/mp4", res.Content.Headers.ContentType?.MediaType, ignoreCase: true);
+
+        // Read the response body — for a missing device the stream closes quickly.
+        // The 5-second CTS prevents hanging if ffmpeg lingers on a missing device.
+        var body = await res.Content.ReadAsByteArrayAsync(cts.Token);
+        // Body is typically empty for missing devices (no ffmpeg output).
+        // When a real camera is present, it would contain fMP4 fragments.
+        if (body.Length > 0)
+        {
+            // Validate fMP4 starts with an ftyp box: 00 00 00 XX 66 74 79 70
+            Assert.Equal(0x66, body[4]); // 'f'
+            Assert.Equal(0x74, body[5]); // 't'
+            Assert.Equal(0x79, body[6]); // 'y'
+            Assert.Equal(0x70, body[7]); // 'p'
+        }
+    }
 }

@@ -105,6 +105,32 @@ public sealed class LiveStreamService(
         }
     }
 
+    /// <summary>
+    /// Streams RTSP as fragmented MP4 via ffmpeg for browser MSE playback.
+    /// Uses codec copy to minimize latency — the browser decodes natively.
+    /// Flags: frag_keyframe (keyframe-aligned fragments), empty_moov (immediate init),
+    /// default_base_moof (compatible moof offsets).
+    /// </summary>
+    public async Task StreamFragmentedMp4Async(
+        Guid deviceId,
+        Stream output,
+        string quality,
+        CancellationToken cancellationToken)
+    {
+        var (device, rtspUrl) = await ResolveRtspAsync(deviceId, quality, cancellationToken);
+        var ffmpeg = ResolveFfmpegPath()
+            ?? throw new InvalidOperationException("ffmpeg not found. Install ffmpeg for live streams.");
+        var args = new StringBuilder()
+            .Append("-hide_banner -loglevel warning ")
+            .Append(RtspInputFlags())
+            .Append("-i \"").Append(rtspUrl).Append("\" ")
+            .Append("-an -c:v copy ")
+            .Append("-f mp4 -movflags frag_keyframe+empty_moov+default_base_moof -")
+            .ToString();
+        logger.LogInformation("Live fMP4 {Ip} q={Q}", device.IpAddress, quality);
+        await RunFfmpegCopyAsync(ffmpeg, args, output, cancellationToken);
+    }
+
     public async Task<(string? MainRtsp, string? SubRtsp, string? PreferredLive)> DescribeAsync(
         Guid deviceId,
         CancellationToken cancellationToken)

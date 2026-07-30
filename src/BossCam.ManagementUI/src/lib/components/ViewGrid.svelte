@@ -1,6 +1,7 @@
 <script lang="ts">
   import { AppState } from '../store';
   import LiveTile from './LiveTile.svelte';
+  import LiveStreamMSE from './LiveStreamMSE.svelte';
 
   let { appState }: { appState: AppState } = $props();
 
@@ -12,6 +13,19 @@
   };
 
   let fullscreenSupported = $state(typeof document !== 'undefined' && !!document.documentElement.requestFullscreen);
+
+  // Per-device MSE stream toggle
+  let mseDeviceIds = $state(new Set<string>());
+
+  function toggleMse(deviceId: string) {
+    const next = new Set(mseDeviceIds);
+    if (next.has(deviceId)) {
+      next.delete(deviceId);
+    } else {
+      next.add(deviceId);
+    }
+    mseDeviceIds = next;
+  }
 
   function resetOrder() {
     appState.resetOrder();
@@ -104,7 +118,13 @@
 
 <div class="view-grid {layoutClasses[appState.layout] || 'layout-4'}">
   {#each appState.orderedDevices.slice(0, appState.layout) as d, i (d.id)}
-    <LiveTile device={d} index={i} appState={appState} />
+    <div class="tile-wrapper">
+      {#if mseDeviceIds.has(d.id)}          <LiveStreamMSE device={d} appState={appState} />
+        <button onclick={() => toggleMse(d.id)} class="mse-switch" title="Switch to MJPEG">📹 MJPEG</button>
+      {:else}          <LiveTile device={d} index={i} appState={appState} />
+        <button onclick={() => toggleMse(d.id)} class="mse-switch" title="Switch to MSE stream">🎬 MSE</button>
+      {/if}
+    </div>
   {:else}
     <div class="empty">Add or register a camera to start viewing.</div>
   {/each}
@@ -191,6 +211,35 @@
   }
   .view-grid.layout-7 :global(.view-tile:first-child) { grid-row: span 2; }
   .view-grid.layout-8 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+
+  .tile-wrapper {
+    position: relative;
+    background: #0a0809;
+    border: 1px solid #ff5a1f55;
+    border-radius: 12px;
+    overflow: hidden;
+    min-height: 160px;
+  }
+  .mse-switch {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    z-index: 10;
+    background: rgba(0, 0, 0, 0.65);
+    border: 1px solid #ff5a1f55;
+    border-radius: 6px;
+    padding: 3px 8px;
+    cursor: pointer;
+    color: #ddd;
+    font: inherit;
+    font-size: .78rem;
+    backdrop-filter: blur(4px);
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .mse-switch:hover {
+    background: rgba(30, 15, 10, 0.85);
+    border-color: #ffa33e;
+  }
 
   .empty {
     grid-column: 1 / -1;

@@ -3,6 +3,7 @@ using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Text;
 using BossCam.Core;
+using Microsoft.Extensions.Options;
 
 namespace BossCam.Core.Security;
 
@@ -26,13 +27,14 @@ public sealed class CompositePasswordCipher : IPasswordCipher
     private readonly bool _useKeyfile;
     private byte[]? _keyfileKey;
 
-    public CompositePasswordCipher(BossCamRuntimeOptions options)
+    public CompositePasswordCipher(IOptions<BossCamRuntimeOptions> options)
     {
         ArgumentNullException.ThrowIfNull(options);
+        var opts = options.Value;
         _useKeyfile = !RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
-        _keyfilePath = string.IsNullOrWhiteSpace(options.SecretKeyPath)
+        _keyfilePath = string.IsNullOrWhiteSpace(opts.SecretKeyPath)
             ? DefaultKeyfilePath()
-            : options.SecretKeyPath;
+            : opts.SecretKeyPath;
     }
 
     /// <summary>Constructor used by tests to force a specific keyfile path regardless of OS platform.</summary>

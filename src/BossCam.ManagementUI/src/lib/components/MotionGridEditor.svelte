@@ -108,11 +108,12 @@
     statusText = 'Saving motion grid…';
     try {
       // Build the detectionGrid payload matching the camera's expected shape
+      // Clone gridCells to avoid race if user continues editing during save
       const payload = {
         detectionGrid: {
           gridWidth: gridData.gridWidth,
           gridHeight: gridData.gridHeight,
-          gridCells: gridData.gridCells,
+          gridCells: [...gridData.gridCells],
         }
       };
       await api.motionGridPut(appState.selectedDeviceId, payload);

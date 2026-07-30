@@ -67,6 +67,7 @@ public sealed class ApiRouteMatrixTests : IClassFixture<BossCamWebAppFactory>
         yield return [$"/api/devices/{id}/validation"];
         yield return [$"/api/devices/{id}/validation/transcripts"];
         yield return [$"/api/devices/{id}/persistence"];
+        yield return [$"/api/devices/{id}/live.mp4"];
         yield return [$"/api/devices/{id}/persistence/eligible-fields"];
         yield return [$"/api/devices/{id}/semantic/history"];
         yield return [$"/api/devices/{id}/constraints"];

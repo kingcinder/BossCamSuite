@@ -1,0 +1,70 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:BossCam.Desktop.Avalonia.ViewModels"
+        x:Class="BossCam.Desktop.Avalonia.MainWindow"
+        Title="BossCamSuite Desktop (Avalonia)"
+        Width="1100" Height="720"
+        Background="#1a1a2e"
+        Foreground="#eee">
+  <Grid RowDefinitions="Auto,*,Auto" Margin="8">
+    <!-- Top toolbar -->
+    <StackPanel Orientation="Horizontal" Spacing="8" Margin="4">
+      <Button Command="{Binding LoadDevicesCommand}" Content="📡 Load Devices" />
+      <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" Foreground="#888" FontSize="13" />
+    </StackPanel>
+
+    <!-- Main content: device list + live view -->
+    <Grid ColumnDefinitions="280,*" Grid.Row="1" Margin="0,8">
+      <!-- Left panel: device list -->
+      <Border Background="#16162a" CornerRadius="8" Padding="8">
+        <StackPanel>
+          <TextBlock Text="Devices" FontSize="16" FontWeight="Bold" Foreground="#ddd" Margin="0,0,0,8" />
+          <ListBox ItemsSource="{Binding Devices}"
+                   SelectedItem="{Binding SelectedDevice}"
+                   BorderThickness="0"
+                   Background="Transparent">
+            <ListBox.ItemTemplate>
+              <DataTemplate>
+                <Border Background="#20203a" CornerRadius="6" Padding="8,6" Margin="0,2">
+                  <StackPanel>
+                    <TextBlock Text="{Binding DisplayName}" FontWeight="Bold" Foreground="#eee" />
+                    <TextBlock Text="{Binding IpAddress}" FontSize="12" Foreground="#888" />
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </StackPanel>
+      </Border>
+
+      <!-- Right panel: live view and info -->
+      <Border Background="#16162a" CornerRadius="8" Padding="8" Grid.Column="1" Margin="8,0,0,0">
+        <StackPanel>
+          <TextBlock Text="Live View" FontSize="16" FontWeight="Bold" Foreground="#ddd" Margin="0,0,0,8" />
+          
+          <!-- Live MJPEG stream -->
+          <Border Background="#0a0a14" CornerRadius="6" Height="320" Margin="0,0,0,8">
+            <Image Source="{Binding LiveFrame}" Stretch="Uniform" />
+          </Border>
+
+          <!-- Device info -->
+          <Border Background="#20203a" CornerRadius="6" Padding="8" Margin="0,0,0,8">
+            <TextBlock Text="{Binding DeviceInfoText}" FontSize="13" Foreground="#ccc" />
+          </Border>
+
+          <!-- Actions -->
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button Command="{Binding RefreshDeviceCommand}" Content="⟳ Refresh" />
+            <Button Command="{Binding SnapshotCommand}" Content="📷 Snapshot" />
+            <Button Command="{Binding LoadDevicesCommand}" Content="📡 Reload" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+    </Grid>
+
+    <!-- Status bar -->
+    <Border Background="#20203a" CornerRadius="4" Padding="6" Grid.Row="2" Margin="0,4,0,0">
+      <TextBlock Text="{Binding StatusText}" FontSize="12" Foreground="#888" />
+    </Border>
+  </Grid>
+</Window>
