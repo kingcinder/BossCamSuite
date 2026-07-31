@@ -336,7 +336,7 @@ BossCamSuite-main/
 │   ├── BossCam.ProbeRunner/      # CLI probe tool
 │   └── BossCam.NativeBridge/     # Native DLL interop
 ├── tests/
-│   ├── BossCam.Tests/            # Unit tests (18 test classes)
+│   ├── BossCam.Tests/            # Unit tests (28 test classes)
 │   └── BossCam.E2E/              # E2E integration tests
 └── assets/
     └── protocols/                # Protocol manifests
@@ -350,10 +350,12 @@ BossCamSuite-main/
 |-------|---------|
 | `BossCamSuiteTests` | Protocol manifest provider, ImportProvider, FirmwareArtifactAnalyzer |
 | `BindAddressInspectorTests` | Bind string classification (loopback/LAN/IPv6) |
+| `CameraStabilityTests` | Connectivity enums/snapshots, diagnostic report roundtrips, failover null-IP, high-res source selection |
 | `CompositeInteractionRulesTests` | Cross-rule precedence for read/write/audit |
 | `ContractDrivenWorkflowTests` | End-to-end promotion: transcript → fixture → capability |
 | `ControlPointInventoryServiceTests` | SQLite-backed device inventory lifecycle |
 | `CoreServicePortFallbackTests` | Recorded-port-first → `:80` fallback in watchdog/diagnostics/`BuildSnapshotUrl` |
+| `DependencyInjectionCycleTests` | `TransportBroker` ↔ failover DI-cycle + reentrancy regressions |
 | `HttpAdapterPortFallbackTests` | HTTP control-plane port fallback + digest asymmetry |
 | `ImageTruthClassificationTests` | Per-image truth classification |
 | `ImageTruthServiceTests` | Image-sweep service against synthetic fixtures |
@@ -362,10 +364,13 @@ BossCamSuite-main/
 | `NvrLayerTests` | NVR playback/search indexing |
 | `OnvifImagingControlAdapterTimeoutTests` | 5 timeout regression tests |
 | `OperatorRuntimeRepairTests` | Operator-flow repair paths |
+| `RecordingResilienceTests` | Recording start/stop/stall/reconcile process-lifetime resilience |
 | `RunningRecordingEqualityTests` | Value-equality for RunningRecording record |
 | `RtspPlayabilityTests` | RTSP `OPTIONS` handshake probe (health semantics) |
 | `SemanticTrustServiceTests` | Trust decisions + audit log |
 | `SnapshotConsumerProbeTests` | Rank-ordered snapshot probing for recording + highlight-board tiles |
+| `SqlIdentifierMapTests` | Store-table → identifier-map SQL injection guard |
 | `TrustHardeningWorkflowTests` | Combined trust + contract verification |
 | `TypedSettingsAndProbeWorkflowTests` | Apply-batch typed settings + persistence verification |
+| `UnknownFirmwareCapabilityPromotionTests` | Firmware-scoped capability promotion from contract truth |
 | `VideoAdapterPortFallbackTests` | `:80` fallback snapshot/bubble descriptor emission |

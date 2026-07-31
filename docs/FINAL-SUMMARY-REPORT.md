@@ -3,7 +3,7 @@
 > **Date:** July 30, 2026 (updated July 31 — see the addendum below for post-report passes)  
 > **Repository:** `github.com/kingcinder/BossCamSuite`  
 > **Branch:** `main`  
-> **Commits:** `d4d9644` → `9e113a0` (9 commits), later passes through `d89c5c0`
+> **Commits:** `d4d9644` → `9e113a0` (9 commits), later passes through `5ccbfd6` (health semantics) and the six-point gap close-out
 
 ---
 
@@ -214,6 +214,21 @@ Since this report was written, two major passes landed:
 | **Standalone Avalonia GUI** | `src/BossCam.Desktop.Avalonia/` wraps every feature behind a single window (live view, devices, features apply, recordings, highlights, playback, diagnostics, firmware, connectivity, storage) with explainer popups, plus a system-wide installer (`scripts/install-bosscam-gui.sh`, hardened for sudo/HOME/DOTNET_ROOT and bounded restore/publish). |
 
 Both passes are fully covered by the 203 unit + 104 E2E totals above.
+
+## Six-point gap review (July 31 close-out)
+
+A six-point critique of the codebase was triaged against current `main`. Three items were
+already satisfied on main (verified with code evidence below) and three were genuine gaps
+closed by the July 31 passes:
+
+| # | Critique | Verdict | Evidence / fix |
+|---|---|---|---|
+| **1** | Svelte Features non-interactive | ✅ Already satisfied | `FeaturesPanel.svelte` is mounted in `App.svelte` (`activeTab === 'features'`) and fully interactive: toggles/sliders/enums call `api.applyTypedField(...)` in `applyToggle`/`applySlider`/`applyEnum` with write-verify state, expert-override gating, and in-flight spinners. Controls are only disabled until write-verified, by design. |
+| **2** | Recording persist hygiene incomplete | ✅ Already satisfied | All five `SaveRecordingJobsAsync` call sites log `LogWarning` in `catch` (`StartAsync`, `StopAsync`, `CheckStalledJobsAsync`, `ReconcilePersistedJobsAsync`, exit handler). `ReconcilePersistedJobsAsync` implements the full PID re-attach design: `TryGetLiveProcess` (start-time PID-reuse guard) re-attaches live recorders via `_running[job.Id] = reattachedEntry; WireExitCleanup(...)`; only genuinely dead processes are marked stopped, and `WireExitCleanup` uses a reference-identity guard so a stale `Exited` event can never orphan a newer re-attached entry. |
+| **3** | Audio path inconsistency risk | ✅ Fixed | Documented at all three `-an` sites in `LiveStreamService`: live preview/transcode is video-only by design (low-latency); recording routes through `DirectFfmpegRecordingPipeline`/`BuildFfmpegArgs`, which map audio (`-map 0:a:0? -c:a copy`). The two argvs deliberately differ. |
+| **4** | Health semantics — RTSP “up” ≠ playable | ✅ Fixed | New `RtspProbe` (RTSP `OPTIONS` handshake; only an `RTSP/1.x` status line counts) wired into `TransportFailoverService`, the connectivity watchdog, and the diagnostic battery. Composite verdict + connectivity status now key off `rtsp:playable`, not bare `tcp:554`; recovery actions distinguish open-but-not-playable from unreachable. 5 new unit tests. |
+| **5** | Docs drift | ✅ Fixed | This report refreshed to 203 unit / 104 E2E / 42 Avalonia with the July 31 addendum; README gained the connectivity-health semantics section, the port-fallback `Test Index` rows, and the corrected 28-class unit count. |
+| **6** | SPA api.ts surface | ✅ Already satisfied | `applyTypedField`, `apply-batch`, and `recordingExport` methods all exist in `src/BossCam.ManagementUI/src/lib/api.ts` and are consumed by `FeaturesPanel.svelte` (apply) and `RecordPanel.svelte` (export). |
 
 ## Stability Pass (commits `8ba4a38` → `9e113a0`)
 
