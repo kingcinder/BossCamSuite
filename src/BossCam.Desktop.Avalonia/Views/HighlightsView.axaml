@@ -1,0 +1,48 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:BossCam.Desktop.Avalonia.Controls"
+             x:Class="BossCam.Desktop.Avalonia.Views.HighlightsView">
+  <StackPanel Spacing="10">
+    <TextBlock Text="Highlights Board" FontSize="18" FontWeight="Bold" Foreground="#fff"
+               c:InfoExplainer.Title="Highlights"
+               c:InfoExplainer.Explanation="The operator board for watching cameras full-screen: select a camera, page between tiles, choose the preferred stream, and record the selected tile." />
+
+    <Grid ColumnDefinitions="*,*,*,*">
+      <Button Command="{Binding SelectDeviceCommand}" Content="⭐ Select Camera"
+              c:InfoExplainer.Title="Select camera"
+              c:InfoExplainer.Explanation="Makes the camera selected in the list the current highlight tile." />
+      <Button Grid.Column="1" Command="{Binding PreviousCommand}" Content="◀ Previous"
+              c:InfoExplainer.Title="Previous"
+              c:InfoExplainer.Explanation="Moves to the previous tile on the highlight board." />
+      <Button Grid.Column="2" Command="{Binding NextCommand}" Content="Next ▶"
+              c:InfoExplainer.Title="Next"
+              c:InfoExplainer.Explanation="Moves to the next tile on the highlight board." />
+      <Button Grid.Column="3" Command="{Binding RecordSelectedCommand}" Content="⏺ Record Selected"
+              c:InfoExplainer.Title="Record selected"
+              c:InfoExplainer.Explanation="Starts a recording of the currently highlighted tile into the highlights folder." />
+    </Grid>
+
+    <Grid ColumnDefinitions="Auto,*,Auto">
+      <TextBlock Text="Preferred stream" VerticalAlignment="Center" Foreground="#bbb"
+                 c:InfoExplainer.Explanation="Which video stream the board uses: main (highest resolution) or sub (lower bandwidth)." />
+      <ComboBox Grid.Column="1" ItemsSource="{Binding StreamModes}"
+                SelectedItem="{Binding StreamMode, Mode=TwoWay}" MinWidth="120"
+                c:InfoExplainer.Title="Stream"
+                c:InfoExplainer.Explanation="main = high-resolution main stream; sub = lower-bitrate sub-stream for weak links." />
+      <Button Grid.Column="2" Command="{Binding StreamCommand}" Content="Apply Stream"
+              c:InfoExplainer.Title="Apply stream"
+              c:InfoExplainer.Explanation="Switches the highlight board to the chosen preferred stream." />
+    </Grid>
+
+    <Border Background="#20203a" CornerRadius="8" Padding="10">
+      <StackPanel Spacing="4">
+        <TextBlock Text="Board state" FontSize="14" FontWeight="Bold" Foreground="#ddd"
+                   c:InfoExplainer.Title="Board state"
+                   c:InfoExplainer.Explanation="The selected tile, its index and how many tiles are on the board." />
+        <TextBlock Text="{Binding ResultText}" FontSize="12" Foreground="#9a9ab0" TextWrapping="Wrap" />
+        <TextBlock Text="{Binding Board.Selected.DisplayName, StringFormat=Highlight: {0}}" FontSize="12" Foreground="#ccc" />
+        <TextBlock Text="{Binding Board.SelectedIndex, StringFormat=Index: {0}}" FontSize="12" Foreground="#ccc" />
+      </StackPanel>
+    </Border>
+  </StackPanel>
+</UserControl>

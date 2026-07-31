@@ -1,0 +1,32 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:BossCam.Desktop.Avalonia.Controls"
+             x:Class="BossCam.Desktop.Avalonia.Views.LiveView">
+  <StackPanel Spacing="10">
+
+    <TextBlock Text="Live View" FontSize="18" FontWeight="Bold" Foreground="#fff"
+               c:InfoExplainer.Title="Live View"
+               c:InfoExplainer.Explanation="Streams a live snapshot of the selected camera every two seconds. Choose a camera from the list, then use the buttons below." />
+
+    <Border Background="#0c0c18" CornerRadius="8" Height="340"
+            c:InfoExplainer.Title="Live picture"
+            c:InfoExplainer.Explanation="Current live snapshot of the selected camera. Updates automatically while a camera is selected.">
+      <Image Source="{Binding LiveFrame}" Stretch="Uniform" />
+    </Border>
+
+    <Border Background="#20203a" CornerRadius="8" Padding="10"
+            c:InfoExplainer.Title="Device details"
+            c:InfoExplainer.Explanation="Identity of the selected camera: model, IP, firmware version and device type, plus the main RTSP URL when the service knows it.">
+      <TextBlock Text="{Binding DeviceInfoText}" FontSize="13" Foreground="#ccc" TextWrapping="Wrap" />
+    </Border>
+
+    <StackPanel Orientation="Horizontal" Spacing="8">
+      <Button Command="{Binding RefreshDeviceCommand}" Content="⟳ Refresh"
+              c:InfoExplainer.Title="Refresh"
+              c:InfoExplainer.Explanation="Refreshes the selected camera's live picture and identity details now." />
+      <Button Command="{Binding SnapshotCommand}" Content="📷 Save Snapshot"
+              c:InfoExplainer.Title="Save Snapshot"
+              c:InfoExplainer.Explanation="Requests the camera's current snapshot and stores it in the configured Snapshots media folder." />
+    </StackPanel>
+  </StackPanel>
+</UserControl>

@@ -1,0 +1,59 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:BossCam.Desktop.Avalonia.Controls"
+             x:Class="BossCam.Desktop.Avalonia.Views.DashboardView">
+  <StackPanel Spacing="12">
+    <TextBlock Text="Dashboard" FontSize="18" FontWeight="Bold" Foreground="#fff"
+               c:InfoExplainer.Title="Dashboard"
+               c:InfoExplainer.Explanation="At-a-glance view of service health, camera connectivity and media storage. Press Refresh to pull the latest values." />
+
+    <Grid ColumnDefinitions="*,*">
+      <Border Background="#20203a" CornerRadius="8" Padding="12">
+        <StackPanel Spacing="6">
+          <TextBlock Text="🩺 Service Health" FontSize="14" FontWeight="Bold" Foreground="#ddd"
+                     c:InfoExplainer.Title="Service health"
+                     c:InfoExplainer.Explanation="Result of the BossCamService /api/health check — confirms the service is reachable and running." />
+          <TextBlock Text="{Binding HealthText}" FontSize="13" Foreground="#ccc" TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+
+      <Border Grid.Column="1" Background="#20203a" CornerRadius="8" Padding="12">
+        <StackPanel Spacing="6">
+          <TextBlock Text="💾 Storage" FontSize="14" FontWeight="Bold" Foreground="#ddd"
+                     c:InfoExplainer.Title="Storage folders"
+                     c:InfoExplainer.Explanation="The media folders recordings, highlights and snapshots are written to on this host." />
+          <TextBlock Text="{Binding StorageSummary}" FontSize="13" Foreground="#ccc" TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+    </Grid>
+
+    <Border Background="#20203a" CornerRadius="8" Padding="12">
+      <StackPanel Spacing="6">
+        <TextBlock Text="🔌 Camera Connectivity" FontSize="14" FontWeight="Bold" Foreground="#ddd"
+                   c:InfoExplainer.Title="Connectivity"
+                   c:InfoExplainer.Explanation="Live health of every registered camera: Healthy, Degraded or Offline, with per-transport results from the connectivity watchdog." />
+        <ItemsControl ItemsSource="{Binding Connectivity}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <Border Background="#23233f" CornerRadius="6" Padding="8,5" Margin="0,2">
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                  <TextBlock Text="{Binding DeviceId}" FontSize="12" Foreground="#9a9ab0"
+                             TextTrimming="CharacterEllipsis" MaxWidth="220" />
+                  <TextBlock Grid.Column="1" Text="{Binding Status}" FontSize="12"
+                             Foreground="#ddd" Margin="12,0,0,0" />
+                  <TextBlock Grid.Column="2" Text="{Binding LastCheckedAt, StringFormat=HH:mm:ss}"
+                             FontSize="11" Foreground="#8a8aa8" />
+                </Grid>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <TextBlock Text="{Binding LastRefreshed}" FontSize="11" Foreground="#8a8aa8" Margin="0,4,0,0" />
+      </StackPanel>
+    </Border>
+
+    <Button Command="{Binding RefreshCommand}" Content="⟳ Refresh Dashboard" HorizontalAlignment="Left"
+            c:InfoExplainer.Title="Refresh Dashboard"
+            c:InfoExplainer.Explanation="Re-runs the health check, connectivity snapshots and storage-path read now." />
+  </StackPanel>
+</UserControl>

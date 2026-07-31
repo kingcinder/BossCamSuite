@@ -1,0 +1,56 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:BossCam.Desktop.Avalonia.Controls"
+             x:Class="BossCam.Desktop.Avalonia.Views.PlaybackView">
+  <StackPanel Spacing="10">
+    <TextBlock Text="SD / NVR Playback" FontSize="18" FontWeight="Bold" Foreground="#fff"
+               c:InfoExplainer.Title="SD Playback"
+               c:InfoExplainer.Explanation="Search the selected camera's own memory card for recordings in a time range. This talks to the camera's storage — different from host continuous recording." />
+
+    <Grid ColumnDefinitions="Auto,*,Auto,*">
+      <TextBlock Text="From" VerticalAlignment="Center" Foreground="#bbb"
+                 c:InfoExplainer.Explanation="Start of the search window." />
+      <DatePicker Grid.Column="1" SelectedDate="{Binding BeginTime}"
+                  c:InfoExplainer.Title="Begin time"
+                  c:InfoExplainer.Explanation="Earliest timestamp to search on the camera's SD card." />
+      <TextBlock Grid.Column="2" Text="To" VerticalAlignment="Center" Foreground="#bbb" Margin="8,0,0,0"
+                 c:InfoExplainer.Explanation="End of the search window." />
+      <DatePicker Grid.Column="3" SelectedDate="{Binding EndTime}"
+                  c:InfoExplainer.Title="End time"
+                  c:InfoExplainer.Explanation="Latest timestamp to search on the camera's SD card." />
+    </Grid>
+
+    <Grid ColumnDefinitions="*,*">
+      <TextBox Text="{Binding Cursor, Mode=TwoWay}" Watermark="Cursor (optional, for paging)"
+               c:InfoExplainer.Title="Cursor"
+               c:InfoExplainer.Explanation="Pagination token returned by a previous search when the result list is long." />
+    </Grid>
+
+    <WrapPanel>
+      <Button Command="{Binding FindFileCommand}" Content="🔍 Find File" Margin="0,0,8,8"
+              c:InfoExplainer.Title="Find file"
+              c:InfoExplainer.Explanation="Lists recording files on the camera's SD card in the time range (first page)." />
+      <Button Command="{Binding FindNextFileCommand}" Content="⏭ Find Next File" Margin="0,0,8,8"
+              c:InfoExplainer.Title="Find next"
+              c:InfoExplainer.Explanation="Fetches the next page of SD recording files, continuing from the cursor." />
+      <Button Command="{Binding GetFileByTimeCommand}" Content="⏰ Get File by Time" Margin="0,0,8,8"
+              c:InfoExplainer.Title="Get by time"
+              c:InfoExplainer.Explanation="Returns the file that covers a specific moment inside the search window." />
+      <Button Command="{Binding PlaybackByTimeCommand}" Content="▶ Playback by Time" Margin="0,0,8,8"
+              c:InfoExplainer.Title="Playback by time"
+              c:InfoExplainer.Explanation="Opens a playback session on the camera for the time range (transport-level)." />
+      <Button Command="{Binding FindCloseCommand}" Content="✕ Close Search" Margin="0,0,8,8"
+              c:InfoExplainer.Title="Close"
+              c:InfoExplainer.Explanation="Closes the active SD search/playback session on the camera." />
+    </WrapPanel>
+
+    <Border Background="#20203a" CornerRadius="8" Padding="10">
+      <StackPanel Spacing="4">
+        <TextBlock Text="Result" FontSize="14" FontWeight="Bold" Foreground="#ddd"
+                   c:InfoExplainer.Title="Search result"
+                   c:InfoExplainer.Explanation="What the camera answered: a structured file list, or the failure reason (missing SD card, unsupported API)." />
+        <TextBlock Text="{Binding ResultText}" FontSize="12" Foreground="#9a9ab0" TextWrapping="Wrap" />
+      </StackPanel>
+    </Border>
+  </StackPanel>
+</UserControl>

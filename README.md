@@ -221,9 +221,31 @@ sudo systemctl status bosscam
 
 ---
 
-## Avalonia Desktop App
+## Avalonia Desktop App (standalone GUI)
 
-A cross-platform desktop UI is available at `src/BossCam.Desktop.Avalonia/` using [Avalonia UI](https://www.avaloniaui.net/) 11.1. It provides device browsing, live MJPEG preview (via snapshot polling), and snapshot capture — all talking to the local `BossCam.Service` instance over HTTP.
+A standalone native desktop frontend is available at `src/BossCam.Desktop.Avalonia/` using [Avalonia UI](https://www.avaloniaui.net/) 11.1. It wraps **every feature the suite offers** behind a single window and talks to the local `BossCam.Service` instance over HTTP.
+
+### Sections
+
+| Section | What it wraps |
+|---------|---------------|
+| **Live View** | Live snapshot stream of the selected camera, identity info, snapshot save |
+| **Dashboard** | Health, recording jobs, connectivity snapshot at a glance |
+| **Devices** | Browse, discover, register, and manage cameras (LAN auth, Aegon bulk import) |
+| **Features** | Firmware toggles/sliders/enums: probe → write-verify → typed apply, expert override gating |
+| **Recordings** | Start/stop continuous recording, reconcile jobs, segment index + clip export |
+| **Highlights** | Highlight board selection |
+| **Playback** | SD-card NVR playback search (host download of clips) |
+| **Diagnostics** | Audit log, endpoint validation transcripts, probe sessions |
+| **Firmware** | Firmware catalog, capability profiles, persistence verification |
+| **Connectivity** | Transport failover chain: health, diagnose, reconnect per device |
+| **Storage** | Storage root paths and config |
+
+### Explainer popups
+
+Every clickable button, input, selectable row, and **static menu title** carries an explainer popup (`InfoExplainer.Explanation` attached property). Hover or Tab-focus any control and a styled popup appears describing exactly what it does and what it is for. The popup is non-interactive, so it never steals pointer events.
+
+### Run from source
 
 **First restore requires internet access** — Avalonia 11.1 has ~15 transitive NuGet dependencies (~70 MB total):
 
@@ -232,7 +254,43 @@ dotnet restore src/BossCam.Desktop.Avalonia/BossCam.Desktop.Avalonia.csproj
 dotnet run --project src/BossCam.Desktop.Avalonia/BossCam.Desktop.Avalonia.csproj
 ```
 
-> **Why it's in the solution if restore needs internet?** The project is listed in `BossCamSuite.Linux.sln` so it appears in IDEs and future CI pipelines. If `dotnet restore` from the solution root takes too long in your environment, target the Avalonia project directly as shown above. Once restored, the project builds as part of the full solution with `dotnet build BossCamSuite.Linux.sln`.
+The service must be running first (`dotnet run --project src/BossCam.Service/BossCam.Service.csproj`, or the installed systemd unit).
+
+### System-wide install (traditional installation process)
+
+```bash
+sudo ./scripts/install-bosscam-gui.sh
+```
+
+The installer follows a conventional Linux installation flow:
+
+1. Publishes the service (`Release`) and installs it to `/opt/bosscam` as a **systemd unit** (`bosscam.service`, auto-start on boot, `Restart=on-failure`).
+2. Publishes the native GUI and installs it to `/opt/bosscam-gui`.
+3. Installs a **launcher** (`/opt/bosscam-gui/launch-bosscam.sh`) that starts the service if needed, then opens the GUI.
+4. Installs a **`.desktop` entry + SVG icon** so the app appears in the application menu.
+
+Optional env vars: `BOSSCAM_PREFIX`, `BOSSCAM_GUI_PREFIX`, `BOSSCAM_SERVICE_USER`, `BOSSCAM_SKIP_SERVICE=1` (GUI only).
+
+```bash
+# Launch
+/opt/bosscam-gui/launch-bosscam.sh          # or the app-menu entry "BossCamSuite"
+# Service health / logs
+systemctl status bosscam
+journalctl -u bosscam -f
+
+# Uninstall (data under ~/.local/share/BossCamSuite is preserved)
+sudo ./scripts/uninstall-bosscam-gui.sh
+# To also purge camera data:
+BOSSCAM_PURGE_DATA=1 sudo ./scripts/uninstall-bosscam-gui.sh
+```
+
+### Tests
+
+Unit + ViewModel tests live in `src/BossCam.Desktop.Avalonia.Tests/` (currently **42 tests** covering every section ViewModel, the shared device-selection sync, typed-apply request shape, and expert-override gating).
+
+```bash
+dotnet test src/BossCam.Desktop.Avalonia.Tests/BossCam.Desktop.Avalonia.Tests.csproj -c Release
+```
 
 ---
 
@@ -249,6 +307,8 @@ BossCamSuite-main/
 ├── scripts/
 │   ├── install-systemd.sh
 │   ├── install-ubuntu-deps.sh
+│   ├── install-bosscam-gui.sh       # system-wide install: /opt + systemd + .desktop
+│   ├── uninstall-bosscam-gui.sh
 │   ├── start-bosscam-ubuntu.sh
 │   ├── start-bosscam-linux.sh
 │   └── run-exhaustive-ubuntu-e2e.sh

@@ -1,0 +1,95 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:BossCam.Desktop.Avalonia.Controls"
+             x:Class="BossCam.Desktop.Avalonia.Views.DiagnosticsView">
+  <StackPanel Spacing="10">
+    <Grid ColumnDefinitions="*,Auto">
+      <TextBlock Text="Diagnostics" FontSize="18" FontWeight="Bold" Foreground="#fff"
+                 VerticalAlignment="Center"
+                 c:InfoExplainer.Title="Diagnostics"
+                 c:InfoExplainer.Explanation="The evidence drawer: write-audit log, endpoint transcripts and probe sessions. See exactly what the service has done and what cameras answered." />
+      <Button Grid.Column="1" Command="{Binding RefreshCommand}" Content="⟳ Refresh"
+              c:InfoExplainer.Title="Refresh"
+              c:InfoExplainer.Explanation="Reloads audit entries, transcripts and probe sessions." />
+    </Grid>
+
+    <Grid ColumnDefinitions="*,*">
+      <Border Background="#20203a" CornerRadius="8" Padding="10">
+        <StackPanel Spacing="4">
+          <TextBlock Text="Write audit" FontSize="14" FontWeight="Bold" Foreground="#ddd"
+                     c:InfoExplainer.Title="Write audit"
+                     c:InfoExplainer.Explanation="Every settings write the service attempted: operation, endpoint, success, semantic status and block reason." />
+          <ItemsControl ItemsSource="{Binding Audit}" MaxHeight="180">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Border Background="#23233f" CornerRadius="5" Padding="6,4" Margin="0,2">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="{Binding Success, StringFormat={}{0}}" FontSize="11"
+                               Foreground="{Binding Success, Converter={x:Static c:BooleanBrushConverter.Instance}}" />
+                    <TextBlock Text="{Binding Operation}" FontSize="11" Foreground="#ddd" />
+                    <TextBlock Text="{Binding Endpoint}" FontSize="11" Foreground="#8a8aa8"
+                               TextTrimming="CharacterEllipsis" MaxWidth="240" />
+                    <TextBlock Text="{Binding Timestamp, StringFormat=HH:mm:ss}" FontSize="11"
+                               Foreground="#7a7aa0" />
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+
+      <Border Grid.Column="1" Background="#20203a" CornerRadius="8" Padding="10">
+        <StackPanel Spacing="4">
+          <TextBlock Text="Endpoint transcripts" FontSize="14" FontWeight="Bold" Foreground="#ddd"
+                     c:InfoExplainer.Title="Transcripts"
+                     c:InfoExplainer.Explanation="Captured request/response pairs from camera endpoints — useful when proving what a camera actually supports." />
+          <ItemsControl ItemsSource="{Binding Transcripts}" MaxHeight="180">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Border Background="#23233f" CornerRadius="5" Padding="6,4" Margin="0,2">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="{Binding Method}" FontSize="11" Foreground="#ddd" Width="38" />
+                    <TextBlock Text="{Binding Endpoint}" FontSize="11" Foreground="#8a8aa8"
+                               TextTrimming="CharacterEllipsis" MaxWidth="280" />
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+    </Grid>
+
+    <Border Background="#20203a" CornerRadius="8" Padding="10">
+      <StackPanel Spacing="4">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Text="Probe sessions" FontSize="14" FontWeight="Bold" Foreground="#ddd"
+                     VerticalAlignment="Center"
+                     c:InfoExplainer.Title="Probe sessions"
+                     c:InfoExplainer.Explanation="Long-running capability probes: status, mode and per-stage verification counts." />
+          <Button Grid.Column="1" Command="{Binding StartProbeSessionCommand}" Content="▶ Start Probe Session"
+                  c:InfoExplainer.Title="Start probe"
+                  c:InfoExplainer.Explanation="Starts a safe read-only probe session for the selected camera to discover its endpoints and fields." />
+        </Grid>
+        <ItemsControl ItemsSource="{Binding Sessions}" MaxHeight="150">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <Border Background="#23233f" CornerRadius="5" Padding="6,4" Margin="0,2">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <TextBlock Text="{Binding Status}" FontSize="11" Foreground="#ddd" />
+                  <TextBlock Text="{Binding Mode}" FontSize="11" Foreground="#8a8ab0" />
+                  <TextBlock Text="{Binding StartedAt, StringFormat=HH:mm:ss}" FontSize="11" Foreground="#7a7aa0" />
+                </StackPanel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+    </Border>
+
+    <TextBlock Text="{Binding ResultText}" FontSize="12" Foreground="#9a9ab0" TextWrapping="Wrap"
+               c:InfoExplainer.Title="Result"
+               c:InfoExplainer.Explanation="How many audit entries, transcripts and sessions were loaded." />
+  </StackPanel>
+</UserControl>

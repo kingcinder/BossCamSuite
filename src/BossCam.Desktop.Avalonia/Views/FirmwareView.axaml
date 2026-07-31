@@ -1,0 +1,120 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:BossCam.Desktop.Avalonia.Controls"
+             x:Class="BossCam.Desktop.Avalonia.Views.FirmwareView">
+  <StackPanel Spacing="10">
+    <Grid ColumnDefinitions="*,Auto">
+      <TextBlock Text="Firmware &amp; Contracts" FontSize="18" FontWeight="Bold" Foreground="#fff"
+                 VerticalAlignment="Center"
+                 c:InfoExplainer.Title="Firmware &amp; Contracts"
+                 c:InfoExplainer.Explanation="The lab surface: firmware artifacts, capability profiles, the endpoint contract catalog with fixtures, and protocol manifests. Most operators won't need this tab." />
+      <Button Grid.Column="1" Command="{Binding RefreshCommand}" Content="⟳ Refresh"
+              c:InfoExplainer.Title="Refresh"
+              c:InfoExplainer.Explanation="Reloads firmware artifacts, capability profiles, contracts and protocols." />
+    </Grid>
+
+    <Grid ColumnDefinitions="*,*">
+      <Border Background="#20203a" CornerRadius="8" Padding="10">
+        <StackPanel Spacing="4">
+          <TextBlock Text="Firmware artifacts" FontSize="14" FontWeight="Bold" Foreground="#ddd"
+                     c:InfoExplainer.Title="Artifacts"
+                     c:InfoExplainer.Explanation="Firmware files the service has analyzed: name, size and fingerprint." />
+          <ItemsControl ItemsSource="{Binding Artifacts}" MaxHeight="140">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Border Background="#23233f" CornerRadius="5" Padding="6,4" Margin="0,2">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="{Binding FileName}" FontSize="11" Foreground="#ddd"
+                               TextTrimming="CharacterEllipsis" MaxWidth="260" />
+                    <TextBlock Text="{Binding SizeBytes, StringFormat={}{0:N0} B}" FontSize="11"
+                               Foreground="#8a8aa8" />
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <Grid ColumnDefinitions="*,Auto" Margin="0,6,0,0">
+            <TextBox Text="{Binding FirmwarePath, Mode=TwoWay}" Watermark="Path to firmware file"
+                     c:InfoExplainer.Title="Firmware path"
+                     c:InfoExplainer.Explanation="Filesystem path of a firmware image to analyze and register." />
+            <Button Grid.Column="1" Command="{Binding RegisterFirmwareCommand}" Content="Register"
+                    c:InfoExplainer.Title="Register firmware"
+                    c:InfoExplainer.Explanation="Analyzes the firmware file and adds it to the artifact catalog." />
+          </Grid>
+        </StackPanel>
+      </Border>
+
+      <Border Grid.Column="1" Background="#20203a" CornerRadius="8" Padding="10">
+        <StackPanel Spacing="4">
+          <TextBlock Text="Capability profiles" FontSize="14" FontWeight="Bold" Foreground="#ddd"
+                     c:InfoExplainer.Title="Capabilities"
+                     c:InfoExplainer.Explanation="What each firmware fingerprint is known to support: endpoint families, writable fields, reboot-required and dangerous fields." />
+          <ItemsControl ItemsSource="{Binding Capabilities}" MaxHeight="200">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Border Background="#23233f" CornerRadius="5" Padding="6,4" Margin="0,2">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="{Binding HardwareModel}" FontSize="11" Foreground="#ddd" />
+                    <TextBlock Text="{Binding FirmwareFingerprint}" FontSize="11" Foreground="#8a8aa8"
+                               TextTrimming="CharacterEllipsis" MaxWidth="200" />
+                    <TextBlock Text="{Binding VerifiedWritableFields.Count, StringFormat={}{0} writable}"
+                               FontSize="11" Foreground="#8a8ab0" />
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+    </Grid>
+
+    <Grid ColumnDefinitions="*,*">
+      <Border Background="#20203a" CornerRadius="8" Padding="10">
+        <StackPanel Spacing="4">
+          <TextBlock Text="Endpoint contracts" FontSize="14" FontWeight="Bold" Foreground="#ddd"
+                     c:InfoExplainer.Title="Contracts"
+                     c:InfoExplainer.Explanation="The typed contract catalog: every endpoint the suite knows how to read/write on supported cameras." />
+          <ItemsControl ItemsSource="{Binding Contracts}" MaxHeight="140">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Border Background="#23233f" CornerRadius="5" Padding="6,4" Margin="0,2">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="{Binding Method}" FontSize="11" Foreground="#ddd" Width="38" />
+                    <TextBlock Text="{Binding Endpoint}" FontSize="11" Foreground="#8a8aa8"
+                               TextTrimming="CharacterEllipsis" MaxWidth="280" />
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+
+      <Border Grid.Column="1" Background="#20203a" CornerRadius="8" Padding="10">
+        <StackPanel Spacing="4">
+          <TextBlock Text="Protocol manifests" FontSize="14" FontWeight="Bold" Foreground="#ddd"
+                     c:InfoExplainer.Title="Protocols"
+                     c:InfoExplainer.Explanation="Discovered protocol manifests: endpoint paths, methods and safety classification for each camera family." />
+          <ItemsControl ItemsSource="{Binding Protocols}" MaxHeight="140">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Border Background="#23233f" CornerRadius="5" Padding="6,4" Margin="0,2">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="{Binding Name}" FontSize="11" Foreground="#ddd" />
+                    <TextBlock Text="{Binding Family}" FontSize="11" Foreground="#8a8ab0" />
+                    <TextBlock Text="{Binding Endpoints.Count, StringFormat={}{0} endpoints}" FontSize="11"
+                               Foreground="#8a8aa8" />
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+    </Grid>
+
+    <TextBlock Text="{Binding ResultText}" FontSize="12" Foreground="#9a9ab0" TextWrapping="Wrap"
+               c:InfoExplainer.Title="Result"
+               c:InfoExplainer.Explanation="Counts of what was loaded in the last refresh." />
+  </StackPanel>
+</UserControl>

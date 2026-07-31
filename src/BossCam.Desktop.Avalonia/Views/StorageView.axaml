@@ -1,0 +1,49 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:BossCam.Desktop.Avalonia.Controls"
+             x:Class="BossCam.Desktop.Avalonia.Views.StorageView">
+  <StackPanel Spacing="10">
+    <TextBlock Text="Storage" FontSize="18" FontWeight="Bold" Foreground="#fff"
+               c:InfoExplainer.Title="Storage"
+               c:InfoExplainer.Explanation="The folders BossCamSuite writes media to. Edit the paths and press Save; the service starts writing to the new locations immediately." />
+
+    <Border Background="#20203a" CornerRadius="8" Padding="12">
+      <StackPanel Spacing="8">
+        <Grid ColumnDefinitions="130,*">
+          <TextBlock Text="Continuous" VerticalAlignment="Center" Foreground="#bbb"
+                     c:InfoExplainer.Explanation="Where host continuous recordings are written." />
+          <TextBox Grid.Column="1" Text="{Binding ContinuousRecordings, Mode=TwoWay}"
+                   c:InfoExplainer.Title="Continuous recordings"
+                   c:InfoExplainer.Explanation="Folder for segment files produced by the host recorder, e.g. ~/.local/share/BossCamSuite/recordings." />
+        </Grid>
+        <Grid ColumnDefinitions="130,*">
+          <TextBlock Text="Highlights" VerticalAlignment="Center" Foreground="#bbb"
+                     c:InfoExplainer.Explanation="Where highlight clips are written." />
+          <TextBox Grid.Column="1" Text="{Binding Highlights, Mode=TwoWay}"
+                   c:InfoExplainer.Title="Highlights"
+                   c:InfoExplainer.Explanation="Folder for highlight clips captured from the highlight board." />
+        </Grid>
+        <Grid ColumnDefinitions="130,*">
+          <TextBlock Text="Snapshots" VerticalAlignment="Center" Foreground="#bbb"
+                     c:InfoExplainer.Explanation="Where saved snapshots are written." />
+          <TextBox Grid.Column="1" Text="{Binding Snapshots, Mode=TwoWay}"
+                   c:InfoExplainer.Title="Snapshots"
+                   c:InfoExplainer.Explanation="Folder for snapshots saved from Live View." />
+        </Grid>
+
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <Button Command="{Binding LoadCommand}" Content="⟳ Load"
+                  c:InfoExplainer.Title="Load"
+                  c:InfoExplainer.Explanation="Reads the current storage paths from the service." />
+          <Button Command="{Binding SaveCommand}" Content="💾 Save"
+                  c:InfoExplainer.Title="Save"
+                  c:InfoExplainer.Explanation="Writes the new paths to the service configuration." />
+        </StackPanel>
+      </StackPanel>
+    </Border>
+
+    <TextBlock Text="{Binding ResultText}" FontSize="12" Foreground="#9a9ab0" TextWrapping="Wrap"
+               c:InfoExplainer.Title="Result"
+               c:InfoExplainer.Explanation="Outcome of the last storage action." />
+  </StackPanel>
+</UserControl>

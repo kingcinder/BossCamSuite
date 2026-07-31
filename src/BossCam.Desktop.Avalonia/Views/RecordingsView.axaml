@@ -1,0 +1,133 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:BossCam.Desktop.Avalonia.Controls"
+             x:Class="BossCam.Desktop.Avalonia.Views.RecordingsView">
+  <StackPanel Spacing="10">
+    <TextBlock Text="Recordings" FontSize="18" FontWeight="Bold" Foreground="#fff"
+               c:InfoExplainer.Title="Recordings"
+               c:InfoExplainer.Explanation="Host-side continuous recording (NVR-lite). Start/stop recordings, browse indexed segments, export a clip from a time range, and run housekeeping." />
+
+    <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*">
+      <Button Command="{Binding StartSelectedCommand}" Content="⏺ Record Selected"
+              c:InfoExplainer.Title="Record Selected"
+              c:InfoExplainer.Explanation="Starts a continuous recording for the camera selected in the list. Segments are written to the continuous recordings folder." />
+      <Button Grid.Column="1" Command="{Binding StartAllCommand}" Content="⏺ Start All"
+              c:InfoExplainer.Title="Start All"
+              c:InfoExplainer.Explanation="Starts recordings for every camera with an enabled profile." />
+      <Button Grid.Column="2" Command="{Binding StopAllCommand}" Content="⏹ Stop All"
+              c:InfoExplainer.Title="Stop All"
+              c:InfoExplainer.Explanation="Stops every running recording cleanly, flushing final segments." />
+      <Button Grid.Column="3" Command="{Binding RefreshCommand}" Content="⟳ Refresh"
+              c:InfoExplainer.Title="Refresh"
+              c:InfoExplainer.Explanation="Reloads jobs, profiles and the latest indexed segments." />
+    </Grid>
+
+    <Grid ColumnDefinitions="*,*">
+      <!-- Running jobs -->
+      <Border Background="#20203a" CornerRadius="8" Padding="10">
+        <StackPanel Spacing="4">
+          <TextBlock Text="Running jobs" FontSize="14" FontWeight="Bold" Foreground="#ddd"
+                     c:InfoExplainer.Title="Recording jobs"
+                     c:InfoExplainer.Explanation="Currently running (or recently stopped) recording jobs, with their source role and mode. A 'degraded' role means the recorder fell back to sub-stream or snapshot." />
+          <ItemsControl ItemsSource="{Binding Jobs}" MaxHeight="170">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Border Background="#23233f" CornerRadius="5" Padding="6,4" Margin="0,2">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="{Binding IsRunning, StringFormat={}{0}}" FontSize="12"
+                               Foreground="{Binding IsRunning, Converter={x:Static c:BooleanBrushConverter.Instance}}" />
+                    <TextBlock Text="{Binding SourceRole}" FontSize="12" Foreground="#bbb" />
+                    <TextBlock Text="{Binding Mode}" FontSize="11" Foreground="#8a8aa8" />
+                    <TextBlock Text="{Binding StartedAt, StringFormat=HH:mm:ss}" FontSize="11" Foreground="#8a8aa8" />
+                    <Button Command="{Binding $parent[ItemsControl].DataContext.StopJobCommand}"
+                            CommandParameter="{Binding}" Content="⏹" FontSize="10"
+                            c:InfoExplainer.Title="Stop job"
+                            c:InfoExplainer.Explanation="Stops this individual recording job." />
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+
+      <!-- Export -->
+      <Border Grid.Column="1" Background="#20203a" CornerRadius="8" Padding="10">
+        <StackPanel Spacing="6">
+          <TextBlock Text="Export clip" FontSize="14" FontWeight="Bold" Foreground="#ddd"
+                     c:InfoExplainer.Title="Clip export"
+                     c:InfoExplainer.Explanation="Export a time range of the selected camera's recordings to a single file. Uses copy-first concat when the TS segments align; re-encodes only when necessary." />
+          <Grid ColumnDefinitions="Auto,*">
+            <TextBlock Text="Start" VerticalAlignment="Center" Foreground="#bbb" />
+            <DatePicker Grid.Column="1" SelectedDate="{Binding ExportStart}" />
+          </Grid>
+          <Grid ColumnDefinitions="Auto,*">
+            <TextBlock Text="End" VerticalAlignment="Center" Foreground="#bbb" />
+            <DatePicker Grid.Column="1" SelectedDate="{Binding ExportEnd}" />
+          </Grid>
+          <TextBox Text="{Binding ExportPath, Mode=TwoWay}" Watermark="Output path (optional)"
+                   c:InfoExplainer.Title="Export path"
+                   c:InfoExplainer.Explanation="Where to write the exported clip. Leave empty to let the service choose." />
+          <Button Command="{Binding ExportClipCommand}" Content="📦 Export Clip" HorizontalAlignment="Left"
+                  c:InfoExplainer.Title="Export"
+                  c:InfoExplainer.Explanation="Exports the selected time range of the current camera's recordings." />
+        </StackPanel>
+      </Border>
+    </Grid>
+
+    <!-- Indexed segments -->
+    <Border Background="#20203a" CornerRadius="8" Padding="10">
+      <StackPanel Spacing="4">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Text="Indexed segments" FontSize="14" FontWeight="Bold" Foreground="#ddd"
+                     c:InfoExplainer.Title="Segment index"
+                     c:InfoExplainer.Explanation="Files on disk known to the recording index: start/end times, duration, size, stream role and whether audio was captured." />
+          <Button Grid.Column="1" Command="{Binding RefreshIndexCommand}" Content="⟳ Refresh Index"
+                  c:InfoExplainer.Title="Refresh index"
+                  c:InfoExplainer.Explanation="Rescans the recording folders and updates the segment index so the timeline and exports are accurate." />
+        </Grid>
+        <ItemsControl ItemsSource="{Binding Segments}" MaxHeight="170">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <Border Background="#23233f" CornerRadius="5" Padding="6,4" Margin="0,2">
+                <Grid ColumnDefinitions="160,*,90,60,40">
+                  <TextBlock Text="{Binding FilePath}" FontSize="11" Foreground="#bbb"
+                             TextTrimming="CharacterEllipsis"
+                             c:InfoExplainer.Explanation="Full path of the segment file on this host." />
+                  <TextBlock Grid.Column="1" Text="{Binding StreamRole}" FontSize="11" Foreground="#8a8ab0"
+                             Margin="8,0,0,0" />
+                  <TextBlock Grid.Column="2" Text="{Binding SizeBytes, StringFormat={}{0:N0} B}"
+                             FontSize="11" Foreground="#8a8aa8" TextAlignment="Right" />
+                  <TextBlock Grid.Column="3" Text="{Binding DurationSec, StringFormat={}{0:0}s}"
+                             FontSize="11" Foreground="#8a8aa8" TextAlignment="Right" />
+                  <TextBlock Grid.Column="4" Text="{Binding HasAudio, StringFormat={}{0}}" FontSize="11"
+                             Foreground="#7a7aa0" TextAlignment="Right" />
+                </Grid>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+    </Border>
+
+    <!-- Maintenance row -->
+    <Grid ColumnDefinitions="*,*,*,*">
+      <Button Command="{Binding ReconcileCommand}" Content="♻ Reconcile"
+              c:InfoExplainer.Title="Reconcile"
+              c:InfoExplainer.Explanation="Checks persisted jobs against live processes: dead processes are marked stopped, survivors are re-attached. Safe after a service restart." />
+      <Button Grid.Column="1" Command="{Binding StallCheckCommand}" Content="🛑 Stall Check"
+              c:InfoExplainer.Title="Stall check"
+              c:InfoExplainer.Explanation="Detects recording jobs whose segments stopped growing and stops (optionally restarts) them." />
+      <Button Grid.Column="2" Command="{Binding RunHousekeepingCommand}" Content="🧹 Housekeeping"
+              c:InfoExplainer.Title="Housekeeping"
+              c:InfoExplainer.Explanation="Deletes oldest segments beyond retention limits and updates the index." />
+      <TextBlock Grid.Column="3" Text="{Binding HousekeepingResult}" FontSize="11" Foreground="#9a9ab0"
+                 VerticalAlignment="Center" TextWrapping="Wrap"
+                 c:InfoExplainer.Explanation="Result of the last housekeeping run." />
+    </Grid>
+
+    <TextBlock Text="{Binding ResultText}" FontSize="12" Foreground="#9a9ab0" TextWrapping="Wrap"
+               c:InfoExplainer.Title="Result"
+               c:InfoExplainer.Explanation="Outcome of the last recording action." />
+  </StackPanel>
+</UserControl>

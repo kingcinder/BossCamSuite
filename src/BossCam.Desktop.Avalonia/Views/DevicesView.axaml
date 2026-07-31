@@ -1,0 +1,95 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:BossCam.Desktop.Avalonia.Controls"
+             x:Class="BossCam.Desktop.Avalonia.Views.DevicesView">
+  <StackPanel Spacing="12">
+    <TextBlock Text="Devices" FontSize="18" FontWeight="Bold" Foreground="#fff"
+               c:InfoExplainer.Title="Devices"
+               c:InfoExplainer.Explanation="Add and manage cameras. Discover cameras on the LAN, register one camera by address, or bulk-register the Aegon-LAN set used in typical labs." />
+
+    <Border Background="#20203a" CornerRadius="8" Padding="12">
+      <StackPanel Spacing="6">
+        <TextBlock Text="Discover cameras" FontSize="14" FontWeight="Bold" Foreground="#ddd"
+                   c:InfoExplainer.Title="Discovery"
+                   c:InfoExplainer.Explanation="Scans the local network for cameras and registers what it finds. Results replace the camera list." />
+        <Button Command="{Binding DiscoverCommand}" Content="📡 Discover Cameras" HorizontalAlignment="Left"
+                c:InfoExplainer.Title="Discover"
+                c:InfoExplainer.Explanation="Runs network discovery and registers any cameras found. Takes a few seconds on larger networks." />
+      </StackPanel>
+    </Border>
+
+    <Border Background="#20203a" CornerRadius="8" Padding="12">
+      <StackPanel Spacing="6">
+        <TextBlock Text="Register one camera" FontSize="14" FontWeight="Bold" Foreground="#ddd"
+                   c:InfoExplainer.Title="Manual registration"
+                   c:InfoExplainer.Explanation="Register a single camera by IP address. The service connects and stores credentials securely (encrypted at rest)." />
+
+        <Grid ColumnDefinitions="Auto,*,Auto,*">
+          <TextBlock Text="IP" VerticalAlignment="Center" Foreground="#bbb"
+                     c:InfoExplainer.Explanation="Camera IP address, e.g. 192.168.1.64." />
+          <TextBox Grid.Column="1" Text="{Binding IpAddress, Mode=TwoWay}" Watermark="192.168.1.64"
+                   c:InfoExplainer.Title="IP address"
+                   c:InfoExplainer.Explanation="The camera's IPv4 address on your network." />
+
+          <TextBlock Grid.Column="2" Text="Port" VerticalAlignment="Center" Foreground="#bbb" Margin="8,0,0,0"
+                     c:InfoExplainer.Explanation="HTTP port the camera's control API listens on (usually 80)." />
+          <TextBox Grid.Column="3" Text="{Binding Port, Mode=TwoWay}" Watermark="80"
+                   c:InfoExplainer.Title="Port"
+                   c:InfoExplainer.Explanation="Port of the camera's HTTP control API. Default 80." />
+        </Grid>
+
+        <Grid ColumnDefinitions="Auto,*,Auto,*">
+          <TextBlock Text="Login" VerticalAlignment="Center" Foreground="#bbb"
+                     c:InfoExplainer.Explanation="Camera administrator login name (commonly 'admin')." />
+          <TextBox Grid.Column="1" Text="{Binding LoginName, Mode=TwoWay}" Watermark="admin"
+                   c:InfoExplainer.Title="Login"
+                   c:InfoExplainer.Explanation="Administrator account used to control the camera." />
+
+          <TextBlock Grid.Column="2" Text="Password" VerticalAlignment="Center" Foreground="#bbb" Margin="8,0,0,0"
+                     c:InfoExplainer.Explanation="Camera password. Stored encrypted; never written to logs or shown back." />
+          <TextBox Grid.Column="3" Text="{Binding Password, Mode=TwoWay}" Watermark="••••••••"
+                   PasswordChar="•" RevealPassword="True"
+                   c:InfoExplainer.Title="Password"
+                   c:InfoExplainer.Explanation="Administrator password. Encrypted at rest and redacted from all logs." />
+        </Grid>
+
+        <Grid ColumnDefinitions="Auto,*">
+          <TextBlock Text="Model" VerticalAlignment="Center" Foreground="#bbb"
+                     c:InfoExplainer.Explanation="Hardware model hint used to pick the right control adapters (e.g. 5523-W)." />
+          <TextBox Grid.Column="1" Text="{Binding HardwareModel, Mode=TwoWay}" Watermark="5523-W"
+                   c:InfoExplainer.Title="Hardware model"
+                   c:InfoExplainer.Explanation="Model hint, e.g. '5523-W'. Helps the service select adapters and contracts." />
+        </Grid>
+
+        <Button Command="{Binding RegisterCommand}" Content="＋ Register" HorizontalAlignment="Left"
+                c:InfoExplainer.Title="Register camera"
+                c:InfoExplainer.Explanation="Registers the camera with the details above and loads it into the camera list." />
+      </StackPanel>
+    </Border>
+
+    <Border Background="#20203a" CornerRadius="8" Padding="12">
+      <StackPanel Spacing="6">
+        <TextBlock Text="Aegon-LAN batch (lab default)" FontSize="14" FontWeight="Bold" Foreground="#ddd"
+                   c:InfoExplainer.Title="Aegon-LAN batch"
+                   c:InfoExplainer.Explanation="One-click registration of the usual Aegon-LAN camera set. Passwords are optional — leave blank to use the defaults." />
+
+        <Grid ColumnDefinitions="*,*">
+          <TextBox Text="{Binding LorexPassword, Mode=TwoWay}" Watermark="Lorex password (optional)"
+                   c:InfoExplainer.Title="Lorex password"
+                   c:InfoExplainer.Explanation="Password for Lorex-branded cameras in the batch. Optional." />
+          <TextBox Grid.Column="1" Text="{Binding WvcPassword, Mode=TwoWay}" Watermark="WVC password (optional)"
+                   c:InfoExplainer.Title="WVC password"
+                   c:InfoExplainer.Explanation="Password for WVC-branded cameras in the batch. Optional." />
+        </Grid>
+
+        <Button Command="{Binding RegisterAegonCommand}" Content="⚡ Register Aegon LAN Set" HorizontalAlignment="Left"
+                c:InfoExplainer.Title="Register Aegon-LAN"
+                c:InfoExplainer.Explanation="Registers the standard Aegon LAN camera set in one click (lab convenience)." />
+      </StackPanel>
+    </Border>
+
+    <TextBlock Text="{Binding ResultText}" FontSize="12" Foreground="#9a9ab0" TextWrapping="Wrap"
+               c:InfoExplainer.Title="Result"
+               c:InfoExplainer.Explanation="Outcome of the last device action: how many cameras were discovered or registered." />
+  </StackPanel>
+</UserControl>

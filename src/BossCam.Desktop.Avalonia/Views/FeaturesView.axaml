@@ -1,0 +1,88 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:BossCam.Desktop.Avalonia.Controls"
+             x:Class="BossCam.Desktop.Avalonia.Views.FeaturesView">
+  <StackPanel Spacing="10">
+    <Grid ColumnDefinitions="*,Auto">
+      <TextBlock Text="Camera Features" FontSize="18" FontWeight="Bold" Foreground="#fff"
+                 VerticalAlignment="Center"
+                 c:InfoExplainer.Title="Camera Features"
+                 c:InfoExplainer.Explanation="Safely discover and flip camera feature toggles (image, video, detection). Only write-verified controls are enabled; expert-only controls unlock with the override switch below." />
+      <Button Grid.Column="1" Command="{Binding QuickProbeCommand}" Content="⚡ Quick Probe"
+              IsEnabled="{Binding HasDevice}"
+              c:InfoExplainer.Title="Quick Probe"
+              c:InfoExplainer.Explanation="Normalizes the camera's typed settings, runs a capability probe, then reloads the control list. Run this first to discover what the selected camera can do." />
+    </Grid>
+
+    <CheckBox IsChecked="{Binding ExpertOverride}" Content="Expert override"
+              IsEnabled="{Binding HasDevice}"
+              c:InfoExplainer.Title="Expert override"
+              c:InfoExplainer.Explanation="When checked, expert-only controls become enabled and applies are sent with expertOverride=true. Unverified or blocked controls still stay disabled — this only unlocks expert-classified fields." />
+
+    <TextBlock Text="{Binding DetailText}" FontSize="12" Foreground="#9a9ab0" TextWrapping="Wrap"
+               c:InfoExplainer.Title="Features status"
+               c:InfoExplainer.Explanation="Status of the last features action: how many controls were discovered, or why an apply failed." />
+
+    <Border Background="#0c0c18" CornerRadius="8" Padding="8" IsVisible="{Binding IsBusy}">
+      <TextBlock Text="Working…" Foreground="#ccc" FontSize="12"
+                 c:InfoExplainer.Explanation="A probe or apply is in progress. Controls are disabled until it finishes." />
+    </Border>
+
+    <ScrollViewer MaxHeight="460" VerticalScrollBarVisibility="Auto">
+      <ItemsControl ItemsSource="{Binding Controls}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate>
+            <Border Background="#20203a" CornerRadius="6" Padding="8,6" Margin="0,2">
+              <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Spacing="2">
+                  <StackPanel Orientation="Horizontal" Spacing="6">
+                    <TextBlock Text="{Binding DisplayName}" FontWeight="Bold" Foreground="#eee"
+                               FontSize="13" />
+                    <Border Background="#2c2c4c" CornerRadius="3" Padding="4,1">
+                      <TextBlock Text="{Binding Family}" FontSize="10" Foreground="#8a8ab0" />
+                    </Border>
+                  </StackPanel>
+                  <TextBlock Text="{Binding FieldKey}" FontSize="11" Foreground="#8a8aa8"
+                             TextTrimming="CharacterEllipsis" />
+                  <TextBlock Text="{Binding ReadWriteState}" FontSize="10" Foreground="#7a7aa0" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                  <!-- Toggle -->
+                  <CheckBox IsChecked="{Binding CurrentBool, Mode=TwoWay}" IsEnabled="{Binding IsEnabled}"
+                            IsVisible="{Binding IsToggle}"
+                            c:InfoExplainer.Explanation="{Binding ToggleExplainer}" />
+                  <!-- Slider -->
+                  <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsSlider}">
+                    <TextBlock Text="{Binding CurrentValue}" FontSize="12" Foreground="#ddd"
+                               VerticalAlignment="Center" Width="40" TextAlignment="Center" />
+                    <Slider Value="{Binding CurrentNumber, Mode=TwoWay}" Minimum="{Binding Min}"
+                            Maximum="{Binding Max}" IsEnabled="{Binding IsEnabled}" Width="120"
+                            VerticalAlignment="Center"
+                            c:InfoExplainer.Explanation="{Binding SliderExplainer}" />
+                  </StackPanel>
+                  <!-- Enum dropdown -->
+                  <ComboBox ItemsSource="{Binding AllowedValues}" SelectedItem="{Binding CurrentValue, Mode=TwoWay}"
+                            IsVisible="{Binding IsEnum}" IsEnabled="{Binding IsEnabled}" MinWidth="120"
+                            c:InfoExplainer.Explanation="{Binding EnumExplainer}" />
+                  <!-- Numeric input -->
+                  <NumericUpDown Value="{Binding CurrentNumber, Mode=TwoWay}" IsVisible="{Binding IsNumeric}"
+                                 IsEnabled="{Binding IsEnabled}" Minimum="{Binding Min}" Maximum="{Binding Max}"
+                                 MinWidth="100" c:InfoExplainer.Explanation="{Binding NumericExplainer}" />
+                  <!-- Free text -->
+                  <TextBox Text="{Binding CurrentValue, Mode=TwoWay}" IsVisible="{Binding IsText}"
+                           IsEnabled="{Binding IsEnabled}" MinWidth="140"
+                           c:InfoExplainer.Explanation="{Binding TextExplainer}" />
+
+                  <Button Command="{Binding ApplyCommand}" Content="Apply" IsEnabled="{Binding IsEnabled}"
+                          c:InfoExplainer.Title="Apply"
+                          c:InfoExplainer.Explanation="Sends the current editor value to the camera through the typed-settings pipeline. Writes are verified and audited; failures are reported, never faked." />
+                </StackPanel>
+              </Grid>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+  </StackPanel>
+</UserControl>
