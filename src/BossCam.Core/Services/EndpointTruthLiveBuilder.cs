@@ -222,5 +222,5 @@ public sealed class FfprobePlaybackProbe(IOptions<BossCamRuntimeOptions> options
     }
 
     private static RtspPlaybackProbeMetadata Candidate(string profileToken, string uri, string evidence)
-        => new() { ProfileToken = profileToken, Uri = uri, State = CameraEndpointVerificationState.UnverifiedCandidate, CredentialState = CameraCredentialState.PlaybackLockedPendingCredentials, Evidence = evidence };
+        => new() { ProfileToken = profileToken, Uri = EndpointTruthLiveBuilder.SanitizeRtspUri(uri), State = CameraEndpointVerificationState.UnverifiedCandidate, CredentialState = CameraCredentialState.PlaybackLockedPendingCredentials, Evidence = evidence };
 }
