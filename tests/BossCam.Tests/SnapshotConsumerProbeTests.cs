@@ -78,6 +78,61 @@ public sealed class SnapshotConsumerProbeTests
     }
 
     [Fact]
+    public async Task FirstReachableSnapshotAsync_HeadersOnly_Accepts_Non_Jpeg_2xx_On_Recorded_Port()
+    {
+        // requireJpeg: false is the tile path — any 2xx counts as reachable, so the recorded
+        // port (which serves an HTML login page) is selected without reading its body.
+        var handler = new ScriptedHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("<html>login</html>")
+        });
+        var factory = new HandlerBackedFactory(handler);
+
+        var pick = await NetSdkPortCandidates.FirstReachableSnapshotAsync(
+            factory, SnapshotSources(), CancellationToken.None, requireJpeg: false);
+
+        Assert.NotNull(pick);
+        Assert.Contains($":{RecordedOnvifPort}/NetSDK/Video/encode/channel/101/snapShot", pick!.Url, StringComparison.Ordinal);
+        Assert.Equal(new[] { RecordedOnvifPort }, handler.RequestedUris.Select(uri => uri.Port));
+    }
+
+    [Fact]
+    public async Task FirstReachableSnapshotAsync_JpegMode_Rejects_Non_Jpeg_2xx()
+    {
+        // requireJpeg: true (recording path) must NOT accept the recorded port's HTML body —
+        // it falls through to the :80 descriptor that serves a real JPEG.
+        var handler = new ScriptedHandler(uri => uri.Port == RecordedOnvifPort
+            ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("<html>login</html>") }
+            : JpegOk());
+        var factory = new HandlerBackedFactory(handler);
+
+        var pick = await NetSdkPortCandidates.FirstReachableSnapshotAsync(
+            factory, SnapshotSources(), CancellationToken.None);
+
+        Assert.NotNull(pick);
+        Assert.Contains(":80/NetSDK/Video/encode/channel/101/snapShot", pick!.Url, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task HighlightBoard_Tile_Probe_Does_Not_Read_Response_Body()
+    {
+        // A body whose read throws proves the tile path is headers-only: if the probe tried to
+        // download the JPEG it would fail (throw → candidate rejected). Since it succeeds, the
+        // body was never materialized — the latency win the tile path exists for.
+        using var harness = await CreateHarnessAsync(RecordedOnvifPort, _ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new ThrowingBodyContent()
+        });
+        var board = BuildBoard(harness);
+
+        var state = await board.GetStateAsync(CancellationToken.None);
+
+        var tile = Assert.Single(state.Tiles);
+        Assert.NotNull(tile.SnapshotUrl);
+        Assert.Contains($":{RecordedOnvifPort}/NetSDK/Video/encode/channel/101/snapShot", tile.SnapshotUrl, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task FirstReachableSnapshotAsync_Returns_Null_Without_Snapshot_Descriptors()
     {
         var factory = new HandlerBackedFactory(new ScriptedHandler(_ => JpegOk()));
@@ -292,6 +347,19 @@ public sealed class SnapshotConsumerProbeTests
                 }
             };
             return Task.FromResult(sources);
+        }
+    }
+
+    /// <summary>Content whose read/serialize throws — proves a probe never touched the body.</summary>
+    private sealed class ThrowingBodyContent : HttpContent
+    {
+        protected override Task SerializeToStreamAsync(Stream stream, System.Net.TransportContext? context)
+            => throw new InvalidOperationException("snapshot probe read the response body — headers-only violated");
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = 0;
+            return false;
         }
     }
 

@@ -112,7 +112,9 @@ and highlight-board tiles through `FirstReachableSnapshotAsync`.
 - `HighlightBoardService` tile `SnapshotUrl` resolves to the `:80` fallback for a dead recorded
   port (recorded-first contract asserted); repeated `GetStateAsync` refreshes do **not** re-probe
   (memoized 15s TTL), and a fully-offline camera's null result is memoized as null without a
-  second probe.
+  second probe. The tile probe is headers-only: a non-JPEG 2xx (HTML login page) is accepted
+  without reading the body (pinned by a throwing-body-content test), while `requireJpeg: true`
+  (recording path) still rejects non-JPEG 2xx and falls through to `:80`.
 
 ### Unit — `VideoAdapterPortFallbackTests` (5)
 
@@ -147,11 +149,19 @@ and highlight-board tiles through `FirstReachableSnapshotAsync`.
   direct-RTSP path.
 - **Tile-path probe cost is bounded** — `BuildTilesAsync` runs on every `GetStateAsync`/`Flip`/`Select`
   and probes snapshot candidates through a **per-device memoized** resolver
-  (`ResolveTileSnapshotAsync`): 15s TTL cache per device + a tighter **2s per-probe bound** (vs the
-  recording path's 4s default) via the optional `probeTimeout` parameter on
-  `FirstReachableSnapshotAsync`. A *fully offline* camera therefore stalls at most one 2s timeout per
-  candidate per TTL window, and repeated refreshes never re-probe it at all (the null result is also
-  cached). Healthy cameras skip the duplicate probe too.
+  (`ResolveTileSnapshotAsync`): 15s TTL cache per device + a tighter **2s per-probe bound** and a
+  **headers-only reachability check** (`requireJpeg: false` — any 2xx counts, the JPEG body is never
+  downloaded). The recording path keeps full JPEG validation (`requireJpeg: true`, 4s default). A
+  *fully offline* camera therefore stalls at most one 2s timeout per candidate per TTL window, and
+  repeated refreshes never re-probe it at all (the null result is also cached). Healthy cameras skip
+  the duplicate probe too.
+
+  **Accepted trade-off:** headers-only accepts *any* 2xx, so a recorded port that answers `200`
+  with an HTML/web-UI page (instead of transport-failing) pins the tile to that non-JPEG URL and
+  does **not** self-heal to `:80`. The live-verified 5523-W recorded ports transport-fail, so the
+  fallback still fires there; the any-2xx rule is chosen over a `Content-Type: image/*` header
+  check because budget cameras do not reliably set a correct Content-Type, and a false reject
+  would drop the tile snapshot entirely. Recording (which feeds ffmpeg) never takes this path.
 - Do **not** collapse the two-element port list into a single URL — the whole point is that
   consumers probe candidates in order (`TransportFailoverService` probes by rank; snapshot
   endpoints loop ports × paths).

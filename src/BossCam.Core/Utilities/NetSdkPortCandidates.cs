@@ -63,14 +63,22 @@ public static class NetSdkPortCandidates
     private static readonly TimeSpan DefaultSnapshotProbeTimeout = TimeSpan.FromSeconds(4);
 
     /// <summary>
-    /// Returns the first snapshot-kind descriptor whose URL actually serves a JPEG, probing
-    /// candidates in ascending rank order — the adapters emit the recorded-port descriptor
-    /// (rank 25) before the :80 fallback (rank 26), so a device whose recorded port is dead
-    /// self-heals to the :80 NetSDK REST surface. Used by single-pick consumers
+    /// Returns the first snapshot-kind descriptor whose URL is reachable, probing candidates in
+    /// ascending rank order — the adapters emit the recorded-port descriptor (rank 25) before
+    /// the :80 fallback (rank 26), so a device whose recorded port is dead self-heals to the
+    /// :80 NetSDK REST surface. Used by single-pick consumers
     /// (<see cref="BossCam.Core.RecordingService"/> snapshot selection, highlight-board tiles)
     /// so the rank-26 fallback descriptor is genuinely consumed instead of FirstOrDefault.
-    /// Returns null when no snapshot descriptor answers with a JPEG (transport failure,
-    /// non-success status, or non-JPEG body all move to the next candidate).
+    /// Returns null when no snapshot descriptor answers (transport failure, non-success status,
+    /// and — in JPEG mode — a non-JPEG body all move to the next candidate).
+    /// <para>
+    /// <paramref name="requireJpeg"/> selects the success criterion. <c>true</c> (default — the
+    /// recording path, which feeds ffmpeg) requires an actual JPEG body (SOI magic + &gt;500 bytes).
+    /// <c>false</c> (the highlight-board tile path) is a lightweight headers-only reachability
+    /// check that accepts any 2xx without downloading the body, since tiles refresh repeatedly
+    /// and only need a reachable URL — the full-body cost only matters where a real JPEG is
+    /// consumed.
+    /// </para>
     /// <para>
     /// <paramref name="probeTimeout"/> bounds each candidate probe; default 4s. Latency-sensitive
     /// consumers that run repeatedly (highlight-board tiles on every refresh) pass a shorter
@@ -81,7 +89,8 @@ public static class NetSdkPortCandidates
         IHttpClientFactory httpClientFactory,
         IEnumerable<VideoSourceDescriptor> sources,
         CancellationToken cancellationToken,
-        TimeSpan? probeTimeout = null)
+        TimeSpan? probeTimeout = null,
+        bool requireJpeg = true)
     {
         ArgumentNullException.ThrowIfNull(httpClientFactory);
 
@@ -93,7 +102,9 @@ public static class NetSdkPortCandidates
 
         foreach (var candidate in candidates)
         {
-            if (await ServesJpegAsync(httpClientFactory, candidate.Url, cancellationToken, probeTimeout ?? DefaultSnapshotProbeTimeout))
+            if (await SnapshotUrlAnswersAsync(
+                    httpClientFactory, candidate.Url, cancellationToken,
+                    probeTimeout ?? DefaultSnapshotProbeTimeout, requireJpeg))
             {
                 return candidate;
             }
@@ -102,7 +113,12 @@ public static class NetSdkPortCandidates
         return null;
     }
 
-    private static async Task<bool> ServesJpegAsync(IHttpClientFactory httpClientFactory, string url, CancellationToken cancellationToken, TimeSpan probeTimeout)
+    private static async Task<bool> SnapshotUrlAnswersAsync(
+        IHttpClientFactory httpClientFactory,
+        string url,
+        CancellationToken cancellationToken,
+        TimeSpan probeTimeout,
+        bool requireJpeg)
     {
         try
         {
@@ -114,6 +130,11 @@ public static class NetSdkPortCandidates
             if (!response.IsSuccessStatusCode)
             {
                 return false;
+            }
+
+            if (!requireJpeg)
+            {
+                return true; // headers-only reachability — don't download the JPEG body per refresh
             }
 
             var bytes = await response.Content.ReadAsByteArrayAsync(cts.Token);

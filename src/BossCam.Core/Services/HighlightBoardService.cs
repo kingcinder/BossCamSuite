@@ -234,10 +234,11 @@ public sealed class HighlightBoardService(
     /// <summary>
     /// Resolves the tile's snapshot descriptor, memoized per device for a short TTL so repeated
     /// board refreshes (GetState/Flip/Select) never re-probe an offline camera. The tile path
-    /// probes with a tighter 2s per-candidate bound than the recording path's 4s default — a
-    /// fully-dead device costs at most one 2s timeout per candidate per TTL window instead of
-    /// stalling every refresh. A cached null (nothing served a JPEG) is also honored so offline
-    /// devices short-circuit without a probe until the TTL expires.
+    /// probes with a tighter 2s per-candidate bound than the recording path's 4s default and a
+    /// headers-only reachability check (no JPEG body download) — a fully-dead device costs at most
+    /// one 2s timeout per candidate per TTL window instead of stalling every refresh. A cached
+    /// null (nothing answered on any candidate) is also honored so offline devices short-circuit
+    /// without a probe until the TTL expires.
     /// </summary>
     private async Task<VideoSourceDescriptor?> ResolveTileSnapshotAsync(
         Guid deviceId,
@@ -257,7 +258,7 @@ public sealed class HighlightBoardService(
         try
         {
             snapshot = await NetSdkPortCandidates.FirstReachableSnapshotAsync(
-                httpClientFactory, sources, cancellationToken, TileSnapshotProbeTimeout);
+                httpClientFactory, sources, cancellationToken, TileSnapshotProbeTimeout, requireJpeg: false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
