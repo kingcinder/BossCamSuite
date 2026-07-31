@@ -62,8 +62,11 @@ public sealed class ConnectionDiagnosticService(
         results["http:deviceInfo"] = await ProbeHttpGetFirstReachableAsync(
             ip!, device.Port, "/NetSDK/System/deviceInfo", user, pass, cancellationToken);
 
-        // 4. RTSP reachability (TCP :554)
+        // 4. RTSP reachability — TCP :554 (port open) plus RTSP playability (OPTIONS handshake).
+        //    A bare TCP connect only proves something is listening; a recordable/live stream must
+        //    answer RTSP OPTIONS (see RtspProbe) — so report both signals separately.
         results["rtsp:main"] = await ProbeTcpPortAsync(ip!, 554, cancellationToken);
+        results["rtsp:playable"] = await ProbeRtspAsync(ip!, 554, cancellationToken);
 
         // 5. ONVIF device service (try common ports)
         foreach (var onvifPort in new[] { 8899, 8888, 80 })
@@ -133,7 +136,10 @@ public sealed class ConnectionDiagnosticService(
     {
         var pingOk = results.GetValueOrDefault("ping")?.Success == true;
         var httpOk = results.GetValueOrDefault("http:deviceInfo")?.Success == true;
-        var rtspOk = results.GetValueOrDefault("tcp:554")?.Success == true;
+        // Composite verdict keys off *playability* (rtsp:playable — the OPTIONS handshake result)
+        // rather than raw tcp:554: a bare TCP-open :554 proves only something is listening, which is
+        // not a recordable/live stream (health semantics, see RtspProbe).
+        var rtspOk = results.GetValueOrDefault("rtsp:playable")?.Success == true;
         var onvifOk = results.Any(r => r.Key.StartsWith("onvif:") && r.Value.Success);
         var snapOk = results.GetValueOrDefault("snapshot")?.Success == true;
 
@@ -155,7 +161,8 @@ public sealed class ConnectionDiagnosticService(
     private static ConnectivityStatus ComputeConnectivityStatus(Dictionary<string, ProbeResult> results)
     {
         var httpOk = results.GetValueOrDefault("http:deviceInfo")?.Success == true;
-        var rtspOk = results.GetValueOrDefault("tcp:554")?.Success == true;
+        // Same playability semantics as ComputeVerdict: rtsp:playable, not bare tcp:554.
+        var rtspOk = results.GetValueOrDefault("rtsp:playable")?.Success == true;
         var snapOk = results.GetValueOrDefault("snapshot")?.Success == true;
 
         if (httpOk && rtspOk) return ConnectivityStatus.Healthy;
@@ -185,10 +192,13 @@ public sealed class ConnectionDiagnosticService(
             actions.Add("The device may require a different transport protocol.");
         }
 
-        var rtspOk = results.GetValueOrDefault("tcp:554")?.Success == true;
+        var tcp554Open = results.GetValueOrDefault("tcp:554")?.Success == true;
+        var rtspOk = results.GetValueOrDefault("rtsp:playable")?.Success == true;
         if (!rtspOk)
         {
-            actions.Add("RTSP port 554 not reachable. Live streaming will fall back to snapshot-only.");
+            actions.Add(tcp554Open
+                ? "RTSP port 554 is open but the device is not answering the RTSP OPTIONS handshake — the stream is not playable/recordable. Live streaming will fall back to snapshot-only."
+                : "RTSP port 554 not reachable. Live streaming will fall back to snapshot-only.");
             actions.Add("Verify RTSP is enabled in the camera's stream settings.");
         }
 
@@ -223,6 +233,26 @@ public sealed class ConnectionDiagnosticService(
         {
             return new ProbeResult { Success = false, Detail = $"Ping exception: {ex.Message}" };
         }
+    }
+
+    /// <summary>
+    /// RTSP playability probe: connects and performs an OPTIONS handshake. Distinct from
+    /// <see cref="ProbeTcpPortAsync"/> (port-open only) so a non-RTSP service on :554 is not
+    /// reported as an up/recordable stream.
+    /// </summary>
+    private static async Task<ProbeResult> ProbeRtspAsync(string host, int port, CancellationToken cancellationToken)
+    {
+        var sw = Stopwatch.StartNew();
+        var playable = await RtspProbe.ProbeAsync(host, port, cancellationToken);
+        sw.Stop();
+        return new ProbeResult
+        {
+            Success = playable,
+            Detail = playable
+                ? $"RTSP OPTIONS {host}:{port} answered in {sw.ElapsedMilliseconds}ms"
+                : $"RTSP {host}:{port} — no RTSP response (TCP may still be open)",
+            LatencyMs = (int)sw.ElapsedMilliseconds
+        };
     }
 
     private static async Task<ProbeResult> ProbeTcpPortAsync(string host, int port, CancellationToken cancellationToken)

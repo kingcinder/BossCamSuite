@@ -108,8 +108,11 @@ public sealed class TransportFailoverService(
 
             if (source.Kind is TransportKind.Rtsp or TransportKind.OnvifRtsp)
             {
-                // RTSP: just try TCP connect to port 554 with a short timeout
-                return await TcpProbeAsync(device.IpAddress!, 554, cts.Token);
+                // RTSP playability: a TCP connect to :554 only proves something is listening.
+                // Require an RTSP OPTIONS handshake so a non-RTSP service on :554 isn't
+                // misreported as an up/recordable stream (see RtspProbe).
+                var (host, port) = ResolveRtspTarget(device, source);
+                return await RtspProbe.ProbeAsync(host, port, cts.Token);
             }
 
             if (source.Kind is TransportKind.LanRest or TransportKind.FlvOverHttp or TransportKind.BubbleFlv)
@@ -140,10 +143,9 @@ public sealed class TransportFailoverService(
 
             if (source.Kind is TransportKind.Rtsp or TransportKind.OnvifRtsp)
             {
-                var port = Uri.TryCreate(source.Url, UriKind.Absolute, out var uri) ? uri.Port : 554;
-                var host = uri?.Host ?? device.IpAddress;
-                var reachable = await TcpProbeAsync(host!, port > 0 ? port : 554, cts.Token);
-                return reachable ? source : null;
+                var (host, port) = ResolveRtspTarget(device, source);
+                var playable = await RtspProbe.ProbeAsync(host, port, cts.Token);
+                return playable ? source : null;
             }
 
             if (source.Kind is TransportKind.LanRest or TransportKind.FlvOverHttp or TransportKind.BubbleFlv)
@@ -215,20 +217,19 @@ public sealed class TransportFailoverService(
         return null;
     }
 
-    private static async Task<bool> TcpProbeAsync(string host, int port, CancellationToken cancellationToken)
+    /// <summary>
+    /// Resolves the RTSP host/port to probe for an RTSP-kind source: the URL's host/port when
+    /// present, otherwise the device IP on :554. Keeps the reachability check pointed at the
+    /// exact stream endpoint instead of assuming :554 for every descriptor.
+    /// </summary>
+    private static (string Host, int Port) ResolveRtspTarget(DeviceIdentity device, VideoSourceDescriptor source)
     {
-        try
+        if (Uri.TryCreate(source.Url, UriKind.Absolute, out var uri) && !string.IsNullOrEmpty(uri.Host))
         {
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            cts.CancelAfter(ProbeTimeout);
-            using var socket = new System.Net.Sockets.TcpClient();
-            await socket.ConnectAsync(host, port, cts.Token);
-            return socket.Connected;
+            return (uri.Host, uri.Port > 0 ? uri.Port : 554);
         }
-        catch
-        {
-            return false;
-        }
+
+        return (device.IpAddress ?? string.Empty, 554);
     }
 
     private static string TruncateCredentials(string url)

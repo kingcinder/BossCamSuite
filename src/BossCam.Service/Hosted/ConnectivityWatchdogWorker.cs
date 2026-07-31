@@ -103,10 +103,12 @@ public sealed class ConnectivityWatchdogWorker(
         var user = string.IsNullOrWhiteSpace(device.LoginName) ? "admin" : device.LoginName;
         var pass = device.Password ?? string.Empty;
 
-        // Quick probe: HTTP device info + TCP :554. The HTTP surface listens on :80 while
+        // Quick probe: HTTP device info + RTSP :554. The HTTP surface listens on :80 while
         // discovery may have recorded an ONVIF/media port — probe recorded-first, then :80.
+        // RTSP "up" requires an OPTIONS handshake (not a bare TCP connect) so a non-RTSP
+        // service on :554 isn't misreported as a live/recordable stream (see RtspProbe).
         var httpOk = await QuickHttpProbeAsync(device, user, pass, cancellationToken);
-        var rtspOk = await QuickTcpProbeAsync(ip, 554, cancellationToken);
+        var rtspOk = await RtspProbe.ProbeAsync(ip, 554, cancellationToken);
 
         var currentStatus = (httpOk, rtspOk) switch
         {
@@ -121,7 +123,7 @@ public sealed class ConnectivityWatchdogWorker(
         var transportResults = new Dictionary<string, bool>
         {
             ["http:deviceInfo"] = httpOk,
-            ["rtsp:tcp:554"] = rtspOk
+            ["rtsp:playable"] = rtspOk
         };
 
         // Save snapshot
@@ -280,21 +282,6 @@ public sealed class ConnectivityWatchdogWorker(
         }
     }
 
-    private static async Task<bool> QuickTcpProbeAsync(string host, int port, CancellationToken cancellationToken)
-    {
-        try
-        {
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            cts.CancelAfter(QuickProbeTimeout);
-            using var socket = new System.Net.Sockets.TcpClient();
-            await socket.ConnectAsync(host, port, cts.Token);
-            return socket.Connected;
-        }
-        catch
-        {
-            return false;
-        }
-    }
 
     /// <summary>
     /// Probes the NetSDK snapshot JPEG across candidate ports (recorded first, then :80) so a

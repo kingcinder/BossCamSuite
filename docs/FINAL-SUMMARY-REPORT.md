@@ -1,9 +1,9 @@
 # BossCamSuite — Final Summary Report
 
-> **Date:** July 30, 2026  
+> **Date:** July 30, 2026 (updated July 31 — see the addendum below for post-report passes)  
 > **Repository:** `github.com/kingcinder/BossCamSuite`  
 > **Branch:** `main`  
-> **Commits:** `d4d9644` → `9e113a0` (9 commits)
+> **Commits:** `d4d9644` → `9e113a0` (9 commits), later passes through `d89c5c0`
 
 ---
 
@@ -184,21 +184,36 @@ const connection = new HubConnectionBuilder()
 
 ## E2E Test Suite Results
 
-All **100 E2E tests pass** (offline `BOSSCAM_E2E_LIVE=0` **and** live mode):
+All **104 E2E tests pass** (offline `BOSSCAM_E2E_LIVE=0` **and** live mode):
 
 | Test Suite | Tests | Status |
 |---|---|---|
 | `ApiRouteMatrixTests` | 46 | ✅ Passed |
 | `LanAuthE2ETests` + `LanBound*E2ETests` | 24 | ✅ Passed |
-| `LanBoundFailFastE2ETests` | 1 | ✅ Passed |
 | `LinuxUiFeatureTests` | 11 | ✅ Passed |
 | `LiveCameraExhaustiveTests` | 5 | ✅ Passed |
 | `SimulatedLanCleanupTests` | 2 | ✅ Passed |
 | `UbuntuPlatformAndStaticUiTests` | 11 | ✅ Passed |
-| **Total** | **100** | **✅ All Passed** |
+| `SnapshotPortFallbackE2ETests` | 2 | ✅ Passed |
+| `RecordingSnapshotFallbackE2ETests` | 2 | ✅ Passed |
+| **Total** | **104** | **✅ All Passed** |
 
-Unit suites: **BossCam.Tests 150/150** (incl. new `RecordingResilienceTests` and
-`DependencyInjectionCycleTests`), **BossCam.Desktop.Avalonia.Tests 17/17**.
+Unit suites: **BossCam.Tests 203/203** (incl. the port-fallback suites
+`HttpAdapterPortFallbackTests`, `CoreServicePortFallbackTests`, `VideoAdapterPortFallbackTests`,
+`SnapshotConsumerProbeTests`, `RtspPlayabilityTests`, plus the earlier `RecordingResilienceTests`
+and `DependencyInjectionCycleTests`), **BossCam.Desktop.Avalonia.Tests 42/42**.
+
+## July 31 addendum — NetSDK port-fallback + standalone GUI
+
+Since this report was written, two major passes landed:
+
+| Area | Work |
+|---|---|
+| **NetSDK REST port fallback** | `NetSdkPortCandidates` centralizes the recorded-port-first → `:80` contract (discovery can record an ONVIF/media port while the NetSDK REST surface listens on 80). Applied across the control plane, snapshot endpoints/pumps, storage, video adapters (rank-26 `:80` fallback descriptors), failover, watchdog, and diagnostics. Recording + highlight-board consumers probe snapshot candidates in rank order. Full design: `docs/reports/2026-07-31-port-fallback-design.md`. |
+| **RTSP health semantics** | `RtspProbe` performs an RTSP `OPTIONS` handshake so an RTSP peer is only reported up/recordable when it answers RTSP — a bare TCP-open `:554` is no longer treated as a live stream. Wired into `TransportFailoverService`, the connectivity watchdog, and the diagnostic battery. |
+| **Standalone Avalonia GUI** | `src/BossCam.Desktop.Avalonia/` wraps every feature behind a single window (live view, devices, features apply, recordings, highlights, playback, diagnostics, firmware, connectivity, storage) with explainer popups, plus a system-wide installer (`scripts/install-bosscam-gui.sh`, hardened for sudo/HOME/DOTNET_ROOT and bounded restore/publish). |
+
+Both passes are fully covered by the 203 unit + 104 E2E totals above.
 
 ## Stability Pass (commits `8ba4a38` → `9e113a0`)
 
@@ -263,8 +278,8 @@ SqliteApplicationStore
 | Endpoint files | 1 | 9 |
 | `new HttpClient()` sites | 24 | 3 (intentional: Digest auth needs per-call handler) |
 | Build warnings | Several | 0 (`TreatWarningsAsErrors=true`) |
-| E2E tests passing | ~85/91 | **100/100** |
-| Unit tests passing | — | **150/150** (BossCam.Tests) + **17/17** (Avalonia) |
+| E2E tests passing | ~85/91 | **104/104** |
+| Unit tests passing | — | **203/203** (BossCam.Tests) + **42/42** (Avalonia) |
 | DI host startup | Circular-dependency crash | **Clean** (ValidateOnBuild regression test added) |
 | Password exposure | Plaintext in serialized JSON | AES-GCM/DPAPI encrypted at rest |
 | ONVIF ApplyAsync | Stub | Real `SetImagingSettings` SOAP |

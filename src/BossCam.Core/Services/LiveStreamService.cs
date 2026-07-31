@@ -36,6 +36,9 @@ public sealed class LiveStreamService(
         var scale = IsMain(quality) ? "1280:-2" : "960:-2";
         var bitrate = IsMain(quality) ? "2500k" : "1200k";
         var args = new StringBuilder()
+            // Live preview is video-only by design: -an drops audio from the low-latency
+            // transcode. Recordings are a separate path (DirectFfmpegRecordingPipeline) which
+            // maps audio via -map 0:a:0? -c:a copy — the two argvs deliberately differ.
             .Append("-hide_banner -loglevel warning ")
             .Append(RtspInputFlags())
             .Append("-i \"").Append(rtspUrl).Append("\" ")
@@ -125,8 +128,11 @@ public sealed class LiveStreamService(
             .Append("-hide_banner -loglevel warning ")
             .Append(RtspInputFlags())
             .Append("-i \"").Append(rtspUrl).Append("\" ")
+            // -an: live preview is video-only by design; recording (a separate pipeline)
+            // maps audio with -map 0:a:0? -c:a copy.
             .Append("-an -c:v copy ")
             .Append("-f mp4 -movflags frag_keyframe+empty_moov+default_base_moof -")
+
             .ToString();
         logger.LogInformation("Live fMP4 {Ip} q={Q}", device.IpAddress, quality);
         await RunFfmpegCopyAsync(ffmpeg, args, output, cancellationToken);
@@ -179,6 +185,8 @@ public sealed class LiveStreamService(
             .Append("-hide_banner -loglevel warning ")
             .Append(RtspInputFlags())
             .Append("-i \"").Append(rtspUrl).Append("\" ")
+            // -an: video-only live preview by design (see class summary — recordings map audio
+            // via DirectFfmpegRecordingPipeline).
             .Append("-an -map 0:v:0 ")
             .Append("-vf \"fps=").Append(fps).Append(",scale=").Append(scale).Append("\" ")
             .Append("-q:v 7 -f mpjpeg -")

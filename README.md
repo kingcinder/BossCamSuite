@@ -210,6 +210,20 @@ Data lives under `~/.local/share/BossCamSuite/` (SQLite DB + recordings + firmwa
 
 Full API documentation is available via Swagger UI when the service is running.
 
+### Connectivity health semantics
+
+- **HTTP / snapshot reachability** uses recorded-port-first → `:80` fallback
+  (`NetSdkPortCandidates`): discovery can record an ONVIF/media port while the NetSDK REST
+  surface listens on 80, so a 5523-W is still reported reachable when `:80` answers.
+- **RTSP health means playable, not just TCP-open.** The connectivity watchdog, diagnostics,
+  and transport failover probe RTSP with an `OPTIONS` handshake (`RtspProbe`) — a bare TCP
+  connect on `:554` only proves *something* is listening, which is not a recordable/live
+  stream. A peer that answers `RTSP/1.x` is up; a silent or non-RTSP listener is not.
+- **Live preview vs recording audio:** live multi-view streams are video-only by design
+  (`-an` keeps the low-latency transcode cheap); recordings route through
+  `DirectFfmpegRecordingPipeline`, which maps audio (`-map 0:a:0? -c:a copy`). The two argvs
+  deliberately differ.
+
 ---
 
 ## systemd Install
@@ -339,6 +353,8 @@ BossCamSuite-main/
 | `CompositeInteractionRulesTests` | Cross-rule precedence for read/write/audit |
 | `ContractDrivenWorkflowTests` | End-to-end promotion: transcript → fixture → capability |
 | `ControlPointInventoryServiceTests` | SQLite-backed device inventory lifecycle |
+| `CoreServicePortFallbackTests` | Recorded-port-first → `:80` fallback in watchdog/diagnostics/`BuildSnapshotUrl` |
+| `HttpAdapterPortFallbackTests` | HTTP control-plane port fallback + digest asymmetry |
 | `ImageTruthClassificationTests` | Per-image truth classification |
 | `ImageTruthServiceTests` | Image-sweep service against synthetic fixtures |
 | `LanBoundTokenGateTests` | Host-aware bearer-token middleware |
@@ -347,6 +363,9 @@ BossCamSuite-main/
 | `OnvifImagingControlAdapterTimeoutTests` | 5 timeout regression tests |
 | `OperatorRuntimeRepairTests` | Operator-flow repair paths |
 | `RunningRecordingEqualityTests` | Value-equality for RunningRecording record |
+| `RtspPlayabilityTests` | RTSP `OPTIONS` handshake probe (health semantics) |
 | `SemanticTrustServiceTests` | Trust decisions + audit log |
+| `SnapshotConsumerProbeTests` | Rank-ordered snapshot probing for recording + highlight-board tiles |
 | `TrustHardeningWorkflowTests` | Combined trust + contract verification |
 | `TypedSettingsAndProbeWorkflowTests` | Apply-batch typed settings + persistence verification |
+| `VideoAdapterPortFallbackTests` | `:80` fallback snapshot/bubble descriptor emission |
