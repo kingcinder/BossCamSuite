@@ -32,6 +32,17 @@ public sealed class HighlightBoardService(
     private readonly object _snapshotProbeLock = new();
     private readonly Dictionary<Guid, (VideoSourceDescriptor? Snapshot, DateTimeOffset ProbedAt)> _snapshotProbeCache = [];
 
+    // Tile transport-source memoization: BuildTilesAsync calls transportBroker.GetSourcesAsync for
+    // every device on every board refresh (GetState/Flip/Select). A device whose primary adapters
+    // yield nothing triggers TransportBroker's failover fallback, which probes each RTSP descriptor
+    // with a 2s OPTIONS handshake (RtspProbe) — re-running that whole chain for every offline
+    // camera on every refresh would waste seconds of socket timeouts per refresh. Cache the
+    // per-device source resolution for the same short TTL; a failed/empty resolution is cached too
+    // so offline devices short-circuit instead of re-triggering the failover chain.
+    private static readonly TimeSpan TileSourcesProbeTtl = TimeSpan.FromSeconds(15);
+    private readonly object _sourcesLock = new();
+    private readonly Dictionary<Guid, (IReadOnlyCollection<VideoSourceDescriptor>? Sources, DateTimeOffset ProbedAt)> _sourcesCache = [];
+
     public async Task<HighlightBoardState> GetStateAsync(CancellationToken cancellationToken)
     {
         var tiles = await BuildTilesAsync(cancellationToken);
@@ -176,16 +187,7 @@ public sealed class HighlightBoardService(
         var tiles = new List<HighlightTile>();
         foreach (var device in devices)
         {
-            IReadOnlyCollection<VideoSourceDescriptor> sources;
-            try
-            {
-                sources = await transportBroker.GetSourcesAsync(device.Id, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                logger.LogDebug(ex, "Failed to resolve sources for {Device}", device.DisplayName);
-                sources = [];
-            }
+            var sources = await ResolveTileSourcesAsync(device.Id, cancellationToken);
 
             var mainRtsp = RecordingService.SelectHighResMainSource(sources)
                 ?? sources.FirstOrDefault(s => s.Kind is TransportKind.Rtsp or TransportKind.OnvifRtsp
@@ -229,6 +231,50 @@ public sealed class HighlightBoardService(
         }
 
         return tiles;
+    }
+
+    /// <summary>
+    /// Resolves the tile's transport sources, memoized per device for a short TTL so repeated board
+    /// refreshes (GetState/Flip/Select) never re-run the failover chain — a device whose primary
+    /// adapters yield nothing triggers <see cref="TransportBroker.GetSourcesAsync"/>'s
+    /// TransportFailoverService fallback, which probes each RTSP descriptor with a 2s OPTIONS
+    /// handshake. A cached failure/empty result is also honored so offline cameras short-circuit
+    /// until the TTL expires instead of re-probing on every refresh.
+    /// </summary>
+    private async Task<IReadOnlyCollection<VideoSourceDescriptor>> ResolveTileSourcesAsync(
+        Guid deviceId,
+        CancellationToken cancellationToken)
+    {
+        lock (_sourcesLock)
+        {
+            if (_sourcesCache.TryGetValue(deviceId, out var cached)
+                && DateTimeOffset.UtcNow - cached.ProbedAt < TileSourcesProbeTtl)
+            {
+                return cached.Sources ?? [];
+            }
+        }
+
+        IReadOnlyCollection<VideoSourceDescriptor> sources;
+        try
+        {
+            sources = await transportBroker.GetSourcesAsync(deviceId, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Failed to resolve sources for device={DeviceId}; tile sources empty", deviceId);
+            sources = [];
+        }
+
+        lock (_sourcesLock)
+        {
+            _sourcesCache[deviceId] = (sources, DateTimeOffset.UtcNow);
+        }
+
+        return sources;
     }
 
     /// <summary>

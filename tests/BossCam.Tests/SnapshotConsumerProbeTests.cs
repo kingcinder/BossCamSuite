@@ -232,6 +232,45 @@ public sealed class SnapshotConsumerProbeTests
         Assert.Equal(2, harness.Handler.RequestedUris.Count);
     }
 
+    [Fact]
+    public async Task HighlightBoard_Repeated_GetState_Does_Not_ReQuery_Transport_Sources()
+    {
+        // GetSourcesAsync is the expensive part of a board refresh for offline cameras: when primary
+        // adapters yield nothing the broker's failover fallback runs 2s RTSP OPTIONS probes. Verify
+        // the per-device transport-source memoization short-circuits a second refresh entirely.
+        using var harness = await CreateHarnessAsync(RecordedOnvifPort);
+        var counting = new CountingVideoAdapter(new SnapshotOnlyVideoAdapter(RecordedOnvifPort));
+        var broker = new TransportBroker([counting], harness.Store, null, NullLogger<TransportBroker>.Instance);
+        var board = BuildBoard(harness with { Broker = broker });
+
+        _ = await board.GetStateAsync(CancellationToken.None);
+        Assert.Equal(1, counting.GetSourcesCalls);
+
+        // Second refresh within the memoization TTL must not re-invoke the transport adapter.
+        _ = await board.GetStateAsync(CancellationToken.None);
+        Assert.Equal(1, counting.GetSourcesCalls);
+    }
+
+    [Fact]
+    public async Task HighlightBoard_Offline_Camera_Transport_Sources_Are_Memoized_As_Empty()
+    {
+        // A device whose adapter throws (simulating the failover path finding nothing, or an adapter
+        // fault) resolves to empty sources; the empty result must be cached so a second refresh does
+        // not re-run the expensive probe chain for the offline camera.
+        using var harness = await CreateHarnessAsync(RecordedOnvifPort);
+        var counting = new CountingVideoAdapter(new ThrowingVideoAdapter());
+        var broker = new TransportBroker([counting], harness.Store, null, NullLogger<TransportBroker>.Instance);
+        var board = BuildBoard(harness with { Broker = broker });
+
+        _ = await board.GetStateAsync(CancellationToken.None);
+        Assert.Equal(1, counting.GetSourcesCalls);
+
+        var state2 = await board.GetStateAsync(CancellationToken.None);
+        Assert.Equal(1, counting.GetSourcesCalls);
+        Assert.Null(Assert.Single(state2.Tiles).LiveUrl); // empty sources → no live/record/snapshot URLs
+        Assert.Empty(harness.Handler.RequestedUris);
+    }
+
     private static HighlightBoardService BuildBoard(ProbeHarness harness)
     {
         var recording = new RecordingService(
@@ -316,6 +355,33 @@ public sealed class SnapshotConsumerProbeTests
         payload[0] = 0xFF;
         payload[1] = 0xD8;
         return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(payload) };
+    }
+
+    /// <summary>Counts GetSourcesAsync invocations so memoization is observable.</summary>
+    private sealed class CountingVideoAdapter(IVideoTransportAdapter inner) : IVideoTransportAdapter
+    {
+        public int GetSourcesCalls { get; private set; }
+
+        public string Name => inner.Name;
+        public TransportKind TransportKind => inner.TransportKind;
+        public int Priority => inner.Priority;
+
+        public Task<IReadOnlyCollection<VideoSourceDescriptor>> GetSourcesAsync(DeviceIdentity device, CancellationToken cancellationToken)
+        {
+            GetSourcesCalls++;
+            return inner.GetSourcesAsync(device, cancellationToken);
+        }
+    }
+
+    /// <summary>Adapter that always throws — simulates the failover/offline path resolving to no sources.</summary>
+    private sealed class ThrowingVideoAdapter : IVideoTransportAdapter
+    {
+        public string Name => "Throwing";
+        public TransportKind TransportKind => TransportKind.Rtsp;
+        public int Priority => 100;
+
+        public Task<IReadOnlyCollection<VideoSourceDescriptor>> GetSourcesAsync(DeviceIdentity device, CancellationToken cancellationToken)
+            => throw new HttpRequestException("adapter transport failure");
     }
 
     /// <summary>Emits the same snapshot descriptors as the real adapters for a recorded port.</summary>
