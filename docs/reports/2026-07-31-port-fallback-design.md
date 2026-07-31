@@ -123,14 +123,23 @@ and highlight-board tiles through `FirstReachableSnapshotAsync`.
 - `StreamDescriptorAdapter` stream discovery falls back to `:80` after recorded-port refusal.
 - `BubbleFlvAdapter` emits `:80` fallback main/sub (4 descriptors) for port-8888; 2 for port-80.
 
-### E2E — `SnapshotPortFallbackE2ETests` (2)
+### E2E — `SnapshotPortFallbackE2ETests` (2) + `RecordingSnapshotFallbackE2ETests` (2)
 
-- **Positive (environment-gated):** fake HTTP responder on `127.0.0.1:80` serves a JPEG; a device
-  registered with a *closed* ephemeral recorded port still gets `200 image/jpeg` from
-  `/api/devices/{id}/snapshot`. Binding `:80` requires elevation, so it early-returns on
-  unprivileged runners (same convention as the live-camera E2E tests).
-- **Negative:** no server anywhere → `502 Bad Gateway`. Runs everywhere (loopback
-  connection-refused is instant; nothing can legitimately serve a JPEG at a NetSDK path).
+Both classes share a `Port80JpegServer` fixture (`127.0.0.1:80` real listener serving a genuine
+~1.9 KB decodable JPEG — real bytes so the snapshot pipeline's ffmpeg can actually encode them,
+not a synthetic SOI stub).
+
+- **Positive (environment-gated):** device registered with a *closed* ephemeral recorded port still
+  gets `200 image/jpeg` from `/api/devices/{id}/snapshot` — and `/api/recordings/start` (with
+  `sourceUrl: "snapshot"` forcing the snapshot pipeline) returns a running job whose `SourceUrl`
+  resolves to the `:80` fallback descriptor (`127.0.0.1:80` + snapShot path, recorded port absent),
+  proving `RecordingService.ResolveSnapshotUrlAsync` self-heals end-to-end through the real HTTP
+  stack. Binding `:80` requires elevation, so it early-returns on unprivileged runners (same
+  convention as the live-camera E2E tests).
+- **Negative (runs everywhere):** no server anywhere → snapshot endpoint `502 Bad Gateway`, and
+  `recordings/start` still starts a job but its `SourceUrl` keeps the recorded port (no false
+  self-heal to a silent `:80`). Loopback connection-refused is instant; nothing can legitimately
+  serve a JPEG at a NetSDK path on a dev box's `:80`.
 
 ## Live evidence
 
