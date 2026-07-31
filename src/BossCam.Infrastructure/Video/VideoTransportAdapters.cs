@@ -4,6 +4,7 @@ using BossCam.Core;
 using BossCam.Core.Utilities;
 using BossCam.Infrastructure.Control;
 using BossCam.NativeBridge;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace BossCam.Infrastructure.Video;
@@ -14,7 +15,10 @@ namespace BossCam.Infrastructure.Video;
 /// Bubble live HTTP <c>/bubble/live?ch=1&amp;stream=0</c> (content-type video/bubble).
 /// Snapshot JPEG <c>/NetSDK/Video/encode/channel/101/snapShot</c>.
 /// </summary>
-public sealed class StreamDescriptorAdapter(IOptions<BossCamRuntimeOptions> options, IHttpClientFactory httpClientFactory) : IVideoTransportAdapter
+public sealed class StreamDescriptorAdapter(
+    IOptions<BossCamRuntimeOptions> options,
+    IHttpClientFactory httpClientFactory,
+    ILogger<StreamDescriptorAdapter> logger) : IVideoTransportAdapter
 {
     public string Name => nameof(StreamDescriptorAdapter);
     public TransportKind TransportKind => TransportKind.LanRest;
@@ -150,9 +154,11 @@ public sealed class StreamDescriptorAdapter(IOptions<BossCamRuntimeOptions> opti
                     break; // first responsive port wins — stop probing fallback candidates
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // try the next candidate port
+                // Try the next candidate port, but never silently: a dead recorded port is a
+                // common 5523-W misconfiguration worth surfacing in logs.
+                logger.LogDebug(ex, "Stream descriptor probe failed on port {Port} for device={Device}; trying next candidate", candidatePort, device.DisplayName);
             }
         }
 

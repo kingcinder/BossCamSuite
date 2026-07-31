@@ -2,6 +2,7 @@ using System.Net;
 using BossCam.Contracts;
 using BossCam.Core;
 using BossCam.Infrastructure.Video;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 namespace BossCam.Tests;
@@ -23,7 +24,8 @@ public sealed class VideoAdapterPortFallbackTests
     {
         var adapter = new StreamDescriptorAdapter(
             Options.Create(new BossCamRuntimeOptions { HttpTimeoutSeconds = 5 }),
-            new Static404HttpClientFactory());
+            new Static404HttpClientFactory(),
+            NullLogger<StreamDescriptorAdapter>.Instance);
         var device = NewDevice(port: RecordedOnvifPort);
 
         var sources = await adapter.GetSourcesAsync(device, CancellationToken.None);
@@ -40,7 +42,8 @@ public sealed class VideoAdapterPortFallbackTests
     {
         var adapter = new StreamDescriptorAdapter(
             Options.Create(new BossCamRuntimeOptions { HttpTimeoutSeconds = 5 }),
-            new Static404HttpClientFactory());
+            new Static404HttpClientFactory(),
+            NullLogger<StreamDescriptorAdapter>.Instance);
         var device = NewDevice(port: 80);
 
         var sources = await adapter.GetSourcesAsync(device, CancellationToken.None);
@@ -56,7 +59,8 @@ public sealed class VideoAdapterPortFallbackTests
             : OkStreamChannel());
         var adapter = new StreamDescriptorAdapter(
             Options.Create(new BossCamRuntimeOptions { HttpTimeoutSeconds = 5 }),
-            new HandlerBackedFactory(handler));
+            new HandlerBackedFactory(handler),
+            NullLogger<StreamDescriptorAdapter>.Instance);
         var device = NewDevice(port: RecordedOnvifPort);
 
         var sources = await adapter.GetSourcesAsync(device, CancellationToken.None);

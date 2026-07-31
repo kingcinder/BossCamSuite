@@ -1,5 +1,15 @@
 namespace BossCam.Core;
 
+/// <summary>One camera entry for the <see cref="BossCamRuntimeOptions.AegonLanDevices"/> batch.</summary>
+public sealed class AegonLanDeviceOptions
+{
+    public string IpAddress { get; set; } = string.Empty;
+    public int Port { get; set; } = 80;
+    public string LoginName { get; set; } = "admin";
+    public string Name { get; set; } = string.Empty;
+    public string HardwareModel { get; set; } = string.Empty;
+}
+
 public sealed class BossCamRuntimeOptions
 {
     public string ProtocolAssetsPath { get; set; } = string.Empty;
@@ -18,6 +28,20 @@ public sealed class BossCamRuntimeOptions
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "EseeCloud");
     public string FirmwareArtifactDirectory { get; set; } = string.Empty;
+    /// <summary>
+    /// Extra absolute directories (beyond <see cref="FirmwareArtifactDirectory"/>) that
+    /// <c>POST /api/firmware/register</c> and the firmware-upload maintenance path accept
+    /// firmware files from. Empty means only <see cref="FirmwareArtifactDirectory"/> is allowed.
+    /// Path containment is segment-aware, so a sibling like <c>/opt/firmware-evil</c> cannot
+    /// masquerade as inside <c>/opt/firmware</c>.
+    /// </summary>
+    public string[] FirmwareAllowedDirectories { get; set; } = [];
+    /// <summary>
+    /// Optional list of known cameras registered by <c>POST /api/devices/register-aegon-lan</c>.
+    /// Defaults to empty — the historic hardcoded home-LAN topology was removed from the repo.
+    /// W5C / Lorex passwords can still be supplied per-call to the endpoint.
+    /// </summary>
+    public AegonLanDeviceOptions[] AegonLanDevices { get; set; } = [];
     public string? RemoteCommandEndpoint { get; set; }
     public int DiscoveryTimeoutSeconds { get; set; } = 3;
     public int HttpTimeoutSeconds { get; set; } = 8;

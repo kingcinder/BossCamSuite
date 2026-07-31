@@ -37,8 +37,9 @@ public sealed class LinuxUiFeatureTests : IClassFixture<BossCamWebAppFactory>
     [Fact]
     public async Task Firmware_Register_Accepts_Valid_File()
     {
-        // Create a temporary firmware file
-        var firmwarePath = Path.Combine(_factory.TempRoot, "e2e-firmware.bin");
+        // Create a temporary firmware file inside the configured firmware artifact directory
+        // (the /api/firmware/register endpoint only accepts files inside the allow-listed roots).
+        var firmwarePath = Path.Combine(_factory.TempRoot, "firmware", "e2e-firmware.bin");
         await File.WriteAllBytesAsync(firmwarePath, new byte[] { 0x48, 0x65, 0x6C, 0x6C, 0x6F }); // "Hello"
 
         var res = await _client.PostAsJsonAsync("/api/firmware/register", new
@@ -48,6 +49,20 @@ public sealed class LinuxUiFeatureTests : IClassFixture<BossCamWebAppFactory>
         await E2EHelpers.AssertOkAsync(res, "firmware/register valid");
         var body = await res.Content.ReadAsStringAsync();
         Assert.False(string.IsNullOrWhiteSpace(body));
+    }
+
+    [Fact]
+    public async Task Firmware_Register_Rejects_Path_Outside_Firmware_Directory()
+    {
+        // Exists, but outside the allow-listed firmware roots — must be rejected (400).
+        var outsidePath = Path.Combine(_factory.TempRoot, "outside-firmware.bin");
+        await File.WriteAllBytesAsync(outsidePath, new byte[] { 0x48, 0x69 });
+
+        var res = await _client.PostAsJsonAsync("/api/firmware/register", new
+        {
+            filePath = outsidePath
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
     }
 
     [Fact]

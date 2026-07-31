@@ -1,5 +1,7 @@
 using BossCam.Contracts;
 using BossCam.Core;
+using BossCam.Core.Utilities;
+using Microsoft.Extensions.Options;
 
 namespace BossCam.Service;
 
@@ -15,11 +17,14 @@ public static class ApiFirmwareContractsProtocolsEndpoints
         app.MapGet("/api/firmware/capabilities", async (CapabilityPromotionService capabilityPromotionService, CancellationToken ct) =>
             Results.Ok(await capabilityPromotionService.GetProfilesAsync(ct)));
 
-        app.MapPost("/api/firmware/register", async (FirmwareRegisterRequest request, HttpContext http, FirmwareCatalogService service, ILogger<Program> logger, CancellationToken ct) =>
+        app.MapPost("/api/firmware/register", async (FirmwareRegisterRequest request, HttpContext http, FirmwareCatalogService service, IOptions<BossCamRuntimeOptions> options, ILogger<Program> logger, CancellationToken ct) =>
         {
-            if (string.IsNullOrWhiteSpace(request.FilePath) || !File.Exists(request.FilePath))
+            // Directory allow-list: only firmware inside the configured artifact directory (or
+            // explicit extra roots) may be cataloged. This prevents an attacker with API access
+            // from hashing/reading arbitrary host files by proxy.
+            if (!FirmwarePathPolicy.IsAllowed(request.FilePath, options.Value, out var reason))
             {
-                return Results.BadRequest(new { error = "FilePath must point to an existing firmware file." });
+                return Results.BadRequest(new { error = reason });
             }
 
             logger.LogInformation("firmware/register callerIP={IP} path={Path}", http.Connection.RemoteIpAddress, request.FilePath);

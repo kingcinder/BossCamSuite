@@ -1,6 +1,7 @@
 using BossCam.Contracts;
 using BossCam.Core.Utilities;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace BossCam.Core;
 
@@ -367,6 +368,7 @@ public sealed class DeviceRegistrationService(
     IApplicationStore store,
     IHttpClientFactory httpClientFactory,
     CapabilityProbeService probeService,
+    IOptions<BossCamRuntimeOptions> options,
     ILogger<DeviceRegistrationService> logger)
 {
     public async Task<IReadOnlyCollection<DeviceIdentity>> RegisterManyAsync(IEnumerable<DeviceRegisterRequest> requests, CancellationToken cancellationToken)
@@ -381,21 +383,64 @@ public sealed class DeviceRegistrationService(
     }
 
     /// <summary>
-    /// Registers the known multi-brand cameras on the Aegon LAN (Juan 5523-W, WVC W5C, Lorex/Dahua).
-    /// Credentials for non-default brands should be provided by the caller when needed.
+    /// Registers the operator's known cameras from <see cref="BossCamRuntimeOptions.AegonLanDevices"/>
+    /// (previously hardcoded home-LAN addresses that leaked a private topology into the repo).
+    /// WVC/Lorex passwords may still be supplied per-call and are matched by hardware model.
     /// </summary>
-    public Task<IReadOnlyCollection<DeviceIdentity>> RegisterAegonLanDefaultsAsync(
+    public async Task<IReadOnlyCollection<DeviceIdentity>> RegisterAegonLanDefaultsAsync(
         string? lorexPassword,
         string? wvcPassword,
         CancellationToken cancellationToken)
-        => RegisterManyAsync(
-        [
-            new DeviceRegisterRequest { IpAddress = "10.0.0.30", Port = 80, LoginName = "admin", Password = "", Name = "Cam-30", HardwareModel = "5523-W" },
-            new DeviceRegisterRequest { IpAddress = "10.0.0.170", Port = 80, LoginName = "admin", Password = "", Name = "Driveway", HardwareModel = "5523-W" },
-            new DeviceRegisterRequest { IpAddress = "10.0.0.228", Port = 80, LoginName = "admin", Password = "", Name = "Cam-228", HardwareModel = "5523-W" },
-            new DeviceRegisterRequest { IpAddress = "10.0.0.129", Port = 8899, LoginName = "admin", Password = wvcPassword ?? "", Name = "WVC-W5C", HardwareModel = "W5C" },
-            new DeviceRegisterRequest { IpAddress = "10.0.0.128", Port = 80, LoginName = "admin", Password = lorexPassword ?? "", Name = "Lorex", HardwareModel = "Lorex" }
-        ], cancellationToken);
+    {
+        var devices = options.Value.AegonLanDevices;
+        if (devices.Length == 0)
+        {
+            logger.LogWarning(
+                "register-aegon-lan called but BossCam:AegonLanDevices is empty; nothing registered. Add entries in appsettings to enable this convenience batch.");
+            return [];
+        }
+
+        return await RegisterManyAsync(BuildAegonLanRequests(devices, lorexPassword, wvcPassword), cancellationToken);
+    }
+
+    /// <summary>Maps configured <see cref="AegonLanDeviceOptions"/> entries to register requests,
+    /// applying the per-call brand passwords by hardware model. Entries without an IP are skipped.</summary>
+    internal static IReadOnlyCollection<DeviceRegisterRequest> BuildAegonLanRequests(
+        IReadOnlyCollection<AegonLanDeviceOptions> devices,
+        string? lorexPassword,
+        string? wvcPassword)
+    {
+        var requests = new List<DeviceRegisterRequest>();
+        foreach (var device in devices)
+        {
+            if (string.IsNullOrWhiteSpace(device.IpAddress))
+            {
+                continue;
+            }
+
+            requests.Add(new DeviceRegisterRequest
+            {
+                IpAddress = device.IpAddress,
+                Port = device.Port > 0 ? device.Port : 80,
+                LoginName = string.IsNullOrWhiteSpace(device.LoginName) ? "admin" : device.LoginName,
+                Password = ResolveBrandPassword(device.HardwareModel, lorexPassword, wvcPassword),
+                Name = string.IsNullOrWhiteSpace(device.Name) ? null : device.Name,
+                HardwareModel = string.IsNullOrWhiteSpace(device.HardwareModel) ? null : device.HardwareModel
+            });
+        }
+
+        return requests;
+    }
+
+    private static string? ResolveBrandPassword(string? hardwareModel, string? lorexPassword, string? wvcPassword)
+    {
+        if (hardwareModel?.Contains("W5C", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            return wvcPassword;
+        }
+
+        return hardwareModel?.Contains("Lorex", StringComparison.OrdinalIgnoreCase) == true ? lorexPassword : null;
+    }
 
     public async Task<DeviceIdentity> RegisterAsync(DeviceRegisterRequest request, CancellationToken cancellationToken)
     {

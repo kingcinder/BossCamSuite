@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using BossCam.Contracts;
+using BossCam.Core.Utilities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -113,8 +114,13 @@ public sealed class SettingsService(
         }
 
         var snapshot = await adapter.ReadAsync(device, cancellationToken);
-        await store.SaveSettingsSnapshotAsync(snapshot, cancellationToken);
-        return snapshot;
+        // Never persist or echo credentials: a custom adapter may embed secret-bearing fields
+        // (e.g. the remote-command envelope used to carry device.Password) inside its groups.
+        // Redact at this boundary so both the SQLite settings-snapshot table and the /settings
+        // API response stay clean regardless of adapter behaviour.
+        var redacted = RedactSnapshot(snapshot);
+        await store.SaveSettingsSnapshotAsync(redacted, cancellationToken);
+        return redacted;
     }
 
     public Task<SettingsSnapshot?> GetLastSnapshotAsync(Guid deviceId, CancellationToken cancellationToken)
@@ -221,14 +227,23 @@ public sealed class SettingsService(
             PostWriteValue = postReadResult.Response?.DeepClone()
         };
 
+        // The result is returned to the API caller as well as audited — redact any secret-bearing
+        // fields in the response so a relay/adapter echoing credentials never leaks over the wire.
+        finalResult = finalResult with
+        {
+            Response = SensitiveDataRedactor.Redact(finalResult.Response),
+            PreWriteValue = SensitiveDataRedactor.Redact(finalResult.PreWriteValue),
+            PostWriteValue = SensitiveDataRedactor.Redact(finalResult.PostWriteValue)
+        };
+
         await store.AddAuditEntryAsync(new WriteAuditEntry
         {
             DeviceId = device.Id,
             AdapterName = adapter.Name,
             Operation = plan.Method,
             Endpoint = plan.Endpoint,
-            RequestContent = RedactPayload(plan.Payload, plan.SensitivePaths)?.ToJsonString(),
-            ResponseContent = new JsonObject
+            RequestContent = SensitiveDataRedactor.Redact(RedactPayload(plan.Payload, plan.SensitivePaths))?.ToJsonString(),
+            ResponseContent = SensitiveDataRedactor.Redact(new JsonObject
             {
                 ["write"] = finalResult.Response?.DeepClone(),
                 ["preRead"] = preReadResult.Response?.DeepClone(),
@@ -237,7 +252,7 @@ public sealed class SettingsService(
                 ["postReadVerified"] = postReadVerified,
                 ["rollbackAttempted"] = rollbackAttempted,
                 ["rollbackSucceeded"] = rollbackSucceeded
-            }.ToJsonString(),
+            })?.ToJsonString(),
             Success = finalResult.Success,
             SemanticStatus = finalResult.SemanticStatus,
             BlockReason = finalResult.Success ? null : finalResult.Message
@@ -282,14 +297,14 @@ public sealed class SettingsService(
             AdapterName = adapter.Name,
             Operation = operation.ToString(),
             Endpoint = operation.ToString(),
-            RequestContent = payload?.ToJsonString(),
-            ResponseContent = result.Response?.ToJsonString(),
+            RequestContent = SensitiveDataRedactor.Redact(payload)?.ToJsonString(),
+            ResponseContent = SensitiveDataRedactor.Redact(result.Response)?.ToJsonString(),
             Success = result.Success,
             SemanticStatus = result.Success ? SemanticWriteStatus.AcceptedChanged : SemanticWriteStatus.Rejected,
             BlockReason = result.Success ? null : result.Message
         }, cancellationToken);
 
-        return result;
+        return result with { Response = SensitiveDataRedactor.Redact(result.Response) };
     }
 
     private async Task<IControlAdapter?> ResolveAdapterAsync(DeviceIdentity device, string? requestedAdapterName, CancellationToken cancellationToken)
@@ -339,6 +354,22 @@ public sealed class SettingsService(
             device.IpAddress,
             requestedAdapterName ?? "(none)");
         return null;
+    }
+
+    private static SettingsSnapshot RedactSnapshot(SettingsSnapshot snapshot)
+    {
+        var groups = snapshot.Groups
+            .Select(group => group with
+            {
+                RawPayload = SensitiveDataRedactor.Redact(group.RawPayload),
+                Values = group.Values.ToDictionary(
+                    static pair => pair.Key,
+                    pair => pair.Value with { Value = SensitiveDataRedactor.Redact(pair.Value.Value) },
+                    StringComparer.OrdinalIgnoreCase)
+            })
+            .ToList();
+
+        return snapshot with { Groups = groups };
     }
 
     private static JsonObject? RedactPayload(JsonObject? payload, IReadOnlyCollection<string> sensitivePaths)

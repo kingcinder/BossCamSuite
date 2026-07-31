@@ -69,7 +69,10 @@ public sealed class OwnedRemoteCommandAdapter(
     {
         var envelope = BuildEnvelope(device, "get", null, null);
         var response = await SendEnvelopeAsync(envelope, cancellationToken);
-        var envelopeNode = JsonNode.Parse(JsonSerializer.Serialize(envelope));
+        // The live envelope carries device.Password in Authorization.Password (required for the
+        // outbound relay call). Never let it reach the settings snapshot: it is persisted to
+        // SQLite by SettingsService.ReadAsync and echoed to the API caller on every settings read.
+        var envelopeNode = JsonNode.Parse(JsonSerializer.Serialize(RedactEnvelopeForDisplay(envelope)));
         var group = new SettingGroup
         {
             Name = "RemoteCommand",
@@ -167,7 +170,8 @@ public sealed class OwnedRemoteCommandAdapter(
     {
         if (string.IsNullOrWhiteSpace(options.Value.RemoteCommandEndpoint))
         {
-            return new RemoteCommandResult { Success = false, Message = "BossCam:RemoteCommandEndpoint is not configured.", Response = JsonNode.Parse(JsonSerializer.Serialize(envelope)) };
+            // Never echo the live envelope (with its password) back to the caller — redact first.
+            return new RemoteCommandResult { Success = false, Message = "BossCam:RemoteCommandEndpoint is not configured.", Response = JsonNode.Parse(JsonSerializer.Serialize(RedactEnvelopeForDisplay(envelope))) };
         }
 
         using var client = httpClientFactory.CreateClient("default");
@@ -195,6 +199,15 @@ public sealed class OwnedRemoteCommandAdapter(
             return new RemoteCommandResult { Success = false, Endpoint = options.Value.RemoteCommandEndpoint, Message = ex.Message };
         }
     }
+
+    /// <summary>
+    /// Returns a copy of the envelope safe for display/persistence: the Authorization password is
+    /// stripped so it never lands in settings snapshots, API responses, or audit entries. The live
+    /// envelope passed to <see cref="SendEnvelopeAsync"/> is untouched and still carries the
+    /// credential for the outbound relay call.
+    /// </summary>
+    private static RemoteCommandEnvelope RedactEnvelopeForDisplay(RemoteCommandEnvelope envelope)
+        => envelope with { Authorization = envelope.Authorization with { Password = null } };
 }
 
 public sealed class NativeFallbackAdapter(

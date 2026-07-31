@@ -596,14 +596,17 @@ public sealed class LanPrivateVendorHttpAdapter(
     private async Task<MaintenanceResult> ExecuteFirmwareUploadAsync(DeviceIdentity device, JsonObject? payload, CancellationToken cancellationToken)
     {
         var filePath = payload?["filePath"]?.GetValue<string>();
-        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        // Directory allow-list: never upload an arbitrary caller-supplied path to the camera.
+        if (!FirmwarePathPolicy.IsAllowed(filePath, Options, out var reason))
         {
-            return new MaintenanceResult { Success = false, AdapterName = Name, Operation = MaintenanceOperation.FirmwareUpload, Message = "Payload must contain an existing filePath." };
+            return new MaintenanceResult { Success = false, AdapterName = Name, Operation = MaintenanceOperation.FirmwareUpload, Message = $"Firmware upload rejected: {reason}" };
         }
 
+        // IsAllowed returning true guarantees filePath is non-null and exists; the compiler can't
+        // see the correlation, so forgive the null here.
         using var content = new MultipartFormDataContent();
-        var stream = File.OpenRead(filePath);
-        content.Add(new StreamContent(stream), "file", Path.GetFileName(filePath));
+        var stream = File.OpenRead(filePath!);
+        content.Add(new StreamContent(stream), "file", Path.GetFileName(filePath!));
         var upload = await SendMultipartAsync(device, "/cgi-bin/upload.cgi", content, cancellationToken);
         var progress = await SendAsync(device, "/cgi-bin/upgrade_rate.cgi?cmd=upgrade_rate", "GET", null, cancellationToken);
         return new MaintenanceResult
