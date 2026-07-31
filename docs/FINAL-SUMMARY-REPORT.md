@@ -230,6 +230,13 @@ closed by the July 31 passes:
 | **5** | Docs drift | ✅ Fixed | This report refreshed to 203 unit / 104 E2E / 42 Avalonia with the July 31 addendum; README gained the connectivity-health semantics section, the port-fallback `Test Index` rows, and the corrected 28-class unit count. |
 | **6** | SPA api.ts surface | ✅ Already satisfied | `applyTypedField`, `apply-batch`, and `recordingExport` methods all exist in `src/BossCam.ManagementUI/src/lib/api.ts` and are consumed by `FeaturesPanel.svelte` (apply) and `RecordPanel.svelte` (export). |
 
+> **Post-review addition (parity close-out):** the SPA is now explicitly documented
+> as the **primary operator console** in the README (served at the service root,
+> browser-only), and a new **UI parity matrix (SPA ↔ Avalonia)** section tracks
+> Features-apply and recordings/clip-export parity between the web console and the
+> Avalonia desktop frontend — both thin clients over the same `BossCam.Service`
+> REST routes. See `README.md`.
+
 ## Stability Pass (commits `8ba4a38` → `9e113a0`)
 
 After the review items above, a full stability pass added camera-connectivity

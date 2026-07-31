@@ -151,6 +151,14 @@ sudo docker compose up -d
 
 ## Svelte Management UI (development)
 
+> **Primary operator console.** The Svelte 5 SPA is the suite's **primary UI**: it is
+> served automatically by the service at `http://127.0.0.1:5317/`, requires nothing
+> but a browser, and carries the full operator surface (live views, features apply,
+> image/stream/network settings, recordings + clip export, highlights, storage
+> paths, firmware). The Avalonia desktop app is a companion native frontend over the
+> same HTTP API — see the
+> [UI parity matrix](#ui-parity-matrix-spa--avalonia) below.
+
 ```bash
 cd src/BossCam.ManagementUI
 npm install
@@ -305,6 +313,52 @@ Unit + ViewModel tests live in `src/BossCam.Desktop.Avalonia.Tests/` (currently 
 ```bash
 dotnet test src/BossCam.Desktop.Avalonia.Tests/BossCam.Desktop.Avalonia.Tests.csproj -c Release
 ```
+
+---
+
+## UI parity matrix (SPA ↔ Avalonia)
+
+The Svelte SPA is the **primary operator console** (served at the service root,
+`http://127.0.0.1:5317/`, browser-only, no install). The Avalonia desktop app is a
+companion native frontend that wraps the same local `BossCam.Service` HTTP API —
+nothing the SPA or GUI does is unique to either surface at the backend level.
+
+The matrix below documents **Features apply** and **recordings / clip export**
+parity (the two workflows the July 31 review focused on).
+
+### Features apply
+
+| Capability | SPA (primary) | Avalonia desktop |
+|---|---|---|
+| Control-point inventory | ✅ `FeaturesPanel` (features tab) | ✅ `FeaturesViewModel` (Features section) |
+| Quick Probe (normalize + probe) | ✅ | ✅ |
+| Toggle apply → typed settings | ✅ `applyToggle` → `api.applyTypedField` | ✅ `FeatureControlRow.ApplyAsync` → `ApplyTypedFieldAsync` |
+| Slider apply | ✅ `applySlider` | ✅ |
+| Enum/dropdown apply | ⚠️ `applyEnum` wired, but the eligible-widget filter admits Toggle/Slider only | ✅ `Dropdown` widget |
+| Numeric / text inputs | ❌ not interactive (falls back to “no interactive control”) | ✅ `NumericInput` / `TextInput` widgets |
+| Apply-batch | ✅ client `applyTypedBatch` | ✅ `ApplyTypedBatchAsync` |
+| Expert-override gating | ✅ per-item + global reveal | ✅ section-level `ExpertOverride` switch |
+| Write-verify gating (only `Writable` enabled) | ✅ | ✅ (`IsEnabled` gate) |
+| Editors seeded from live camera values | ✅ | ✅ |
+| In-flight apply feedback | ✅ spinner + toast | ✅ `IsApplying` + status text |
+
+### Recordings & clip export
+
+| Capability | SPA (primary) | Avalonia desktop |
+|---|---|---|
+| Start selected / start-all / stop-all / stop-job | ✅ `RecordPanel` | ✅ `RecordingsViewModel` |
+| Index refresh + segment listing | ✅ | ✅ |
+| Clip export (device + time window + path) | ✅ `exportClip` → `api.recordingExport` | ✅ `ExportClipAsync` |
+| Re-encode fallback surfaced | ✅ (`reEncoded` in result) | ✅ (`ReEncoded` in result) |
+| Download exported clip | ✅ inline `recordingDownloadUrl` link | ⚠️ API client exposes `GetRecordingDownloadUrl`; Recordings section reports the output path (Playback section hosts clip downloads) |
+| Housekeeping / reconcile / stall-check | ❌ not exposed in the SPA | ✅ dedicated buttons (`🧹 Housekeeping`, `♻ Reconcile`, `🛑 Stall Check`) |
+
+> Both surfaces call the same REST routes and consume the same `WriteResult` /
+> `ClipExportResult` payloads; the GUI additionally renders explainer popups on
+> every control. Where a behavior differs (numeric/text editors, housekeeping /
+> reconcile / stall-check, and the clip-download link are GUI-only today), it is a
+> UI-surface choice, not an API gap — the SPA `api.ts` and the Avalonia
+> `IBossCamApiClient` are thin clients over the same `BossCam.Service` endpoints.
 
 ---
 
