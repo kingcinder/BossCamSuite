@@ -43,7 +43,7 @@ public sealed class EndpointTruthLiveBuilder(IFfprobePlaybackProbe ffprobe, ILog
             var credentialed = BuildCredentialedRtspUri(stream.Value, input.Device.LoginName, input.Device.Password);
             var probed = await ffprobe.ProbeAsync(stream.Key, credentialed, input.Device.LoginName, input.Device.Password, cancellationToken);
             streams.Add(probed);
-            logger.LogInformation("ProjectionUpdated profile={ProfileToken} uri={Uri} probedCodec={Codec}", probed.ProfileToken, probed.Uri, probed.Codec ?? string.Empty);
+            logger.LogInformation("ProjectionUpdated profile={ProfileToken} uri={Uri} probedCodec={Codec}", probed.ProfileToken, SanitizeRtspUri(probed.Uri), probed.Codec ?? string.Empty);
         }
 
         return new CameraEndpointTruthProfile
@@ -70,6 +70,21 @@ public sealed class EndpointTruthLiveBuilder(IFfprobePlaybackProbe ffprobe, ILog
         }
 
         var builder = new UriBuilder(parsed) { UserName = username, Password = password ?? string.Empty };
+        return builder.Uri.ToString();
+    }
+
+    private static string SanitizeRtspUri(string uri)
+    {
+        if (!Uri.TryCreate(uri, UriKind.Absolute, out var parsed))
+        {
+            return uri;
+        }
+
+        var builder = new UriBuilder(parsed)
+        {
+            UserName = string.Empty,
+            Password = string.Empty
+        };
         return builder.Uri.ToString();
     }
 }
@@ -189,7 +204,7 @@ public sealed class FfprobePlaybackProbe(IOptions<BossCamRuntimeOptions> options
             return new RtspPlaybackProbeMetadata
             {
                 ProfileToken = profileToken,
-                Uri = uri,
+                Uri = EndpointTruthLiveBuilder.SanitizeRtspUri(uri),
                 State = CameraEndpointVerificationState.Verified,
                 CredentialState = CameraCredentialState.Verified,
                 VerifiedUsername = username,
