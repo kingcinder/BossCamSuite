@@ -3,7 +3,7 @@
 > **Date:** July 30, 2026  
 > **Repository:** `github.com/kingcinder/BossCamSuite`  
 > **Branch:** `main`  
-> **Commits:** `d4d9644` → `fb053fd` (7 commits)
+> **Commits:** `d4d9644` → `9e113a0` (9 commits)
 
 ---
 
@@ -184,18 +184,39 @@ const connection = new HubConnectionBuilder()
 
 ## E2E Test Suite Results
 
-All **93 E2E tests pass** across 8 test classes:
+All **100 E2E tests pass** (offline `BOSSCAM_E2E_LIVE=0` **and** live mode):
 
 | Test Suite | Tests | Status |
 |---|---|---|
 | `ApiRouteMatrixTests` | 46 | ✅ Passed |
-| `LanAuthE2ETests` | 17 | ✅ Passed |
+| `LanAuthE2ETests` + `LanBound*E2ETests` | 24 | ✅ Passed |
 | `LanBoundFailFastE2ETests` | 1 | ✅ Passed |
 | `LinuxUiFeatureTests` | 11 | ✅ Passed |
 | `LiveCameraExhaustiveTests` | 5 | ✅ Passed |
 | `SimulatedLanCleanupTests` | 2 | ✅ Passed |
 | `UbuntuPlatformAndStaticUiTests` | 11 | ✅ Passed |
-| **Total** | **93** | **✅ All Passed** |
+| **Total** | **100** | **✅ All Passed** |
+
+Unit suites: **BossCam.Tests 150/150** (incl. new `RecordingResilienceTests` and
+`DependencyInjectionCycleTests`), **BossCam.Desktop.Avalonia.Tests 17/17**.
+
+## Stability Pass (commits `8ba4a38` → `9e113a0`)
+
+After the review items above, a full stability pass added camera-connectivity
+resilience and closed the loop with regression tests:
+
+| Area | Work |
+|---|---|
+| **Transport failover** | `TransportFailoverService` probes RTSP main → sub → ONVIF → HTTP/FLV → RTMP → snapshot → P2P in priority order with a 4s per-transport timeout; `TransportBroker` falls back to it when adapters yield nothing. |
+| **DI cycle fix** | `TransportBroker` ↔ `TransportFailoverService` singleton circular dependency broke `ValidateOnBuild` at host startup (all 100 E2E tests failed). `TransportBroker` now resolves failover lazily via `IServiceProvider`; an `AsyncLocal` reentrancy guard also fixes a latent infinite-recursion (broker → failover → broker) for sourceless devices. |
+| **Connectivity watchdog** | `ConnectivityWatchdogWorker` periodically snapshots device health (`Healthy/Degraded/Offline`), attempts reconnects, and broadcasts via SignalR; `ConnectionDiagnosticService` + `/api/devices/{id}/network/recovery` provide diagnosis. |
+| **Recording R1/R4** | Jobs persisted on start/stop; `ReconcilePersistedJobsAsync` re-attaches live PIDs (with PID-reuse guard) or closes dead jobs; `CheckStalledJobsAsync` stops/optionally restarts stalled pipelines; `RecordingLifecycleWorker` owns reconcile + housekeeping + stall checks. |
+| **Recording audio** | Direct FFmpeg pipeline maps audio (`-map 0:a:0? -c:a copy`); snapshot pipeline stays video-only by design. |
+| **Avalonia test isolation** | `BossCam.Desktop.Avalonia.Tests` moved to its own directory with a **unique `.sln` GUID** (previously duplicated `BossCam.E2E`'s), removing shared-`obj/` fragility and a shadowing `Directory.Build.props`. |
+| **favicon durability** | Moved to `ManagementUI/public/` so Vite `emptyOutDir` no longer wipes `wwwroot/favicon.svg`. |
+| **Stale test repair** | `LanBoundAuthE2ETests` discovers real assets instead of `/app.js`; `OperatorRuntimeRepairTests` accepts `BossCamSuite.Linux.sln`. |
+
+Full detail: `docs/reports/2026-07-30-transport-failover-di-fix-report.md`.
 
 ---
 
@@ -242,7 +263,9 @@ SqliteApplicationStore
 | Endpoint files | 1 | 9 |
 | `new HttpClient()` sites | 24 | 3 (intentional: Digest auth needs per-call handler) |
 | Build warnings | Several | 0 (`TreatWarningsAsErrors=true`) |
-| E2E tests passing | ~85/91 | **93/93** |
+| E2E tests passing | ~85/91 | **100/100** |
+| Unit tests passing | — | **150/150** (BossCam.Tests) + **17/17** (Avalonia) |
+| DI host startup | Circular-dependency crash | **Clean** (ValidateOnBuild regression test added) |
 | Password exposure | Plaintext in serialized JSON | AES-GCM/DPAPI encrypted at rest |
 | ONVIF ApplyAsync | Stub | Real `SetImagingSettings` SOAP |
 | Fixture cleanup | None | Age-based + excess-limit deletion |
