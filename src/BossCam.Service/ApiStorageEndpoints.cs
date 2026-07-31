@@ -2,6 +2,7 @@ using System.Text.Json;
 using BossCam.Contracts;
 using BossCam.Core;
 using BossCam.Core.Utilities;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace BossCam.Service;
@@ -14,7 +15,7 @@ public static class ApiStorageEndpoints
 {
     public static WebApplication MapStorageEndpoints(this WebApplication app)
     {
-        app.MapGet("/api/storage/paths", () => Results.Ok(LoadMediaStoragePaths()));
+        app.MapGet("/api/storage/paths", () => Results.Ok(LoadMediaStoragePaths(app.Logger)));
 
         app.MapPost("/api/storage/paths", (MediaStoragePaths paths, IOptions<BossCamRuntimeOptions> runtime) =>
         {
@@ -51,7 +52,7 @@ public static class ApiStorageEndpoints
                 return Results.NotFound(new { error = "Device not found." });
             }
 
-            var paths = LoadMediaStoragePaths();
+            var paths = LoadMediaStoragePaths(app.Logger);
             Directory.CreateDirectory(paths.Snapshots);
 
             var user = string.IsNullOrWhiteSpace(device.LoginName) ? "admin" : device.LoginName;
@@ -145,26 +146,33 @@ public static class ApiStorageEndpoints
         };
     }
 
-    private static MediaStoragePaths LoadMediaStoragePaths()
+    private static MediaStoragePaths LoadMediaStoragePaths(ILogger logger)
+        => LoadMediaStoragePaths(logger, MediaStorageConfigPath());
+
+    /// <summary>Internal for unit tests (InternalsVisibleTo BossCam.Tests) so a corrupt
+    /// config file can be asserted against without touching the real operator config.</summary>
+    internal static MediaStoragePaths LoadMediaStoragePaths(ILogger logger, string configPath)
     {
-        var path = MediaStorageConfigPath();
-        if (!File.Exists(path))
+        if (!File.Exists(configPath))
         {
             var defaults = DefaultMediaStoragePaths();
             Directory.CreateDirectory(defaults.ContinuousRecordings);
             Directory.CreateDirectory(defaults.Highlights);
             Directory.CreateDirectory(defaults.Snapshots);
-            File.WriteAllText(path, JsonSerializer.Serialize(defaults, new JsonSerializerOptions { WriteIndented = true }));
+            File.WriteAllText(configPath, JsonSerializer.Serialize(defaults, new JsonSerializerOptions { WriteIndented = true }));
             return defaults;
         }
 
         try
         {
-            var loaded = JsonSerializer.Deserialize<MediaStoragePaths>(File.ReadAllText(path));
+            var loaded = JsonSerializer.Deserialize<MediaStoragePaths>(File.ReadAllText(configPath));
             return loaded ?? DefaultMediaStoragePaths();
         }
-        catch
+        catch (Exception ex)
         {
+            // A corrupt/unreadable media-storage.json silently resets storage paths to defaults,
+            // which would redirect recordings elsewhere without the operator noticing — warn.
+            logger.LogWarning(ex, "Failed to read media storage config at {Path}; falling back to defaults", configPath);
             return DefaultMediaStoragePaths();
         }
     }

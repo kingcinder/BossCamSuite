@@ -125,8 +125,12 @@ public sealed class TransportFailoverService(
 
             return false;
         }
-        catch
+        catch (Exception ex)
         {
+            // Per-transport probe failures are expected during failover (a dead camera fails
+            // several candidates) — Debug so the chain outcome stays traceable without
+            // spamming at Warning on every miss.
+            logger.LogDebug(ex, "Transport reachability probe failed for {Device} kind={Kind} url={Url}", device.DisplayName, source.Kind, TruncateCredentials(source.Url));
             return false;
         }
     }
@@ -161,8 +165,11 @@ public sealed class TransportFailoverService(
             // P2P / other: assume potentially working if listed
             return source;
         }
-        catch
+        catch (Exception ex)
         {
+            // Probe failures per transport are expected in the failover chain; Debug-log with
+            // credentials truncated so the failing candidate is identifiable in the logs.
+            logger.LogDebug(ex, "Transport probe failed for {Device} kind={Kind} url={Url}", device.DisplayName, source.Kind, TruncateCredentials(source.Url));
             return null;
         }
     }

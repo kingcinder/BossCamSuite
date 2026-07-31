@@ -182,8 +182,11 @@ public sealed class RecordingService(
                 plainSnapshot = b.Uri.ToString();
             }
         }
-        catch
+        catch (Exception ex)
         {
+            // Malformed snapshot URL from discovery — fall back to the raw URL (credentials
+            // still flow through -u), but trace it so a bad source isn't silently misrouted.
+            logger.LogDebug(ex, "Failed to strip credentials from snapshot URL for {Device}", device.DisplayName);
         }
 
         Process process;
@@ -900,8 +903,10 @@ public sealed class RecordingService(
     /// PR-R2: Best-effort ffprobe duration probe. Returns null on failure.
     /// Uses a lightweight ffprobe call that reads only format duration.
     /// Tries "ffprobe" on PATH first, then falls back to sibling of ffmpeg binary.
+    /// Internal for unit tests (InternalsVisibleTo BossCam.Tests) so the Debug log
+    /// on probe failure can be asserted with a captured logger.
     /// </summary>
-    private static async Task<double?> ProbeDurationAsync(string filePath, string? ffmpegPath, CancellationToken cancellationToken)
+    internal async Task<double?> ProbeDurationAsync(string filePath, string? ffmpegPath, CancellationToken cancellationToken)
     {
         if (ffmpegPath is null) return null;
 
@@ -936,9 +941,11 @@ public sealed class RecordingService(
                 return duration;
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // ffprobe failed — fall back to segment-seconds estimate
+            // ffprobe failed — fall back to segment-seconds estimate. Debug so a missing or
+            // misconfigured ffprobe shows up in logs instead of silently degrading every index.
+            logger.LogDebug(ex, "ffprobe duration probe failed for {File}", filePath);
         }
         return null;
     }
@@ -1140,8 +1147,11 @@ public sealed class RecordingService(
                 logger.LogDebug("ffmpeg stderr pid={Pid}: {Stderr}", processId, stderr.Length > 2000 ? stderr[^2000..] : stderr);
             }
         }
-        catch
+        catch (Exception ex)
         {
+            // Losing the stderr drain hides ffmpeg's diagnostics channel (auth failures, codec
+            // errors). Never take down the recording, but trace the drain failure.
+            logger.LogDebug(ex, "Failed to drain ffmpeg stderr pid={Pid}", processId);
         }
     }
 
@@ -1209,7 +1219,7 @@ public sealed class RecordingService(
         return false;
     }
 
-    private static bool TryDelete(FileInfo info, ref int filesDeleted, ref long bytesDeleted)
+    private bool TryDelete(FileInfo info, ref int filesDeleted, ref long bytesDeleted)
     {
         try
         {
@@ -1219,8 +1229,11 @@ public sealed class RecordingService(
             bytesDeleted += length;
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            // A file that can't be deleted (in use, permissions) silently under-delivers on
+            // retention policy — Debug so housekeeping shortfalls are traceable.
+            logger.LogDebug(ex, "Housekeeping could not delete {File}", info.FullName);
             return false;
         }
     }

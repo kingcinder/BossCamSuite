@@ -174,7 +174,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, ISectionView
                 DeviceInfoText += $"\nMain RTSP: {main}";
             }
         }
-        catch { /* non-critical */ }
+        catch
+        {
+            // Optional enrichment only — GetLiveInfoAsync already returns null on failure,
+            // so the live view must not break if live-info is temporarily unavailable.
+        }
 
         _liveTimer?.Dispose();
         _liveTimer = new Timer(async _ =>

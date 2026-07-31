@@ -276,8 +276,11 @@ public sealed class ConnectivityWatchdogWorker(
             // Any HTTP response (even 401) means the device is reachable
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            // Per-probe failures are expected on offline devices; Debug keeps the watchdog's
+            // probe traffic traceable without Warning-spam on every dead camera.
+            logger.LogDebug(ex, "Quick HTTP probe failed for {Ip}:{Port}", ip, port);
             return false;
         }
     }

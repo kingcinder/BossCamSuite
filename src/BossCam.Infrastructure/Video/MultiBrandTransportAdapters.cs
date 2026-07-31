@@ -364,8 +364,11 @@ public sealed class DahuaLorexControlAdapter(
             return html.Contains("flirLorex", StringComparison.OrdinalIgnoreCase)
                 || html.Contains("WEB SERVICE", StringComparison.OrdinalIgnoreCase);
         }
-        catch
+        catch (Exception ex)
         {
+            // Web-shell probe failure is an expected probe miss on non-Lorex cameras; Debug so
+            // the brand-detection fallback is traceable without spamming at Warning.
+            logger.LogDebug(ex, "Lorex web-shell probe failed for {Device} ({Ip}); falling back to brand detection", device.DisplayName, device.IpAddress);
             return MultiBrandHighResTransportAdapter.DetectBrand(device) == CameraBrand.DahuaLorex;
         }
     }

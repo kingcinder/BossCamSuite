@@ -70,6 +70,77 @@ dotnet run --project src/BossCam.Service/BossCam.Service.csproj
 
 ---
 
+## Operator Configuration (`BossCam:` appsettings keys)
+
+Two `BossCam:` keys in `src/BossCam.Service/appsettings.json` (or your
+systemd/`appsettings.Linux.json` override) govern security- and
+topology-sensitive behavior. Both default to **empty** and are opt-in.
+
+### `BossCam:FirmwareAllowedDirectories`
+
+Directory allow-list for firmware files. Both the **SPA** (`FirmwarePanel`
+"Register" → `api.firmwareRegister(filePath)` → `POST /api/firmware/register`)
+and the **Avalonia GUI** (Firmware section → `FirmwareViewModel.RegisterFirmwareAsync`)
+let an operator submit a firmware path that is then uploaded to a camera's
+CGI. Instead of accepting any existing file the caller names (an exfiltration-
+by-proxy vector), the service only accepts files that resolve inside a
+configured firmware root:
+
+- If `FirmwareAllowedDirectories` is **empty**, the only allowed root is
+  `BossCam:FirmwareArtifactDirectory` (default `~/.local/share/BossCamSuite/firmware`).
+- When set, the list **replaces** `FirmwareArtifactDirectory` as the allowed
+  roots — include it too if you want the default root to stay accepted.
+- Containment is segment-aware (`/opt/firmware-evil` cannot masquerade as
+  inside `/opt/firmware`) and cross-drive paths are rejected.
+
+```json
+{
+  "BossCam": {
+    "FirmwareArtifactDirectory": "/var/bosscam/firmware",
+    "FirmwareAllowedDirectories": [
+      "/var/bosscam/firmware",
+      "/opt/vendor-fw"
+    ]
+  }
+}
+```
+
+With this config, an operator can point either UI's firmware register at
+`/var/bosscam/firmware/NVR50_8.1.8.bin` or `/opt/vendor-fw/DH_IPC-HFW.bin`;
+anything outside those roots is rejected (`Firmware upload rejected: ...`).
+
+### `BossCam:AegonLanDevices`
+
+Config-driven camera list for the one-shot **Aegon bulk import** batch. The
+historic hardcoded home-LAN topology (real IPs + camera labels) was removed
+from the repo; the batch now registers whatever is listed here. Both the
+**SPA** (Devices → Aegon bulk import → `api.registerAegonLan(lorex, wvc)` →
+`POST /api/devices/register-aegon-lan`) and the **Avalonia GUI** (Devices
+section → Aegon bulk import → `DevicesViewModel` →
+`RegisterAegonLanAsync(lorexPassword, wvcPassword)`) surface the same batch.
+
+```json
+{
+  "BossCam": {
+    "AegonLanDevices": [
+      { "IpAddress": "192.168.1.20", "Port": 80,     "LoginName": "admin", "Name": "Driveway", "HardwareModel": "5523-W" },
+      { "IpAddress": "192.168.1.21", "Port": 8899,   "LoginName": "admin", "Name": "Porch",    "HardwareModel": "W5C" }
+    ]
+  }
+}
+```
+
+Entry fields: `IpAddress` (required; entries without one are skipped),
+`Port` (default `80`; recorded-port-first → `:80` fallback still applies),
+`LoginName` (default `admin`), `Name`, and `HardwareModel`. The optional
+per-call `lorexPassword` / `wvcPassword` are matched to each entry by
+`HardwareModel` — a model containing **`W5C`** gets the WVC password, one
+containing **`Lorex`** gets the Lorex password; other models register
+passwordless. If `AegonLanDevices` is empty (the default), the batch returns
+`[]` and logs a warning pointing here — add entries to enable it.
+
+---
+
 ## LAN Auth Token (host-aware gate)
 
 When binding to a LAN address, a bearer token is **required** — the service refuses to start without one.

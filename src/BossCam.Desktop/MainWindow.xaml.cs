@@ -3081,6 +3081,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 }
                 catch
                 {
+                    // The camera returned a userList value that isn't valid JSON — fall back to
+                    // showing the raw editable value so the operator still sees the account list
+                    // (marked "Unparsed") instead of losing it entirely.
                     UserList.Add(users.EditableValue);
                     UserAccounts.Add(new UserAccountRow
                     {
@@ -3735,6 +3738,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             }
             catch
             {
+                // Non-JSON camera responses are normal — same tolerance as
+                // HttpControlAdapters.TryParseNode; fall through to the string/number handling below.
             }
         }
 
@@ -3762,6 +3767,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             }
             catch
             {
+                // Not a valid JSON object — the caller treats a null return as "no object".
                 return null;
             }
         }

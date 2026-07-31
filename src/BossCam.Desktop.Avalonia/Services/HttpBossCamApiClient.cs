@@ -260,6 +260,9 @@ public sealed class HttpBossCamApiClient : IBossCamApiClient
         }
         catch
         {
+            // Polled on a 2s timer by the live view — a failed fetch simply means "no new
+            // frame" this tick. Logging every miss would spam the 2s loop; the caller
+            // already treats null as "no frame" and the GUI state is unchanged.
             return null;
         }
     }
@@ -272,6 +275,8 @@ public sealed class HttpBossCamApiClient : IBossCamApiClient
         }
         catch
         {
+            // Optional live-info enrichment only: the caller guards with HasValue, so null
+            // just means the RTSP line is omitted from the info panel — never fatal.
             return null;
         }
     }
@@ -291,6 +296,8 @@ public sealed class HttpBossCamApiClient : IBossCamApiClient
         }
         catch
         {
+            // The failure is surfaced to the user by the caller (SnapshotAsync maps false to
+            // "Snapshot failed" in the status bar), so returning false is sufficient here.
             return false;
         }
     }

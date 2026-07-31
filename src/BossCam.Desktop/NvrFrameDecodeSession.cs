@@ -108,6 +108,9 @@ public sealed class NvrFrameDecodeSession : IDisposable
             }
             catch
             {
+                // Best-effort teardown: the ffmpeg process may already have exited (race with
+                // the Exited handler); Kill/WaitForExit failures here are safe to ignore during
+                // Stop()/Dispose() — the stream is being torn down anyway.
             }
             finally
             {
@@ -189,9 +192,13 @@ public sealed class NvrFrameDecodeSession : IDisposable
         }
         catch (OperationCanceledException)
         {
+            // Normal shutdown path.
         }
         catch
         {
+            // Background stderr drain only: a read failure just stops accumulating the
+            // diagnostic tail that feeds BuildDiagnostics(). Playback outcome is already
+            // conveyed via _firstFrameTcs and the process exit code, so nothing is lost.
         }
     }
 
@@ -220,9 +227,13 @@ public sealed class NvrFrameDecodeSession : IDisposable
         }
         catch (OperationCanceledException)
         {
+            // Normal shutdown path.
         }
         catch
         {
+            // Background decode loop: any read failure (broken pipe, decode error) ends the
+            // loop, and the outcome is explicitly surfaced to the waiting consumer right
+            // below via _firstFrameTcs/_framesDecoded — it is never silently dropped.
         }
 
         _firstFrameTcs?.TrySetResult(_framesDecoded > 0);
@@ -316,6 +327,8 @@ public sealed class NvrFrameDecodeSession : IDisposable
         }
         catch
         {
+            // Process.ExitCode throws InvalidOperationException while the process is still
+            // running; null is the intended "not exited yet" sentinel the callers rely on.
             return null;
         }
     }

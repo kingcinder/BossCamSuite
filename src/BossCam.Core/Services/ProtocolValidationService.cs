@@ -910,8 +910,11 @@ public sealed class ProtocolValidationService(
                 : null;
             return new DeepProbeResponse(response.StatusCode, raw, parsed, cookieHeader, effectiveEndpoint);
         }
-        catch
+        catch (Exception ex)
         {
+            // Deep-probe HTTP failures are expected while iterating auth/endpoint permutations —
+            // Debug so a validation run's misses stay traceable without spamming at Warning.
+            logger.LogDebug(ex, "Deep probe HTTP call failed for {Device} endpoint={Endpoint} method={Method} auth={Auth}", device.DisplayName, effectiveEndpoint, method, context.Mode);
             return new DeepProbeResponse(null, null, null, null, effectiveEndpoint);
         }
     }

@@ -6,6 +6,7 @@ using System.Text;
 using System.Xml.Linq;
 using BossCam.Contracts;
 using BossCam.Core;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace BossCam.Infrastructure.Discovery;
@@ -98,7 +99,9 @@ public sealed class DvrBroadcastDiscoveryProvider(IOptions<BossCamRuntimeOptions
     }
 }
 
-public sealed class OnvifDiscoveryProvider(IOptions<BossCamRuntimeOptions> options) : IDiscoveryProvider
+public sealed class OnvifDiscoveryProvider(
+    IOptions<BossCamRuntimeOptions> options,
+    ILogger<OnvifDiscoveryProvider> logger) : IDiscoveryProvider
 {
     public string Name => "OnvifWsDiscovery";
 
@@ -139,8 +142,11 @@ public sealed class OnvifDiscoveryProvider(IOptions<BossCamRuntimeOptions> optio
                     Metadata = new Dictionary<string, string> { ["xaddrs"] = uri }
                 });
             }
-            catch
+            catch (Exception ex)
             {
+                // Non-device / malformed multicast responses are common on a busy LAN; Debug so
+                // a discovery pass that yields nothing isn't a black box.
+                logger.LogDebug(ex, "ONVIF WS-Discovery response parse failed from {Endpoint}", received.RemoteEndPoint);
             }
         }
 
