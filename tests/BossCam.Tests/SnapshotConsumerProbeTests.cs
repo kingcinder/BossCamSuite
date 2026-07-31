@@ -132,20 +132,7 @@ public sealed class SnapshotConsumerProbeTests
     public async Task HighlightBoard_Tile_SnapshotUrl_Falls_Back_To_80()
     {
         using var harness = await CreateHarnessAsync(RecordedOnvifPort);
-        var recording = new RecordingService(
-            harness.Store,
-            harness.Broker,
-            new TestRecordingPipelineResolver(),
-            NullBossCamEventBroadcaster.Instance,
-            harness.Factory,
-            NullLogger<RecordingService>.Instance);
-        var board = new HighlightBoardService(
-            harness.Store,
-            harness.Broker,
-            recording,
-            harness.Factory,
-            NullBossCamEventBroadcaster.Instance,
-            NullLogger<HighlightBoardService>.Instance);
+        var board = BuildBoard(harness);
 
         var state = await board.GetStateAsync(CancellationToken.None);
 
@@ -154,6 +141,58 @@ public sealed class SnapshotConsumerProbeTests
         Assert.Contains(":80/NetSDK/Video/encode/channel/101/snapShot", tile.SnapshotUrl, StringComparison.Ordinal);
         // The recorded-port-first contract still holds: 8888 was tried before :80.
         Assert.Equal(new[] { RecordedOnvifPort, 80 }, harness.Handler.RequestedUris.Select(uri => uri.Port));
+    }
+
+    [Fact]
+    public async Task HighlightBoard_Repeated_GetState_Does_Not_ReProbe_Snapshot()
+    {
+        using var harness = await CreateHarnessAsync(RecordedOnvifPort);
+        var board = BuildBoard(harness);
+
+        _ = await board.GetStateAsync(CancellationToken.None);
+        var firstProbeCount = harness.Handler.RequestedUris.Count;
+        Assert.Equal(2, firstProbeCount); // recorded port + :80 fallback probed once
+
+        // Second refresh within the memoization TTL must not re-probe the snapshot candidates.
+        _ = await board.GetStateAsync(CancellationToken.None);
+        Assert.Equal(firstProbeCount, harness.Handler.RequestedUris.Count);
+    }
+
+    [Fact]
+    public async Task HighlightBoard_Offline_Camera_Is_Memoized_As_Null()
+    {
+        // Both candidate ports transport-fail → FirstReachableSnapshotAsync returns null.
+        using var harness = await CreateHarnessAsync(RecordedOnvifPort, _ => throw new HttpRequestException("connection refused"));
+        var board = BuildBoard(harness);
+
+        var state = await board.GetStateAsync(CancellationToken.None);
+
+        var tile = Assert.Single(state.Tiles);
+        Assert.Null(tile.SnapshotUrl);
+        Assert.Equal(new[] { RecordedOnvifPort, 80 }, harness.Handler.RequestedUris.Select(uri => uri.Port));
+
+        // The null result is cached — a second refresh must not re-probe an offline camera.
+        var state2 = await board.GetStateAsync(CancellationToken.None);
+        Assert.Null(Assert.Single(state2.Tiles).SnapshotUrl);
+        Assert.Equal(2, harness.Handler.RequestedUris.Count);
+    }
+
+    private static HighlightBoardService BuildBoard(ProbeHarness harness)
+    {
+        var recording = new RecordingService(
+            harness.Store,
+            harness.Broker,
+            new TestRecordingPipelineResolver(),
+            NullBossCamEventBroadcaster.Instance,
+            harness.Factory,
+            NullLogger<RecordingService>.Instance);
+        return new HighlightBoardService(
+            harness.Store,
+            harness.Broker,
+            recording,
+            harness.Factory,
+            NullBossCamEventBroadcaster.Instance,
+            NullLogger<HighlightBoardService>.Instance);
     }
 
     private static IReadOnlyCollection<VideoSourceDescriptor> SnapshotSources()
@@ -173,7 +212,9 @@ public sealed class SnapshotConsumerProbeTests
             Metadata = new Dictionary<string, string> { ["kind"] = "snapshot", ["port"] = port.ToString() }
         };
 
-    private static async Task<ProbeHarness> CreateHarnessAsync(int recordedPort)
+    private static async Task<ProbeHarness> CreateHarnessAsync(
+        int recordedPort,
+        Func<Uri, HttpResponseMessage>? responder = null)
     {
         var dbPath = Path.Combine(Path.GetTempPath(), $"bosscam-snapshot-consumer-{Guid.NewGuid():N}.db");
         var store = new SqliteApplicationStore(Options.Create(new BossCamRuntimeOptions { DatabasePath = dbPath }));
@@ -191,9 +232,9 @@ public sealed class SnapshotConsumerProbeTests
         };
         await store.UpsertDevicesAsync([device], CancellationToken.None);
 
-        var handler = new ScriptedHandler(uri => uri.Port == recordedPort
+        var handler = new ScriptedHandler(responder ?? (uri => uri.Port == recordedPort
             ? throw new HttpRequestException($"connection refused on :{uri.Port}")
-            : JpegOk());
+            : JpegOk()));
         var factory = new HandlerBackedFactory(handler);
         var broker = new TransportBroker([new SnapshotOnlyVideoAdapter(recordedPort)], store, null, NullLogger<TransportBroker>.Instance);
 

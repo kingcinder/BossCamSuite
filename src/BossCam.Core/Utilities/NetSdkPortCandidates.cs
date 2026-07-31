@@ -60,6 +60,8 @@ public static class NetSdkPortCandidates
         return false;
     }
 
+    private static readonly TimeSpan DefaultSnapshotProbeTimeout = TimeSpan.FromSeconds(4);
+
     /// <summary>
     /// Returns the first snapshot-kind descriptor whose URL actually serves a JPEG, probing
     /// candidates in ascending rank order — the adapters emit the recorded-port descriptor
@@ -69,11 +71,17 @@ public static class NetSdkPortCandidates
     /// so the rank-26 fallback descriptor is genuinely consumed instead of FirstOrDefault.
     /// Returns null when no snapshot descriptor answers with a JPEG (transport failure,
     /// non-success status, or non-JPEG body all move to the next candidate).
+    /// <para>
+    /// <paramref name="probeTimeout"/> bounds each candidate probe; default 4s. Latency-sensitive
+    /// consumers that run repeatedly (highlight-board tiles on every refresh) pass a shorter
+    /// bound so a fully-offline camera cannot stall the whole call for two full timeouts.
+    /// </para>
     /// </summary>
     public static async Task<VideoSourceDescriptor?> FirstReachableSnapshotAsync(
         IHttpClientFactory httpClientFactory,
         IEnumerable<VideoSourceDescriptor> sources,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        TimeSpan? probeTimeout = null)
     {
         ArgumentNullException.ThrowIfNull(httpClientFactory);
 
@@ -85,7 +93,7 @@ public static class NetSdkPortCandidates
 
         foreach (var candidate in candidates)
         {
-            if (await ServesJpegAsync(httpClientFactory, candidate.Url, cancellationToken))
+            if (await ServesJpegAsync(httpClientFactory, candidate.Url, cancellationToken, probeTimeout ?? DefaultSnapshotProbeTimeout))
             {
                 return candidate;
             }
@@ -94,12 +102,12 @@ public static class NetSdkPortCandidates
         return null;
     }
 
-    private static async Task<bool> ServesJpegAsync(IHttpClientFactory httpClientFactory, string url, CancellationToken cancellationToken)
+    private static async Task<bool> ServesJpegAsync(IHttpClientFactory httpClientFactory, string url, CancellationToken cancellationToken, TimeSpan probeTimeout)
     {
         try
         {
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            cts.CancelAfter(TimeSpan.FromSeconds(4));
+            cts.CancelAfter(probeTimeout);
             using var client = httpClientFactory.CreateClient("probe");
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
             using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cts.Token);

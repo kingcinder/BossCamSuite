@@ -22,6 +22,16 @@ public sealed class HighlightBoardService(
     private int _selectedIndex;
     private string _preferredStream = "main"; // main | sub | snapshot
 
+    // Tile snapshot probe memoization: BuildTilesAsync runs on every GetState/Flip/Select and
+    // would otherwise probe up to two snapshot candidates per device on each refresh. A fully
+    // offline camera (adapters still emit static snapshot descriptors) would add up to 2× the
+    // per-probe timeout to *every* board refresh. Cache the per-device result for a short TTL
+    // and use a tighter probe bound than the recording path so repeated refreshes are cheap.
+    private static readonly TimeSpan TileSnapshotProbeTimeout = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan TileSnapshotProbeTtl = TimeSpan.FromSeconds(15);
+    private readonly object _snapshotProbeLock = new();
+    private readonly Dictionary<Guid, (VideoSourceDescriptor? Snapshot, DateTimeOffset ProbedAt)> _snapshotProbeCache = [];
+
     public async Task<HighlightBoardState> GetStateAsync(CancellationToken cancellationToken)
     {
         var tiles = await BuildTilesAsync(cancellationToken);
@@ -189,7 +199,9 @@ public sealed class HighlightBoardService(
             // Probe the snapshot-kind descriptors in rank order (recorded port first, then the
             // :80 fallback the adapters emit) so the tile's SnapshotUrl / live fallback picks a
             // genuinely reachable JPEG — self-healing dead recorded ports like the recording path.
-            var snapshot = await NetSdkPortCandidates.FirstReachableSnapshotAsync(httpClientFactory, sources, cancellationToken);
+            // Memoized per device (15s TTL) with a tighter 2s per-probe bound so offline cameras
+            // don't stall every board refresh (see ResolveTileSnapshotAsync).
+            var snapshot = await ResolveTileSnapshotAsync(device.Id, sources, cancellationToken);
             var bubble = sources.FirstOrDefault(s => s.Kind == TransportKind.BubbleFlv);
 
             var live = preferred switch
@@ -217,6 +229,55 @@ public sealed class HighlightBoardService(
         }
 
         return tiles;
+    }
+
+    /// <summary>
+    /// Resolves the tile's snapshot descriptor, memoized per device for a short TTL so repeated
+    /// board refreshes (GetState/Flip/Select) never re-probe an offline camera. The tile path
+    /// probes with a tighter 2s per-candidate bound than the recording path's 4s default — a
+    /// fully-dead device costs at most one 2s timeout per candidate per TTL window instead of
+    /// stalling every refresh. A cached null (nothing served a JPEG) is also honored so offline
+    /// devices short-circuit without a probe until the TTL expires.
+    /// </summary>
+    private async Task<VideoSourceDescriptor?> ResolveTileSnapshotAsync(
+        Guid deviceId,
+        IReadOnlyCollection<VideoSourceDescriptor> sources,
+        CancellationToken cancellationToken)
+    {
+        lock (_snapshotProbeLock)
+        {
+            if (_snapshotProbeCache.TryGetValue(deviceId, out var cached)
+                && DateTimeOffset.UtcNow - cached.ProbedAt < TileSnapshotProbeTtl)
+            {
+                return cached.Snapshot;
+            }
+        }
+
+        VideoSourceDescriptor? snapshot;
+        try
+        {
+            snapshot = await NetSdkPortCandidates.FirstReachableSnapshotAsync(
+                httpClientFactory, sources, cancellationToken, TileSnapshotProbeTimeout);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // FirstReachableSnapshotAsync swallows per-candidate transport failures, so this is
+            // only reachable for infrastructure errors; degrade to a null tile rather than
+            // failing the whole board refresh.
+            logger.LogDebug(ex, "Snapshot probe failed for device={DeviceId}; tile snapshot null", deviceId);
+            snapshot = null;
+        }
+
+        lock (_snapshotProbeLock)
+        {
+            _snapshotProbeCache[deviceId] = (snapshot, DateTimeOffset.UtcNow);
+        }
+
+        return snapshot;
     }
 }
 

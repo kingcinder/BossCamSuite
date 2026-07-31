@@ -110,7 +110,9 @@ and highlight-board tiles through `FirstReachableSnapshotAsync`.
 - `RecordingService.ResolveSnapshotUrlAsync` falls back to `:80`; with no descriptors it falls
   back to `BuildSnapshotUrl` (recorded port preserved).
 - `HighlightBoardService` tile `SnapshotUrl` resolves to the `:80` fallback for a dead recorded
-  port (recorded-first contract asserted).
+  port (recorded-first contract asserted); repeated `GetStateAsync` refreshes do **not** re-probe
+  (memoized 15s TTL), and a fully-offline camera's null result is memoized as null without a
+  second probe.
 
 ### Unit — `VideoAdapterPortFallbackTests` (5)
 
@@ -143,13 +145,13 @@ and highlight-board tiles through `FirstReachableSnapshotAsync`.
   so the rank-26 `:80` fallback descriptor is genuinely consumed (JPEG-validated, rank-ordered).
   The recording probe is lazy — it only fires when the snapshot pipeline is selected, never on the
   direct-RTSP path.
-- **Tile-path probe cost** — `BuildTilesAsync` runs on every `GetStateAsync`/`Flip`/`Select` and now
-  probes up to two snapshot candidates per device (4s bound each). A device whose recorded port is
-  dead but `:80` answers adds only a fast connection-refused + one JPEG GET; a *fully offline*
-  Juan-family device (adapters still emit static snapshot descriptors) adds up to ~8s worst-case per
-  refresh. This is the price of the requested recorded-first/:80-fallback probing; if boards with
-  many offline cameras feel sluggish, reduce the per-probe timeout for the tile path or add short
-  per-device memoization.
+- **Tile-path probe cost is bounded** — `BuildTilesAsync` runs on every `GetStateAsync`/`Flip`/`Select`
+  and probes snapshot candidates through a **per-device memoized** resolver
+  (`ResolveTileSnapshotAsync`): 15s TTL cache per device + a tighter **2s per-probe bound** (vs the
+  recording path's 4s default) via the optional `probeTimeout` parameter on
+  `FirstReachableSnapshotAsync`. A *fully offline* camera therefore stalls at most one 2s timeout per
+  candidate per TTL window, and repeated refreshes never re-probe it at all (the null result is also
+  cached). Healthy cameras skip the duplicate probe too.
 - Do **not** collapse the two-element port list into a single URL — the whole point is that
   consumers probe candidates in order (`TransportFailoverService` probes by rank; snapshot
   endpoints loop ports × paths).
