@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using BossCam.Contracts;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace BossCam.Core;
@@ -397,9 +398,14 @@ public sealed class SettingsService(
 public sealed class TransportBroker(
     IEnumerable<IVideoTransportAdapter> transportAdapters,
     IApplicationStore store,
-    TransportFailoverService? failoverService,
+    IServiceProvider? serviceProvider,
     ILogger<TransportBroker> logger)
 {
+    // Reentrancy guard: TransportFailoverService.ResolveBestSourceAsync calls back into
+    // GetSourcesAsync. Without this, a device with zero adapter sources would recurse
+    // (broker -> failover -> broker -> failover -> ...) until the stack overflows.
+    private readonly AsyncLocal<bool> _inFailoverFallback = new();
+
     public async Task<IReadOnlyCollection<VideoSourceDescriptor>> GetSourcesAsync(Guid deviceId, CancellationToken cancellationToken)
     {
         var device = await store.GetDeviceAsync(deviceId, cancellationToken);
@@ -427,14 +433,29 @@ public sealed class TransportBroker(
             .Select(static group => group.First())
             .ToList();
 
-        // When primary adapters yield nothing, try the aggressive failover fallback
-        if (deduped.Count == 0 && failoverService is not null && device.IpAddress is not null)
+        // When primary adapters yield nothing, try the aggressive failover fallback.
+        // TransportFailoverService is resolved lazily from the container (not constructor
+        // injected) to break the TransportBroker <-> TransportFailoverService singleton
+        // cycle that made DI ValidateOnBuild (and host startup) fail.
+        if (deduped.Count == 0 && serviceProvider is not null && device.IpAddress is not null && !_inFailoverFallback.Value)
         {
-            logger.LogInformation("Primary transport adapters found no sources for {Device}; using TransportFailoverService", device.DisplayName);
-            var fallback = await failoverService.ResolveBestSourceAsync(deviceId, "main", cancellationToken);
-            if (fallback is not null)
+            var failoverService = serviceProvider.GetService<TransportFailoverService>();
+            if (failoverService is not null)
             {
-                deduped.Add(fallback);
+                logger.LogInformation("Primary transport adapters found no sources for {Device}; using TransportFailoverService", device.DisplayName);
+                _inFailoverFallback.Value = true;
+                try
+                {
+                    var fallback = await failoverService.ResolveBestSourceAsync(deviceId, "main", cancellationToken);
+                    if (fallback is not null)
+                    {
+                        deduped.Add(fallback);
+                    }
+                }
+                finally
+                {
+                    _inFailoverFallback.Value = false;
+                }
             }
         }
 

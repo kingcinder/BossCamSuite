@@ -126,40 +126,18 @@ public sealed class RecordingService(
             StartedAt = DateTimeOffset.UtcNow
         };
 
+        var startedEntry = new RunningRecording(started, process, scriptPath);
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            _running[started.Id] = new RunningRecording(started, process, scriptPath);
+            _running[started.Id] = startedEntry;
         }
         finally
         {
             _gate.Release();
         }
 
-        process.Exited += async (_, _) =>
-        {
-            await _gate.WaitAsync(CancellationToken.None);
-            try
-            {
-                if (_running.Remove(started.Id, out var removed))
-                {
-                    var stopped = removed.Job with { IsRunning = false, StoppedAt = DateTimeOffset.UtcNow };
-                    logger.LogWarning("Recording job exited: {JobId}", started.Id);
-                    // PR-R1: Persist the stopped job
-                    try { await store.SaveRecordingJobsAsync([stopped], CancellationToken.None); }
-                    catch { /* best-effort */ }
-                    // Push recording stopped to all connected SPA clients.
-                    _ = broadcaster.RecordingJobStoppedAsync(stopped, CancellationToken.None);
-                    // Clean up the helper script on spontaneous exit too (camera drop, EOF, signal)
-                    // so we don't leak /tmp/bosscam-rec-*.sh when nobody ever calls StopAsync.
-                    TryDeleteScript(removed.ScriptPath);
-                }
-            }
-            finally
-            {
-                _gate.Release();
-            }
-        };
+        WireExitCleanup(process, startedEntry);
 
         // PR-R1: Persist the recording job
         try
@@ -430,7 +408,7 @@ public sealed class RecordingService(
             var stopped = running.Job with { IsRunning = false, StoppedAt = DateTimeOffset.UtcNow };
             // PR-R1: Persist the stopped job
             try { await store.SaveRecordingJobsAsync([stopped], cancellationToken); }
-            catch { /* best-effort */ }
+            catch (Exception ex) { logger.LogWarning(ex, "Failed to persist stopped recording job {JobId}", stopped.Id); }
             // Push recording stopped to all connected SPA clients.
             _ = broadcaster.RecordingJobStoppedAsync(stopped, CancellationToken.None);
             return stopped;
@@ -529,7 +507,7 @@ public sealed class RecordingService(
                 _running.Remove(jobId);
                 var stopped = current.Job with { IsRunning = false, StoppedAt = now, LastError = "Stalled: no segment growth" };
                 try { await store.SaveRecordingJobsAsync([stopped], cancellationToken); }
-                catch { /* best-effort */ }
+                catch (Exception ex) { logger.LogWarning(ex, "Failed to persist stalled recording job {JobId}", stopped.Id); }
                 _ = broadcaster.RecordingJobStoppedAsync(stopped, CancellationToken.None);
                 stalled.Add(stopped);
             }
@@ -558,8 +536,10 @@ public sealed class RecordingService(
 
     /// <summary>
     /// PR-R1: Load persisted recording jobs from the store and reconcile their running state.
-    /// For jobs marked IsRunning=true, check if the process is still alive in _running.
-    /// If not, mark as stopped and persist the updated state.
+    /// For jobs marked IsRunning=true, verify the OS process is still alive by recorded PID.
+    /// Live processes are re-attached into the in-memory table so StopAsync / the stall
+    /// watchdog keep working after a service restart; dead processes are marked stopped and
+    /// persisted, with a RecordingJobStopped broadcast.
     /// </summary>
     public async Task<IReadOnlyCollection<RecordingJob>> ReconcilePersistedJobsAsync(CancellationToken cancellationToken)
     {
@@ -576,16 +556,45 @@ public sealed class RecordingService(
             await _gate.WaitAsync(cancellationToken);
             try
             {
-                if (!_running.TryGetValue(job.Id, out var running) || running.Process.HasExited)
+                // Fast path: still attached in memory and the process is alive.
+                if (_running.TryGetValue(job.Id, out var running) && !running.Process.HasExited)
+                {
+                    reconciled.Add(job);
+                    continue;
+                }
+
+                // Restart path: check the OS process by recorded PID so a still-running
+                // ffmpeg / snapshot pipeline is re-attached instead of falsely stopped.
+                var liveProcess = TryGetLiveProcess(job);
+                if (liveProcess is null)
                 {
                     var stopped = job with { IsRunning = false, StoppedAt = DateTimeOffset.UtcNow };
                     reconciled.Add(stopped);
                     try { await store.SaveRecordingJobsAsync([stopped], cancellationToken); }
-                    catch { /* best-effort */ }
-                    logger.LogWarning("Persisted job {JobId} marked running but process is gone — reconciled as stopped", job.Id);
+                    catch (Exception ex) { logger.LogWarning(ex, "Failed to persist reconciled stopped job {JobId}", job.Id); }
+                    _ = broadcaster.RecordingJobStoppedAsync(stopped, CancellationToken.None);
+                    logger.LogWarning("Persisted job {JobId} marked running but process pid={Pid} is gone — reconciled as stopped", job.Id, job.ProcessId);
                 }
                 else
                 {
+                    // Re-attach the live process so stop / stall handling can manage it.
+                    var scriptPath = string.Equals(job.Mode, "snapshot", StringComparison.OrdinalIgnoreCase)
+                        ? Path.Combine(Path.GetTempPath(), $"bosscam-rec-{job.DeviceId:N}.sh")
+                        : null;
+                    // PR-R1: The helper script may have been deleted on a prior stop or a
+                    // /tmp sweep after restart, but stopping still works — both pipelines
+                    // kill the recorded PID's whole process tree, so the ffmpeg/curl
+                    // children die with it even when the script file is gone. Warn when
+                    // the expected script is missing so operators can spot /tmp cleanup.
+                    if (scriptPath is not null && !File.Exists(scriptPath))
+                    {
+                        logger.LogWarning("Re-attaching snapshot job {JobId} but helper script is missing ({Script}); stop will rely on process-tree kill", job.Id, scriptPath);
+                    }
+
+                    var reattachedEntry = new RunningRecording(job, liveProcess, scriptPath);
+                    _running[job.Id] = reattachedEntry;
+                    WireExitCleanup(liveProcess, reattachedEntry);
+                    logger.LogInformation("Persisted job {JobId} re-attached to live process pid={Pid}", job.Id, job.ProcessId);
                     reconciled.Add(job);
                 }
             }
@@ -595,6 +604,102 @@ public sealed class RecordingService(
             }
         }
         return reconciled;
+    }
+
+    /// <summary>
+    /// Returns a live <see cref="Process"/> handle for the given job, or null when the PID is
+    /// missing, non-positive, the process has already exited, or the PID was recycled onto an
+    /// unrelated process (guarded by comparing the process start time against the job's
+    /// <c>StartedAt</c> — a surviving recorder can never start after its own job record).
+    /// Used by the restart-reconcile path to re-attach surviving recording processes safely.
+    /// </summary>
+    private static Process? TryGetLiveProcess(RecordingJob job)
+    {
+        if (job.ProcessId is not int pid || pid <= 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            var process = Process.GetProcessById(pid);
+            if (process.HasExited)
+            {
+                process.Dispose();
+                return null;
+            }
+
+            // PID-reuse guard: the OS may have recycled the PID onto a completely different
+            // process since the recorder died. A real recorder's process always starts before
+            // its job record exists, so a start time after StartedAt means we must not adopt it.
+            var processStartedAt = process.StartTime.ToUniversalTime();
+            if (processStartedAt > job.StartedAt.UtcDateTime)
+            {
+                process.Dispose();
+                return null;
+            }
+
+            return process;
+        }
+        catch (ArgumentException)
+        {
+            return null; // no such process
+        }
+        catch (InvalidOperationException)
+        {
+            return null; // process exited between GetProcessById and HasExited
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            return null; // permission / platform probe failure — treat as not adoptable
+        }
+    }
+
+    /// <summary>
+    /// Wires a spontaneous-exit handler onto a running recorder so the job is removed from the
+    /// running table, persisted as stopped, broadcast over SignalR, and its helper script is
+    /// cleaned up. Shared by <see cref="StartAsync"/> and the restart-reconcile path so both
+    /// in-memory and re-attached jobs get identical cleanup semantics.
+    /// <para>
+    /// The handler guards on <see cref="RunningRecording"/> reference identity: the
+    /// restart-reconcile path can re-register the same job id with a newer entry (e.g. a stale
+    /// in-memory entry whose process exited but whose Exited event hadn't dispatched yet, with
+    /// the PID since recycled onto a live process). A stale handler firing late must never
+    /// remove the newer entry — that would orphan the live recorder and persist "stopped"
+    /// while the process keeps running.
+    /// </para>
+    /// </summary>
+    private void WireExitCleanup(Process process, RunningRecording entry)
+    {
+        process.EnableRaisingEvents = true;
+        process.Exited += async (_, _) =>
+        {
+            await _gate.WaitAsync(CancellationToken.None);
+            try
+            {
+                // Reference-equality guard: only remove if this entry is still the one
+                // tracked for the job id (see summary above).
+                if (_running.TryGetValue(entry.Job.Id, out var current)
+                    && ReferenceEquals(current, entry)
+                    && _running.Remove(entry.Job.Id, out var removed))
+                {
+                    var stopped = removed.Job with { IsRunning = false, StoppedAt = DateTimeOffset.UtcNow };
+                    logger.LogWarning("Recording job exited: {JobId}", entry.Job.Id);
+                    // PR-R1: Persist the stopped job
+                    try { await store.SaveRecordingJobsAsync([stopped], CancellationToken.None); }
+                    catch (Exception ex) { logger.LogWarning(ex, "Failed to persist exited recording job {JobId}", stopped.Id); }
+                    // Push recording stopped to all connected SPA clients.
+                    _ = broadcaster.RecordingJobStoppedAsync(stopped, CancellationToken.None);
+                    // Clean up the helper script on spontaneous exit too (camera drop, EOF, signal)
+                    // so we don't leak /tmp/bosscam-rec-*.sh when nobody ever calls StopAsync.
+                    TryDeleteScript(removed.ScriptPath);
+                }
+            }
+            finally
+            {
+                _gate.Release();
+            }
+        };
     }
 
     public async Task<IReadOnlyCollection<RecordingJob>> GetJobsAsync(CancellationToken cancellationToken)

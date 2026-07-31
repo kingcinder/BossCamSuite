@@ -231,8 +231,27 @@ public sealed class LanBoundEnvVarAuthE2ETests : IClassFixture<LanBoundAuthFacto
     [Fact]
     public async Task Static_Asset_Gets_Served_Under_Lan_Bind_Envar_Token()
     {
-        var res = await _client.GetAsync("/app.js");
-        Assert.True(res.IsSuccessStatusCode, $"/app.js -> {(int)res.StatusCode}");
+        // SPA bundles now emit content-hashed files under /assets/, so a hardcoded
+        // /app.js would 404 after every rebuild. Pick a real file from wwwroot at
+        // test time (same discovery pattern as UbuntuPlatformAndStaticUiTests), and
+        // fall back to the stable /index.html entry point.
+        var webRoot = Path.Combine(
+            AppContext.BaseDirectory,
+            "..", "..", "..", "..", "..",
+            "src", "BossCam.Service", "wwwroot");
+        var assetsDir = Path.Combine(webRoot, "assets");
+        var assetPath = "/index.html";
+        if (Directory.Exists(assetsDir))
+        {
+            var file = Directory.EnumerateFiles(assetsDir).FirstOrDefault();
+            if (file is not null)
+            {
+                assetPath = "/assets/" + Path.GetFileName(file);
+            }
+        }
+
+        var res = await _client.GetAsync(assetPath);
+        Assert.True(res.IsSuccessStatusCode, $"{assetPath} -> {(int)res.StatusCode}");
     }
 
     [Fact]

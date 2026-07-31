@@ -10,6 +10,95 @@
   let pathStatus = $state('');
   let stopLoading = $state<string | null>(null);
 
+  // ── Clip export ─────────────────────────────────────────────
+  let exportDeviceId = $state('');
+  let exportStart = $state('');
+  let exportEnd = $state('');
+  let exportPath = $state('');
+  let exportResult = $state<string>('');
+  let exportLoading = $state(false);
+  let exportDownloadPath = $state<string>('');
+
+  // Seed the export device from the selected camera whenever it changes.
+  $effect(() => {
+    if (appState.selectedDeviceId && !exportDeviceId) {
+      exportDeviceId = appState.selectedDeviceId;
+    }
+  });
+
+  // Default the time window to the last 30 minutes when opening the panel.
+  $effect(() => {
+    if (appState.activeTab === 'record' && !exportStart && !exportEnd) {
+      const end = new Date();
+      const start = new Date(end.getTime() - 30 * 60 * 1000);
+      exportStart = toLocalInput(start);
+      exportEnd = toLocalInput(end);
+    }
+  });
+
+  function toLocalInput(d: Date): string {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  async function exportClip() {
+    if (!exportDeviceId) {
+      appState.showToast('Select a camera first', false);
+      return;
+    }
+    if (!exportStart || !exportEnd) {
+      appState.showToast('Set a time range first', false);
+      return;
+    }
+    if (!exportPath.trim()) {
+      appState.showToast('Set an output path first', false);
+      return;
+    }
+    exportLoading = true;
+    exportResult = '';
+    exportDownloadPath = '';
+    try {
+      const result = await api.recordingExport({
+        deviceId: exportDeviceId,
+        startTime: new Date(exportStart).toISOString(),
+        endTime: new Date(exportEnd).toISOString(),
+        outputPath: exportPath.trim(),
+      });
+      if (result.success) {
+        exportDownloadPath = result.outputPath;
+        const mb = (result.bytes / (1024 * 1024)).toFixed(2);
+        exportResult = `✅ ${result.outputPath} · ${mb} MB · ${Math.round(result.durationSec)}s${result.reEncoded ? ' · re-encoded fallback' : ' · copied without re-encode'}`;
+        appState.showToast('Clip exported');
+      } else {
+        exportResult = `❌ ${result.message || 'Export failed'}`;
+        appState.showToast(result.message || 'Export failed', false);
+      }
+    } catch (e: unknown) {
+      exportResult = 'Export failed: ' + String(e);
+      appState.showToast(String(e), false);
+    }
+    exportLoading = false;
+  }
+
+  async function startSelectedRec() {
+    if (!appState.selectedDeviceId) return;
+    if (!pathContinuous.trim()) {
+      appState.showToast('Set a continuous recordings folder path first', false);
+      return;
+    }
+    try {
+      const job = await api.recordingStart({ deviceId: appState.selectedDeviceId, outputDirectory: pathContinuous.trim() });
+      if (job.degradedReason) {
+        appState.showToast(`Recording started (degraded: ${job.sourceRole || 'snapshot'})`, false);
+      } else {
+        appState.showToast('Recording started');
+      }
+      await refreshRec();
+    } catch (e: unknown) {
+      appState.showToast(String(e), false);
+    }
+  }
+
   // Auto-refresh recording jobs when SignalR pushes job events.
   // Also refresh on tab switch (existing $effect behavior).
   $effect(() => {
@@ -98,20 +187,7 @@
     }
   }
 
-  async function startSelectedRec() {
-    if (!appState.selectedDeviceId) return;
-    if (!pathContinuous.trim()) {
-      appState.showToast('Set a continuous recordings folder path first', false);
-      return;
-    }
-    try {
-      await api.recordingStart({ deviceId: appState.selectedDeviceId, outputDirectory: pathContinuous.trim() });
-      appState.showToast('Recording started');
-      await refreshRec();
-    } catch (e: unknown) {
-      appState.showToast(String(e), false);
-    }
-  }
+
 
   async function stopAllRec() {
     try {
@@ -229,10 +305,21 @@
           </div>
           <div class="job-meta">
             <span class="chip">{job.segmentSeconds}s segments</span>
+            {#if job.mode === 'snapshot'}
+              <span class="chip degraded">📷 snapshot</span>
+            {:else}
+              <span class="chip">🎥 direct</span>
+            {/if}
+            {#if job.sourceRole && job.sourceRole !== 'main'}
+              <span class="chip degraded" title={job.degradedReason || ''}>⚠ {job.sourceRole}</span>
+            {/if}
             {#if job.sourceUrl}
               <span class="chip sub" title={job.sourceUrl}>src</span>
             {/if}
           </div>
+          {#if job.degradedReason}
+            <span class="degraded-badge" title={job.degradedReason}>Degraded</span>
+          {/if}
           <button
             onclick={() => stopJob(job.id)}
             type="button"
@@ -260,9 +347,15 @@
             <div class="job-info">
               <strong>{deviceName(job.deviceId)}</strong>
               <span class="sub">stopped {timeAgo(job.stoppedAt || job.startedAt)}</span>
+              {#if job.lastError}
+                <span class="last-error" title={job.lastError}>{job.lastError}</span>
+              {/if}
             </div>
             <div class="job-meta">
               <span class="chip">{job.segmentSeconds}s</span>
+              {#if job.mode === 'snapshot'}
+                <span class="chip degraded">📷 snapshot</span>
+              {/if}
             </div>
           </div>
         {/each}
@@ -272,6 +365,47 @@
 
   <h4>Indexed segments</h4>
   <pre class="code">{appState.recordingIndex}</pre>
+</div>
+
+<!-- Clip export -->
+<div class="card">
+  <h3>Export clip</h3>
+  <p class="muted">Export an indexed time window to a single playable file (concat + copy first, re-encode only if needed).</p>
+  <div class="form-grid paths-grid">
+    <div class="form-item">
+      <label for="exportDeviceId">Camera</label>
+      <select id="exportDeviceId" bind:value={exportDeviceId}>
+        {#each appState.devices as d (d.id)}
+          <option value={d.id}>{d.displayName || d.ipAddress || d.id.slice(0, 8)}</option>
+        {/each}
+      </select>
+    </div>
+    <div class="row gap wrap">
+      <div class="form-item">
+        <label for="exportStart">Start</label>
+        <input id="exportStart" type="datetime-local" bind:value={exportStart} />
+      </div>
+      <div class="form-item">
+        <label for="exportEnd">End</label>
+        <input id="exportEnd" type="datetime-local" bind:value={exportEnd} />
+      </div>
+    </div>
+    <div class="form-item">
+      <label for="exportPath">Output path (server-side)</label>
+      <input id="exportPath" type="text" bind:value={exportPath} placeholder="{pathContinuous || '/home/you/Videos/BossCam/continuous'}/export-{Date.now()}.mp4" />
+    </div>
+  </div>
+  <div class="row" style="margin-top:12px">
+    <button onclick={exportClip} type="button" class="accent" disabled={exportLoading}>
+      {exportLoading ? '⏳ Exporting…' : '⬇ Export clip'}
+    </button>
+  </div>
+  {#if exportResult}
+    <p class="muted small" class:export-ok={!!exportDownloadPath}>{exportResult}</p>
+  {/if}
+  {#if exportDownloadPath}
+    <a class="download-link" href={api.recordingDownloadUrl(exportDownloadPath)} target="_blank" rel="noopener">⬇ Download exported clip</a>
+  {/if}
 </div>
 
 <style>
@@ -397,6 +531,73 @@
     padding: 2px 6px;
     font-size: .72rem;
     color: var(--muted);
+  }
+  .chip.degraded {
+    background: #3a2a1a;
+    color: #ddcf8f;
+    border: 1px solid #cf9e3e44;
+  }
+  .degraded-badge {
+    background: #3a2a1a;
+    color: #ddcf8f;
+    font-size: .72rem;
+    padding: 2px 8px;
+    border-radius: 10px;
+    border: 1px solid #cf9e3e55;
+    cursor: help;
+  }
+  .last-error {
+    display: block;
+    color: #dd8f8f;
+    font-size: .75rem;
+    margin-top: 2px;
+    cursor: help;
+    word-break: break-word;
+  }
+  .download-link {
+    display: inline-block;
+    margin-top: 8px;
+    color: #3ecf8e;
+    font-size: .85rem;
+    text-decoration: none;
+    border: 1px solid #3ecf8e44;
+    border-radius: 6px;
+    padding: 4px 10px;
+  }
+  .download-link:hover {
+    border-color: #3ecf8e;
+    background: #1a3a1a;
+  }
+  .export-ok {
+    color: #8fdd8f;
+  }
+  select {
+    background: #0b090bcc;
+    border: 1px solid #ff5a1f55;
+    border-radius: 8px;
+    padding: 8px;
+    color: var(--text);
+    font: inherit;
+    min-width: 200px;
+  }
+  .form-item input[type="datetime-local"] {
+    background: #0b090bcc;
+    border: 1px solid #ff5a1f55;
+    border-radius: 8px;
+    padding: 8px;
+    color: var(--text);
+    font: inherit;
+    color-scheme: dark;
+  }
+  .form-item input[type="text"] {
+    flex: 1;
+    min-width: 0;
+    background: #0b090bcc;
+    border: 1px solid #ff5a1f55;
+    border-radius: 8px;
+    padding: 8px;
+    color: var(--text);
+    font: inherit;
   }
   .stop-btn {
     padding: 4px 10px;

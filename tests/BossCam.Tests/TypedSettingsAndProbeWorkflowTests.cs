@@ -71,7 +71,7 @@ public sealed class TypedSettingsAndProbeWorkflowTests : IDisposable
         await store.SaveSettingsSnapshotAsync(snapshot, CancellationToken.None);
 
         var settingsService = BuildSettingsService(store, [new NoopControlAdapter()]);
-        var typed = new TypedSettingsService(store, settingsService, new PersistenceVerificationService([new NoopControlAdapter()], store, NullLogger<PersistenceVerificationService>.Instance), new SemanticTrustService(store, BuildContractCatalog(store), settingsService, NullLogger<SemanticTrustService>.Instance), BuildContractCatalog(store), NullLogger<TypedSettingsService>.Instance);
+        var typed = new TypedSettingsService(store, settingsService, new PersistenceVerificationService([new NoopControlAdapter()], store, NullLogger<PersistenceVerificationService>.Instance), new SemanticTrustService(store, BuildContractCatalog(store), settingsService, NullLogger<SemanticTrustService>.Instance), BuildContractCatalog(store), new CapabilityPromotionService(store, BuildContractCatalog(store)), NullLogger<TypedSettingsService>.Instance);
         var groups = await typed.NormalizeDeviceAsync(device.Id, refreshFromDevice: false, CancellationToken.None);
 
         Assert.Contains(groups, group => group.GroupKind == TypedSettingGroupKind.VideoImage);
@@ -107,7 +107,7 @@ public sealed class TypedSettingsAndProbeWorkflowTests : IDisposable
         ], CancellationToken.None);
 
         var settingsService = BuildSettingsService(store, [new NoopControlAdapter()]);
-        var typed = new TypedSettingsService(store, settingsService, new PersistenceVerificationService([new NoopControlAdapter()], store, NullLogger<PersistenceVerificationService>.Instance), new SemanticTrustService(store, BuildContractCatalog(store), settingsService, NullLogger<SemanticTrustService>.Instance), BuildContractCatalog(store), NullLogger<TypedSettingsService>.Instance);
+        var typed = new TypedSettingsService(store, settingsService, new PersistenceVerificationService([new NoopControlAdapter()], store, NullLogger<PersistenceVerificationService>.Instance), new SemanticTrustService(store, BuildContractCatalog(store), settingsService, NullLogger<SemanticTrustService>.Instance), BuildContractCatalog(store), new CapabilityPromotionService(store, BuildContractCatalog(store)), NullLogger<TypedSettingsService>.Instance);
         var result = await typed.ApplyTypedFieldAsync(device.Id, "ip", JsonValue.Create("10.0.0.31"), expertOverride: false, CancellationToken.None);
 
         Assert.NotNull(result);
@@ -196,7 +196,7 @@ public sealed class TypedSettingsAndProbeWorkflowTests : IDisposable
 
         var adapter = new StatefulTestAdapter();
         var settingsService = BuildSettingsService(store, [adapter]);
-        var typed = new TypedSettingsService(store, settingsService, new PersistenceVerificationService([adapter], store, NullLogger<PersistenceVerificationService>.Instance), new SemanticTrustService(store, BuildContractCatalog(store), settingsService, NullLogger<SemanticTrustService>.Instance), BuildContractCatalog(store), NullLogger<TypedSettingsService>.Instance);
+        var typed = new TypedSettingsService(store, settingsService, new PersistenceVerificationService([adapter], store, NullLogger<PersistenceVerificationService>.Instance), new SemanticTrustService(store, BuildContractCatalog(store), settingsService, NullLogger<SemanticTrustService>.Instance), BuildContractCatalog(store), new CapabilityPromotionService(store, BuildContractCatalog(store)), NullLogger<TypedSettingsService>.Instance);
         var result = await typed.ApplyTypedFieldAsync(device.Id, "brightness", JsonValue.Create(61), expertOverride: false, CancellationToken.None);
 
         Assert.NotNull(result);

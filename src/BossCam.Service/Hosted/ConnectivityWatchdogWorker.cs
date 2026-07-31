@@ -17,6 +17,7 @@ namespace BossCam.Service.Hosted;
 ///
 /// This is the "aggressive fallback" heart of the camera stability system.
 /// </summary>
+#pragma warning disable CS9113 // failoverService + options are reserved for configurable-interval and failover-driven modes
 public sealed class ConnectivityWatchdogWorker(
     IApplicationStore store,
     ConnectionDiagnosticService diagnosticService,
@@ -160,6 +161,7 @@ public sealed class ConnectivityWatchdogWorker(
                 device.DisplayName);
         }
     }
+#pragma warning restore CS9113
 
     private async Task HandleOfflineDeviceAsync(DeviceIdentity device, CancellationToken cancellationToken)
     {
@@ -227,7 +229,14 @@ public sealed class ConnectivityWatchdogWorker(
                 await store.UpsertDevicesAsync([updated], cancellationToken);
 
                 await BroadcastConnectivityChangeAsync(
-                    device, ConnectivityStatus.Degraded, cancellationToken);
+                    new DeviceConnectivitySnapshot
+                    {
+                        DeviceId = device.Id,
+                        Status = ConnectivityStatus.Degraded,
+                        TransportResults = new Dictionary<string, bool> { [$"http:alt:{altPort}"] = true },
+                        LastCheckedAt = DateTimeOffset.UtcNow
+                    },
+                    cancellationToken);
                 return;
             }
         }

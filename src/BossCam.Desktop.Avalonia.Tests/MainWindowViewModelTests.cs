@@ -9,7 +9,7 @@ namespace BossCam.Desktop.Avalonia.Tests;
 /// Uses <see cref="TestBossCamApiClient"/> so no live server needed.
 ///
 /// Run with:
-///   dotnet test src/BossCam.Desktop.Avalonia/BossCam.Desktop.Avalonia.Tests.csproj
+///   dotnet test src/BossCam.Desktop.Avalonia.Tests/BossCam.Desktop.Avalonia.Tests.csproj
 ///
 /// Note: requires Avalonia NuGet packages to be restored first.
 /// See scripts/restore-avalonia-packages.sh if restore times out.
@@ -53,7 +53,7 @@ public sealed class MainWindowViewModelTests
         var device = new DeviceIdentity
         {
             Id = Guid.NewGuid(),
-            DisplayName = "TestCam",
+            Name = "TestCam",
             IpAddress = "192.168.1.100",
             HardwareModel = "5523-W",
             FirmwareVersion = "V4.00.R02",
@@ -76,7 +76,7 @@ public sealed class MainWindowViewModelTests
         var device = new DeviceIdentity
         {
             Id = Guid.NewGuid(),
-            DisplayName = "Front Door",
+            Name = "Front Door",
             IpAddress = "10.0.0.50",
             HardwareModel = "IPC-5523W",
             FirmwareVersion = "V4.30.R01",
@@ -100,7 +100,7 @@ public sealed class MainWindowViewModelTests
         var device = new DeviceIdentity
         {
             Id = Guid.NewGuid(),
-            DisplayName = "NullCam",
+            Name = "NullCam",
             IpAddress = null,
             HardwareModel = null,
             FirmwareVersion = null,
@@ -131,7 +131,7 @@ public sealed class MainWindowViewModelTests
         var propertyNames = new List<string?>();
         vm.PropertyChanged += (_, e) => propertyNames.Add(e.PropertyName);
 
-        vm.SelectedDevice = new DeviceIdentity { Id = Guid.NewGuid(), DisplayName = "Test" };
+        vm.SelectedDevice = new DeviceIdentity { Id = Guid.NewGuid(), Name = "Test" };
 
         Assert.Contains(nameof(MainWindowViewModel.SelectedDevice), propertyNames);
         Assert.Contains(nameof(MainWindowViewModel.IsLive), propertyNames);
@@ -146,8 +146,8 @@ public sealed class MainWindowViewModelTests
         {
             DevicesResult =
             [
-                new() { Id = Guid.NewGuid(), DisplayName = "Cam1" },
-                new() { Id = Guid.NewGuid(), DisplayName = "Cam2" }
+                new() { Id = Guid.NewGuid(), Name = "Cam1" },
+                new() { Id = Guid.NewGuid(), Name = "Cam2" }
             ]
         };
         var vm = CreateVm(api);
@@ -187,7 +187,7 @@ public sealed class MainWindowViewModelTests
     {
         var api = new TestBossCamApiClient { SaveSnapshotResult = true };
         var vm = CreateVm(api);
-        vm.SelectedDevice = new DeviceIdentity { Id = Guid.NewGuid(), DisplayName = "Test" };
+        vm.SelectedDevice = new DeviceIdentity { Id = Guid.NewGuid(), Name = "Test" };
 
         await vm.SnapshotCommand.ExecuteAsync(null);
 
@@ -200,7 +200,7 @@ public sealed class MainWindowViewModelTests
     {
         var api = new TestBossCamApiClient { SaveSnapshotResult = false };
         var vm = CreateVm(api);
-        vm.SelectedDevice = new DeviceIdentity { Id = Guid.NewGuid(), DisplayName = "Test" };
+        vm.SelectedDevice = new DeviceIdentity { Id = Guid.NewGuid(), Name = "Test" };
 
         await vm.SnapshotCommand.ExecuteAsync(null);
 
@@ -224,8 +224,8 @@ public sealed class MainWindowViewModelTests
         var vm = CreateVm();
         vm.Devices = new System.Collections.ObjectModel.ObservableCollection<DeviceIdentity>
         {
-            new() { Id = Guid.NewGuid(), DisplayName = "Cam1" },
-            new() { Id = Guid.NewGuid(), DisplayName = "Cam2" }
+            new() { Id = Guid.NewGuid(), Name = "Cam1" },
+            new() { Id = Guid.NewGuid(), Name = "Cam2" }
         };
         Assert.Equal(2, vm.Devices.Count);
 

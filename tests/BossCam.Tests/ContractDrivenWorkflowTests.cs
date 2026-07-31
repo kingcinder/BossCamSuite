@@ -114,7 +114,7 @@ public sealed class ContractDrivenWorkflowTests : IDisposable
         await store.SaveSettingsSnapshotAsync(snapshot, CancellationToken.None);
 
         var settings = BuildSettingsService(store, [new NoopControlAdapter()]);
-        var typed = new TypedSettingsService(store, settings, new PersistenceVerificationService([new NoopControlAdapter()], store, NullLogger<PersistenceVerificationService>.Instance), new SemanticTrustService(store, new EndpointContractCatalogService(store, NullLogger<EndpointContractCatalogService>.Instance), settings, NullLogger<SemanticTrustService>.Instance), new EndpointContractCatalogService(store, NullLogger<EndpointContractCatalogService>.Instance), NullLogger<TypedSettingsService>.Instance);
+        var typed = new TypedSettingsService(store, settings, new PersistenceVerificationService([new NoopControlAdapter()], store, NullLogger<PersistenceVerificationService>.Instance), new SemanticTrustService(store, new EndpointContractCatalogService(store, NullLogger<EndpointContractCatalogService>.Instance), settings, NullLogger<SemanticTrustService>.Instance), new EndpointContractCatalogService(store, NullLogger<EndpointContractCatalogService>.Instance), new CapabilityPromotionService(store, new EndpointContractCatalogService(store, NullLogger<EndpointContractCatalogService>.Instance)), NullLogger<TypedSettingsService>.Instance);
         var groups = await typed.NormalizeDeviceAsync(device.Id, refreshFromDevice: false, CancellationToken.None);
 
         var codec = groups.SelectMany(static group => group.Fields).First(field => field.FieldKey == "codec");
@@ -177,7 +177,7 @@ public sealed class ContractDrivenWorkflowTests : IDisposable
         await store.SaveSettingsSnapshotAsync(snapshot, CancellationToken.None);
 
         var settings = BuildSettingsService(store, [new NoopControlAdapter()]);
-        var typed = new TypedSettingsService(store, settings, new PersistenceVerificationService([new NoopControlAdapter()], store, NullLogger<PersistenceVerificationService>.Instance), new SemanticTrustService(store, new EndpointContractCatalogService(store, NullLogger<EndpointContractCatalogService>.Instance), settings, NullLogger<SemanticTrustService>.Instance), new EndpointContractCatalogService(store, NullLogger<EndpointContractCatalogService>.Instance), NullLogger<TypedSettingsService>.Instance);
+        var typed = new TypedSettingsService(store, settings, new PersistenceVerificationService([new NoopControlAdapter()], store, NullLogger<PersistenceVerificationService>.Instance), new SemanticTrustService(store, new EndpointContractCatalogService(store, NullLogger<EndpointContractCatalogService>.Instance), settings, NullLogger<SemanticTrustService>.Instance), new EndpointContractCatalogService(store, NullLogger<EndpointContractCatalogService>.Instance), new CapabilityPromotionService(store, new EndpointContractCatalogService(store, NullLogger<EndpointContractCatalogService>.Instance)), NullLogger<TypedSettingsService>.Instance);
 
         var result = await typed.ApplyTypedFieldAsync(device.Id, "bitrate", JsonValue.Create(999999), expertOverride: false, CancellationToken.None);
 
@@ -215,7 +215,7 @@ public sealed class ContractDrivenWorkflowTests : IDisposable
         ], CancellationToken.None);
 
         var settings = BuildSettingsService(store, [new NoopControlAdapter()]);
-        var typed = new TypedSettingsService(store, settings, new PersistenceVerificationService([new NoopControlAdapter()], store, NullLogger<PersistenceVerificationService>.Instance), new SemanticTrustService(store, new EndpointContractCatalogService(store, NullLogger<EndpointContractCatalogService>.Instance), settings, NullLogger<SemanticTrustService>.Instance), new EndpointContractCatalogService(store, NullLogger<EndpointContractCatalogService>.Instance), NullLogger<TypedSettingsService>.Instance);
+        var typed = new TypedSettingsService(store, settings, new PersistenceVerificationService([new NoopControlAdapter()], store, NullLogger<PersistenceVerificationService>.Instance), new SemanticTrustService(store, new EndpointContractCatalogService(store, NullLogger<EndpointContractCatalogService>.Instance), settings, NullLogger<SemanticTrustService>.Instance), new EndpointContractCatalogService(store, NullLogger<EndpointContractCatalogService>.Instance), new CapabilityPromotionService(store, new EndpointContractCatalogService(store, NullLogger<EndpointContractCatalogService>.Instance)), NullLogger<TypedSettingsService>.Instance);
         var result = await typed.ApplyTypedFieldAsync(device.Id, "brightness", JsonValue.Create(51), expertOverride: false, CancellationToken.None);
 
         Assert.NotNull(result);
@@ -304,7 +304,7 @@ public sealed class ContractDrivenWorkflowTests : IDisposable
 
         var adapter = new StatefulVideoAdapter();
         var settings = BuildSettingsService(store, [adapter]);
-        var typed = new TypedSettingsService(store, settings, new PersistenceVerificationService([adapter], store, NullLogger<PersistenceVerificationService>.Instance), new SemanticTrustService(store, new EndpointContractCatalogService(store, NullLogger<EndpointContractCatalogService>.Instance), settings, NullLogger<SemanticTrustService>.Instance), new EndpointContractCatalogService(store, NullLogger<EndpointContractCatalogService>.Instance), NullLogger<TypedSettingsService>.Instance);
+        var typed = new TypedSettingsService(store, settings, new PersistenceVerificationService([adapter], store, NullLogger<PersistenceVerificationService>.Instance), new SemanticTrustService(store, new EndpointContractCatalogService(store, NullLogger<EndpointContractCatalogService>.Instance), settings, NullLogger<SemanticTrustService>.Instance), new EndpointContractCatalogService(store, NullLogger<EndpointContractCatalogService>.Instance), new CapabilityPromotionService(store, new EndpointContractCatalogService(store, NullLogger<EndpointContractCatalogService>.Instance)), NullLogger<TypedSettingsService>.Instance);
         var result = await typed.ApplyTypedFieldAsync(device.Id, "bitrate", JsonValue.Create(2048), expertOverride: false, CancellationToken.None);
 
         Assert.NotNull(result);

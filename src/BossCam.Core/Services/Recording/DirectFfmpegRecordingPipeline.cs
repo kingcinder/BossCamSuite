@@ -40,12 +40,16 @@ public sealed class DirectFfmpegRecordingPipeline : IRecordingPipeline
         }
         args.Add("-i");
         args.Add(sourceUrl);
-        // Drop audio (PCMA/PCMU and any other); copy HEVC main high-res or H264 video.
+        // Map the best video stream (copy) plus the best audio stream when the source has one.
+        // PR-R7: use an optional audio map so video-only sources still record without failing.
         args.Add("-map");
         args.Add("0:v:0");
         args.Add("-c:v");
         args.Add("copy");
-        args.Add("-an");
+        args.Add("-map");
+        args.Add("0:a:0?");
+        args.Add("-c:a");
+        args.Add("copy");
         args.Add("-f");
         args.Add("segment");
         args.Add("-segment_time");
@@ -104,7 +108,12 @@ public sealed class DirectFfmpegRecordingPipeline : IRecordingPipeline
         args.Add("0:v:0");
         args.Add("-c:v");
         args.Add("copy");
-        args.Add("-an");
+        // PR-R7: match the runtime Start() path — map best audio stream when present
+        // (optional map so video-only sources don't fail), copy codec.
+        args.Add("-map");
+        args.Add("0:a:0?");
+        args.Add("-c:a");
+        args.Add("copy");
         args.Add("-f");
         args.Add("segment");
         args.Add("-segment_time");

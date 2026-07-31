@@ -80,7 +80,8 @@ public sealed class OperatorRuntimeRepairTests
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null)
         {
-            if (File.Exists(Path.Combine(directory.FullName, "BossCamSuite.sln")))
+            if (File.Exists(Path.Combine(directory.FullName, "BossCamSuite.Linux.sln"))
+                || File.Exists(Path.Combine(directory.FullName, "BossCamSuite.sln")))
             {
                 return directory.FullName;
             }
@@ -88,6 +89,6 @@ public sealed class OperatorRuntimeRepairTests
             directory = directory.Parent;
         }
 
-        throw new DirectoryNotFoundException("Could not locate BossCamSuite.sln from the test output directory.");
+        throw new DirectoryNotFoundException("Could not locate BossCamSuite solution file from the test output directory.");
     }
 }

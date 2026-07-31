@@ -1,5 +1,6 @@
 using BossCam.Contracts;
 using BossCam.Core;
+using Microsoft.Extensions.Options;
 
 namespace BossCam.Service;
 
@@ -60,7 +61,7 @@ public static class ApiRecordingsEndpoints
             Results.Ok(await recordingService.ExportClipAsync(request, ct)));
 
         // PR-R3: Download a clip by path (must be under storage root for safety)
-        app.MapGet("/api/recordings/download", async (string path, IOptions<BossCamRuntimeOptions> runtime, CancellationToken ct) =>
+        app.MapGet("/api/recordings/download", (string path, IOptions<BossCamRuntimeOptions> runtime) =>
         {
             if (string.IsNullOrWhiteSpace(path))
             {
@@ -109,7 +110,8 @@ public static class ApiRecordingsEndpoints
             var timeout = options.Value.StallTimeoutSeconds;
             var autoRestart = options.Value.StallAutoRestart;
             var stalled = await recordingService.CheckStalledJobsAsync(timeout, autoRestart, ct);
-            return Results.Ok(new { checked = true, stalled = stalled.Count, autoRestart, stalled });
+            // @checked escapes the reserved keyword while keeping the JSON property name "checked".
+            return Results.Ok(new { @checked = true, stalled = stalled.Count, autoRestart });
         });
 
         app.MapPost("/api/recordings/reconcile", async (RecordingService recordingService, CancellationToken ct) =>

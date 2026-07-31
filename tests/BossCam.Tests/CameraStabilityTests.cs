@@ -284,7 +284,10 @@ public sealed class CameraStabilityTests
         Assert.Equal(ConnectivityDiagnosticVerdict.RtspDownSnapshotOnly, report.Verdict);
         Assert.True(report.Success);
         Assert.Equal(ConnectivityStatus.Degraded, report.ConnectivityStatus);
-        Assert.Single(report.ProbeResults, r => r.Value.Success);
+        // HTTP + snapshot are up, RTSP (tcp:554) is the only failing probe.
+        Assert.True(report.ProbeResults["http:80"].Success);
+        Assert.True(report.ProbeResults["snapshot"].Success);
+        Assert.False(report.ProbeResults["tcp:554"].Success);
     }
 
     [Fact]
@@ -315,17 +318,17 @@ public sealed class CameraStabilityTests
     }
 
     [Fact]
-    public void TransportFailoverService_ResolveBestSource_Null_For_No_Ip()
+    public async Task TransportFailoverService_ResolveBestSource_Null_For_No_Ip()
     {
         // Create a store with a device that has no IP
         var dbPath = Path.Combine(Path.GetTempPath(), $"bosscam-failover-null-{Guid.NewGuid():N}.db");
         try
         {
             var store = new SqliteApplicationStore(Options.Create(new BossCamRuntimeOptions { DatabasePath = dbPath }));
-            store.InitializeAsync(CancellationToken.None).GetAwaiter().GetResult();
+            await store.InitializeAsync(CancellationToken.None);
 
             var noIpDevice = new DeviceIdentity { Name = "NoIP" };
-            store.UpsertDevicesAsync([noIpDevice], CancellationToken.None).GetAwaiter().GetResult();
+            await store.UpsertDevicesAsync([noIpDevice], CancellationToken.None);
 
             // The service needs HTTP client factory which won't actually be used because device has no IP
             var service = new TransportFailoverService(
@@ -334,8 +337,7 @@ public sealed class CameraStabilityTests
                 new HttpClientFactoryMock(),
                 NullLogger<TransportFailoverService>.Instance);
 
-            var result = service.ResolveBestSourceAsync(noIpDevice.Id, "main", CancellationToken.None)
-                .GetAwaiter().GetResult();
+            var result = await service.ResolveBestSourceAsync(noIpDevice.Id, "main", CancellationToken.None);
 
             Assert.Null(result);
         }
