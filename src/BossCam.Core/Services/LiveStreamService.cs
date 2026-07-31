@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Channels;
 using BossCam.Contracts;
+using BossCam.Core.Utilities;
 using Microsoft.Extensions.Logging;
 
 namespace BossCam.Core;
@@ -197,7 +198,9 @@ public sealed class LiveStreamService(
 
         var user = string.IsNullOrWhiteSpace(device.LoginName) ? "admin" : device.LoginName;
         var password = device.Password ?? string.Empty;
-        var port = device.Port <= 0 ? 80 : device.Port;
+        // Discovery can record the ONVIF/media port (8888/8899) while the NetSDK REST
+        // snapshot API listens on 80 — try the recorded port first, then fall back to 80.
+        var ports = NetSdkPortCandidates.For(device.Port);
         var paths = new[]
         {
             "/NetSDK/Video/encode/channel/101/snapShot",
@@ -210,33 +213,41 @@ public sealed class LiveStreamService(
         while (!cancellationToken.IsCancellationRequested)
         {
             byte[]? jpeg = null;
-            foreach (var path in paths)
+            foreach (var port in ports)
             {
-                try
+                foreach (var path in paths)
                 {
-                    using var req = new HttpRequestMessage(HttpMethod.Get, $"http://{device.IpAddress}:{port}{path}");
-                    var token = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{user}:{password}"));
-                    req.Headers.Authorization = new AuthenticationHeaderValue("Basic", token);
-                    using var res = await SnapshotClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-                    if (!res.IsSuccessStatusCode)
+                    try
                     {
-                        continue;
-                    }
+                        using var req = new HttpRequestMessage(HttpMethod.Get, $"http://{device.IpAddress}:{port}{path}");
+                        var token = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{user}:{password}"));
+                        req.Headers.Authorization = new AuthenticationHeaderValue("Basic", token);
+                        using var res = await SnapshotClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                        if (!res.IsSuccessStatusCode)
+                        {
+                            continue;
+                        }
 
-                    var bytes = await res.Content.ReadAsByteArrayAsync(cancellationToken);
-                    if (bytes.Length > 500 && bytes[0] == 0xFF && bytes[1] == 0xD8)
+                        var bytes = await res.Content.ReadAsByteArrayAsync(cancellationToken);
+                        if (bytes.Length > 500 && bytes[0] == 0xFF && bytes[1] == 0xD8)
+                        {
+                            jpeg = bytes;
+                            break;
+                        }
+                    }
+                    catch (OperationCanceledException)
                     {
-                        jpeg = bytes;
-                        break;
+                        throw;
+                    }
+                    catch
+                    {
+                        // next path
                     }
                 }
-                catch (OperationCanceledException)
+
+                if (jpeg is not null)
                 {
-                    throw;
-                }
-                catch
-                {
-                    // next path
+                    break; // succeeded on this port — skip remaining fallback candidates
                 }
             }
 

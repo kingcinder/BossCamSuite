@@ -12,6 +12,7 @@ public sealed class RecordingService(
     TransportBroker transportBroker,
     IRecordingPipelineResolver pipelines,
     IBossCamEventBroadcaster broadcaster,
+    IHttpClientFactory httpClientFactory,
     ILogger<RecordingService> logger)
 {
     /// <summary>
@@ -47,14 +48,6 @@ public sealed class RecordingService(
             sourceUrl = SelectHighResMainSource(sources)?.Url;
         }
 
-        // Snapshot is fallback only (often 704x480). Prefer high-res RTSP when available.
-        var snapshotUrl = sources.FirstOrDefault(static s =>
-                s.Metadata.TryGetValue("kind", out var kind) && kind.Equals("snapshot", StringComparison.OrdinalIgnoreCase)
-                && s.Metadata.TryGetValue("highRes", out var hr) && hr.Equals("true", StringComparison.OrdinalIgnoreCase))?.Url
-            ?? sources.FirstOrDefault(static s =>
-                s.Metadata.TryGetValue("kind", out var kind) && kind.Equals("snapshot", StringComparison.OrdinalIgnoreCase))?.Url
-            ?? BuildSnapshotUrl(device);
-
         var selectedMain = SelectHighResMainSource(sources);
         var forceSnapshot = string.Equals(request.SourceUrl, "snapshot", StringComparison.OrdinalIgnoreCase)
             || (sourceUrl?.Contains("snapShot", StringComparison.OrdinalIgnoreCase) ?? false)
@@ -68,7 +61,11 @@ public sealed class RecordingService(
 
         if (useSnapshotPipeline)
         {
-            sourceUrl = snapshotUrl;
+            // Snapshot is fallback only (often 704x480). Prefer a *reachable* snapshot: probe the
+            // adapters' snapshot-kind descriptors in rank order (recorded port first, then the
+            // :80 fallback they emit) so recording self-heals when the recorded port is dead.
+            // Last resort is BuildSnapshotUrl (port normalized via NetSdkPortCandidates.For).
+            sourceUrl = await ResolveSnapshotUrlAsync(device, sources, cancellationToken);
             sourceRole = "snapshot";
             degradedReason = selectedMain is null ? "No RTSP main source available — using snapshot pipeline" : "Snapshot forced by request";
         }
@@ -267,13 +264,35 @@ public sealed class RecordingService(
     private static string BashQuote(string value)
         => "'" + value.Replace("'", "'\"'\"'", StringComparison.Ordinal) + "'";
 
-    private static string BuildSnapshotUrl(DeviceIdentity device)
+    /// <summary>
+    /// Last-resort snapshot URL when no snapshot source descriptor exists. The port is derived
+    /// through <see cref="NetSdkPortCandidates.For(int)"/> (recorded port, or :80 for a
+    /// non-positive/80 recorded port) so the fallback contract stays in one place. This returns a
+    /// single URL — the snapshot pipeline is a one-shot curl loop — so it cannot itself express
+    /// the :80 fallback candidate; multi-candidate probing is left to the video adapters' rank-26
+    /// descriptor and <see cref="TransportFailoverService"/>.
+    /// </summary>
+    internal static string BuildSnapshotUrl(DeviceIdentity device)
     {
         var user = string.IsNullOrWhiteSpace(device.LoginName) ? "admin" : device.LoginName;
         var password = device.Password ?? string.Empty;
-        var port = device.Port <= 0 ? 80 : device.Port;
+        var port = NetSdkPortCandidates.For(device.Port)[0];
         return $"http://{Uri.EscapeDataString(user)}:{Uri.EscapeDataString(password)}@{device.IpAddress}:{port}/NetSDK/Video/encode/channel/101/snapShot";
     }
+
+    /// <summary>
+    /// Picks the snapshot URL for the snapshot pipeline: probes the adapters' snapshot-kind
+    /// descriptors in ascending rank order (recorded port first, then the :80 fallback they
+    /// emit) and returns the first that actually serves a JPEG. Falls back to
+    /// <see cref="BuildSnapshotUrl(DeviceIdentity)"/> when no descriptor answers. Internal for
+    /// unit tests (InternalsVisibleTo).
+    /// </summary>
+    internal async Task<string> ResolveSnapshotUrlAsync(
+        DeviceIdentity device,
+        IReadOnlyCollection<VideoSourceDescriptor> sources,
+        CancellationToken cancellationToken)
+        => (await NetSdkPortCandidates.FirstReachableSnapshotAsync(httpClientFactory, sources, cancellationToken))?.Url
+           ?? BuildSnapshotUrl(device);
 
     /// <summary>
     /// Picks the highest-priority main/high-res stream. Never selects sub paths like ch0_1, /12, subtype=1.

@@ -31,6 +31,7 @@ public sealed class RecordingResilienceTests : IDisposable
             new TransportBroker([], store, null, NullLogger<TransportBroker>.Instance),
             new TestRecordingPipelineResolver(),
             NullBossCamEventBroadcaster.Instance,
+            new HttpClientFactoryMock(), // reconcile/stall tests never probe snapshot URLs
             NullLogger<RecordingService>.Instance);
         return (store, service);
     }

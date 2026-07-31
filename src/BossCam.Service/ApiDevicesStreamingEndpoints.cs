@@ -1,5 +1,6 @@
 using BossCam.Contracts;
 using BossCam.Core;
+using BossCam.Core.Utilities;
 using Microsoft.AspNetCore.Http.Features;
 
 namespace BossCam.Service;
@@ -31,7 +32,11 @@ public static class ApiDevicesStreamingEndpoints
 
             var user = string.IsNullOrWhiteSpace(device.LoginName) ? "admin" : device.LoginName;
             var password = device.Password ?? string.Empty;
-            var port = device.Port <= 0 ? 80 : device.Port;
+            // Discovery can record the ONVIF/media port (8888/8899) on the device while the
+            // NetSDK REST snapshot API actually listens on 80 (verified live on 5523-W units:
+            // deviceInfo returns 200 on :80, transport-fails on the recorded ONVIF port).
+            // Try the recorded port first, then fall back to 80 for each candidate path.
+            var ports = NetSdkPortCandidates.For(device.Port);
             var token = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{user}:{password}"));
             var candidatePaths = new[]
             {
@@ -45,28 +50,31 @@ public static class ApiDevicesStreamingEndpoints
             // Digest-auth fallback requires per-request handler; pooled factory doesn't apply here.
             using var handler = new HttpClientHandler { Credentials = new System.Net.NetworkCredential(user, password) };
             using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(8) };
-            foreach (var path in candidatePaths)
+            foreach (var port in ports)
             {
-                try
+                foreach (var path in candidatePaths)
                 {
-                    var url = $"http://{device.IpAddress}:{port}{path}";
-                    using var request = new HttpRequestMessage(HttpMethod.Get, url);
-                    request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", token);
-                    using var response = await client.SendAsync(request, ct);
-                    if (!response.IsSuccessStatusCode)
+                    try
                     {
-                        continue;
-                    }
+                        var url = $"http://{device.IpAddress}:{port}{path}";
+                        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", token);
+                        using var response = await client.SendAsync(request, ct);
+                        if (!response.IsSuccessStatusCode)
+                        {
+                            continue;
+                        }
 
-                    var bytes = await response.Content.ReadAsByteArrayAsync(ct);
-                    if (bytes.Length > 500 && bytes[0] == 0xFF && bytes[1] == 0xD8)
-                    {
-                        return Results.File(bytes, "image/jpeg");
+                        var bytes = await response.Content.ReadAsByteArrayAsync(ct);
+                        if (bytes.Length > 500 && bytes[0] == 0xFF && bytes[1] == 0xD8)
+                        {
+                            return Results.File(bytes, "image/jpeg");
+                        }
                     }
-                }
-                catch
-                {
-                    // try next candidate
+                    catch
+                    {
+                        // try next candidate
+                    }
                 }
             }
 

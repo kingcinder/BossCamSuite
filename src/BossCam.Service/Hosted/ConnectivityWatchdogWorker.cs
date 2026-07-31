@@ -1,5 +1,6 @@
 using BossCam.Contracts;
 using BossCam.Core;
+using BossCam.Core.Utilities;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -99,12 +100,12 @@ public sealed class ConnectivityWatchdogWorker(
         }
 
         var ip = device.IpAddress;
-        var port = device.Port <= 0 ? 80 : device.Port;
         var user = string.IsNullOrWhiteSpace(device.LoginName) ? "admin" : device.LoginName;
         var pass = device.Password ?? string.Empty;
 
-        // Quick probe: HTTP device info + TCP :554
-        var httpOk = await QuickHttpProbeAsync(ip, port, user, pass, cancellationToken);
+        // Quick probe: HTTP device info + TCP :554. The HTTP surface listens on :80 while
+        // discovery may have recorded an ONVIF/media port — probe recorded-first, then :80.
+        var httpOk = await QuickHttpProbeAsync(device, user, pass, cancellationToken);
         var rtspOk = await QuickTcpProbeAsync(ip, 554, cancellationToken);
 
         var currentStatus = (httpOk, rtspOk) switch
@@ -246,6 +247,14 @@ public sealed class ConnectivityWatchdogWorker(
             device.DisplayName, string.Join(", ", alternatePorts));
     }
 
+    /// <summary>Probes deviceInfo across candidate ports (recorded first, then :80).</summary>
+    internal async Task<bool> QuickHttpProbeAsync(
+        DeviceIdentity device, string user, string pass, CancellationToken cancellationToken)
+        => await NetSdkPortCandidates.AnyPortSucceedsAsync(
+            device.Port,
+            (port, ct) => QuickHttpProbeAsync(device.IpAddress!, port, user, pass, ct),
+            cancellationToken);
+
     private async Task<bool> QuickHttpProbeAsync(
         string ip, int port, string user, string pass, CancellationToken cancellationToken)
     {
@@ -287,33 +296,40 @@ public sealed class ConnectivityWatchdogWorker(
         }
     }
 
-    private async Task<bool> QuickSnapshotProbeAsync(
+    /// <summary>
+    /// Probes the NetSDK snapshot JPEG across candidate ports (recorded first, then :80) so a
+    /// 5523-W with a recorded ONVIF/media port is not misreported offline when :80 serves it.
+    /// </summary>
+    internal async Task<bool> QuickSnapshotProbeAsync(
         DeviceIdentity device, CancellationToken cancellationToken)
     {
-        try
+        var user = string.IsNullOrWhiteSpace(device.LoginName) ? "admin" : device.LoginName;
+        var pass = device.Password ?? string.Empty;
+        var ip = device.IpAddress ?? string.Empty;
+        return await NetSdkPortCandidates.AnyPortSucceedsAsync(device.Port, async (port, ct) =>
         {
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            cts.CancelAfter(QuickProbeTimeout);
-            using var client = httpClientFactory.CreateClient("probe");
-            var user = string.IsNullOrWhiteSpace(device.LoginName) ? "admin" : device.LoginName;
-            var pass = device.Password ?? string.Empty;
-            var port = device.Port <= 0 ? 80 : device.Port;
-            using var request = new HttpRequestMessage(
-                HttpMethod.Get,
-                $"http://{device.IpAddress}:{port}/NetSDK/Video/encode/channel/101/snapShot");
-            var token = Convert.ToBase64String(
-                System.Text.Encoding.UTF8.GetBytes($"{user}:{pass}"));
-            request.Headers.Authorization =
-                new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", token);
-            using var response = await client.SendAsync(
-                request, HttpCompletionOption.ResponseHeadersRead, cts.Token);
-            var bytes = await response.Content.ReadAsByteArrayAsync(cts.Token);
-            return bytes.Length > 500 && bytes[0] == 0xFF && bytes[1] == 0xD8;
-        }
-        catch
-        {
-            return false;
-        }
+            try
+            {
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                cts.CancelAfter(QuickProbeTimeout);
+                using var client = httpClientFactory.CreateClient("probe");
+                using var request = new HttpRequestMessage(
+                    HttpMethod.Get,
+                    $"http://{ip}:{port}/NetSDK/Video/encode/channel/101/snapShot");
+                var token = Convert.ToBase64String(
+                    System.Text.Encoding.UTF8.GetBytes($"{user}:{pass}"));
+                request.Headers.Authorization =
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", token);
+                using var response = await client.SendAsync(
+                    request, HttpCompletionOption.ResponseHeadersRead, cts.Token);
+                var bytes = await response.Content.ReadAsByteArrayAsync(cts.Token);
+                return bytes.Length > 500 && bytes[0] == 0xFF && bytes[1] == 0xD8;
+            }
+            catch
+            {
+                return false; // next candidate port
+            }
+        }, cancellationToken);
     }
 
     private async Task BroadcastConnectivityChangeAsync(

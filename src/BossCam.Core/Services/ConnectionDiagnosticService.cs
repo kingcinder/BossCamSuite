@@ -3,6 +3,7 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
 using BossCam.Contracts;
+using BossCam.Core.Utilities;
 using Microsoft.Extensions.Logging;
 
 namespace BossCam.Core;
@@ -57,9 +58,9 @@ public sealed class ConnectionDiagnosticService(
             results[$"tcp:{probePort}"] = await ProbeTcpPortAsync(ip!, probePort, cancellationToken);
         }
 
-        // 3. HTTP API reachability
-        results["http:deviceInfo"] = await ProbeHttpGetAsync(
-            $"http://{ip}:{port}/NetSDK/System/deviceInfo", user, pass, cancellationToken);
+        // 3. HTTP API reachability — recorded port first, then :80 (NetSDK REST surface often on 80)
+        results["http:deviceInfo"] = await ProbeHttpGetFirstReachableAsync(
+            ip!, device.Port, "/NetSDK/System/deviceInfo", user, pass, cancellationToken);
 
         // 4. RTSP reachability (TCP :554)
         results["rtsp:main"] = await ProbeTcpPortAsync(ip!, 554, cancellationToken);
@@ -92,9 +93,10 @@ public sealed class ConnectionDiagnosticService(
             };
         }
 
-        // 7. Try snapshot
-        results["snapshot"] = await ProbeHttpGetAsync(
-            $"http://{ip}:{port}/NetSDK/Video/encode/channel/101/snapShot", user, pass, cancellationToken);
+        // 7. Try snapshot — recorded port first, then :80 (a 5523-W with a recorded ONVIF port
+        //    is still snapshot-reachable via the :80 NetSDK REST surface).
+        results["snapshot"] = await ProbeHttpGetFirstReachableAsync(
+            ip!, device.Port, "/NetSDK/Video/encode/channel/101/snapShot", user, pass, cancellationToken);
 
         // Derive composite verdict
         var summary = BuildSummary(results);
@@ -252,6 +254,28 @@ public sealed class ConnectionDiagnosticService(
                 LatencyMs = (int)sw.ElapsedMilliseconds
             };
         }
+    }
+
+    /// <summary>
+    /// HTTP probe across candidate ports in recorded-first/:80-fallback order. Returns the first
+    /// success, or the last failure detail when every candidate fails.
+    /// </summary>
+    private async Task<ProbeResult> ProbeHttpGetFirstReachableAsync(
+        string ip, int recordedPort, string path, string user, string pass, CancellationToken cancellationToken)
+    {
+        ProbeResult? last = null;
+        foreach (var port in NetSdkPortCandidates.For(recordedPort))
+        {
+            var r = await ProbeHttpGetAsync($"http://{ip}:{port}{path}", user, pass, cancellationToken);
+            if (r.Success)
+            {
+                return r;
+            }
+
+            last = r;
+        }
+
+        return last ?? new ProbeResult { Success = false, Detail = $"HTTP probe failed for {path} on all candidate ports." };
     }
 
     private async Task<ProbeResult> ProbeHttpGetAsync(

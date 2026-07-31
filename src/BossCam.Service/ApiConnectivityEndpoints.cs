@@ -36,7 +36,7 @@ public static class ApiConnectivityEndpoints
             CancellationToken ct) =>
         {
             var report = await diagnosticService.DiagnoseAsync(id, ct);
-            return report.Success ? Results.Ok(report) : Results.Ok(report); // always return report even on failure
+            return Results.Ok(report); // always return report even on failure
         });
 
         // POST /api/devices/{id}/connectivity/reconnect — force reconnect attempt

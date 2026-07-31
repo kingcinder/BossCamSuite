@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using BossCam.Contracts;
 using BossCam.Core;
+using BossCam.Core.Utilities;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -18,9 +19,12 @@ public abstract class HttpControlAdapterBase(IOptions<BossCamRuntimeOptions> opt
     protected IHttpClientFactory HttpClientFactory => httpClientFactory;
 
     protected Uri BuildDeviceUri(DeviceIdentity device, string endpoint)
+        => BuildDeviceUri(device, endpoint, device.Port > 0 ? device.Port : 80);
+
+    protected Uri BuildDeviceUri(DeviceIdentity device, string endpoint, int port)
     {
         var cleaned = endpoint.Replace(" ", string.Empty, StringComparison.OrdinalIgnoreCase).Replace("/ID", "/0", StringComparison.OrdinalIgnoreCase);
-        return new Uri($"http://{device.IpAddress}:{device.Port}{cleaned}", UriKind.Absolute);
+        return new Uri($"http://{device.IpAddress}:{port}{cleaned}", UriKind.Absolute);
     }
 
     protected async Task<HttpAdapterResponse?> SendAsync(DeviceIdentity device, string endpoint, string method, JsonObject? payload, CancellationToken cancellationToken, string? mediaType = null)
@@ -30,23 +34,48 @@ public abstract class HttpControlAdapterBase(IOptions<BossCamRuntimeOptions> opt
             return null;
         }
 
-        var uri = BuildDeviceUri(device, endpoint);
         var payloadRaw = payload?.ToJsonString();
-        var basic = await SendOnceAsync(device, uri, endpoint, method, payloadRaw, mediaType, useBasicHeader: true, useCredentialCache: false, cancellationToken);
-        if (basic is not null && basic.StatusCode != HttpStatusCode.Unauthorized)
+        // Discovery can record an ONVIF/media port (8888/8899) on the device while the
+        // NetSDK REST control plane actually listens on 80 — verified live on 5523-W
+        // units where deviceInfo/properties return 200 on :80 but transport-fail on the
+        // recorded ONVIF port. Fall back to 80 only when the recorded port differs and
+        // the first attempt fails at the TRANSPORT level (null); never on an HTTP
+        // response (auth/semantic results are authoritative for that port).
+        var ports = NetSdkPortCandidates.For(device.Port);
+        foreach (var port in ports)
         {
-            return basic;
+            var uri = BuildDeviceUri(device, endpoint, port);
+            var basic = await SendOnceAsync(device, uri, endpoint, method, payloadRaw, mediaType, useBasicHeader: true, useCredentialCache: false, cancellationToken);
+            if (basic is not null && basic.StatusCode != HttpStatusCode.Unauthorized)
+            {
+                return basic;
+            }
+
+            if (basic is not null)
+            {
+                Logger.LogInformation(
+                    "HTTP auth retry with digest/credential-cache. adapter={Adapter} device={Device} ip={Ip} endpoint={Endpoint} method={Method} firstStatus={Status}",
+                    GetType().Name,
+                    device.DisplayName,
+                    device.IpAddress,
+                    endpoint,
+                    method,
+                    basic.StatusCode);
+                return await SendOnceAsync(device, uri, endpoint, method, payloadRaw, mediaType, useBasicHeader: false, useCredentialCache: true, cancellationToken);
+            }
+
+            if (ports.Length > 1)
+            {
+                Logger.LogWarning(
+                    "HTTP transport failure on port {Port} for adapter={Adapter} device={Device} endpoint={Endpoint}; trying fallback port 80",
+                    port,
+                    GetType().Name,
+                    device.DisplayName,
+                    endpoint);
+            }
         }
 
-        Logger.LogInformation(
-            "HTTP auth retry with digest/credential-cache. adapter={Adapter} device={Device} ip={Ip} endpoint={Endpoint} method={Method} firstStatus={Status}",
-            GetType().Name,
-            device.DisplayName,
-            device.IpAddress,
-            endpoint,
-            method,
-            basic?.StatusCode);
-        return await SendOnceAsync(device, uri, endpoint, method, payloadRaw, mediaType, useBasicHeader: false, useCredentialCache: true, cancellationToken);
+        return null;
     }
 
     protected async Task<HttpAdapterResponse?> SendMultipartAsync(DeviceIdentity device, string endpoint, MultipartFormDataContent content, CancellationToken cancellationToken)

@@ -1,4 +1,5 @@
 using BossCam.Contracts;
+using BossCam.Core.Utilities;
 using Microsoft.Extensions.Logging;
 
 namespace BossCam.Core;
@@ -12,6 +13,7 @@ public sealed class HighlightBoardService(
     IApplicationStore store,
     TransportBroker transportBroker,
     RecordingService recordingService,
+    IHttpClientFactory httpClientFactory,
     IBossCamEventBroadcaster broadcaster,
     ILogger<HighlightBoardService> logger)
 {
@@ -184,8 +186,10 @@ public sealed class HighlightBoardService(
                     || s.Url.Contains("/12", StringComparison.OrdinalIgnoreCase)
                     || s.Url.Contains("subtype=1", StringComparison.OrdinalIgnoreCase)
                     || (s.Metadata.TryGetValue("stream", out var st) && st.Equals("sub", StringComparison.OrdinalIgnoreCase))));
-            var snapshot = sources.FirstOrDefault(s =>
-                s.Metadata.TryGetValue("kind", out var kind) && kind.Equals("snapshot", StringComparison.OrdinalIgnoreCase));
+            // Probe the snapshot-kind descriptors in rank order (recorded port first, then the
+            // :80 fallback the adapters emit) so the tile's SnapshotUrl / live fallback picks a
+            // genuinely reachable JPEG — self-healing dead recorded ports like the recording path.
+            var snapshot = await NetSdkPortCandidates.FirstReachableSnapshotAsync(httpClientFactory, sources, cancellationToken);
             var bubble = sources.FirstOrDefault(s => s.Kind == TransportKind.BubbleFlv);
 
             var live = preferred switch

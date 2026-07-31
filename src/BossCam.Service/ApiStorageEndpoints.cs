@@ -1,6 +1,7 @@
 using System.Text.Json;
 using BossCam.Contracts;
 using BossCam.Core;
+using BossCam.Core.Utilities;
 using Microsoft.Extensions.Options;
 
 namespace BossCam.Service;
@@ -55,28 +56,60 @@ public static class ApiStorageEndpoints
 
             var user = string.IsNullOrWhiteSpace(device.LoginName) ? "admin" : device.LoginName;
             var password = device.Password ?? string.Empty;
-            var port = device.Port <= 0 ? 80 : device.Port;
+            // Discovery can record the ONVIF/media port (8888/8899) while the NetSDK REST
+            // snapshot API listens on 80 (verified live on 5523-W units) — try the recorded
+            // port first, then fall back to 80 for each candidate snapshot path.
+            var ports = NetSdkPortCandidates.For(device.Port);
             var token = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{user}:{password}"));
 
             using var client = httpClientFactory.CreateClient("snapshot");
             client.Timeout = TimeSpan.FromSeconds(10);
-            using var request = new HttpRequestMessage(HttpMethod.Get, $"http://{device.IpAddress}:{port}/NetSDK/Video/encode/channel/101/snapShot");
-            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", token);
-            using var response = await client.SendAsync(request, ct);
+            var candidatePaths = new[]
+            {
+                "/NetSDK/Video/encode/channel/101/snapShot",
+                "/NetSDK/Video/encode/channel/102/snapShot"
+            };
+            byte[]? bytes = null;
+            foreach (var port in ports)
+            {
+                foreach (var path in candidatePaths)
+                {
+                    try
+                    {
+                        using var request = new HttpRequestMessage(HttpMethod.Get, $"http://{device.IpAddress}:{port}{path}");
+                        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", token);
+                        using var response = await client.SendAsync(request, ct);
+                        if (!response.IsSuccessStatusCode)
+                        {
+                            continue;
+                        }
 
-            byte[] bytes;
-            if (response.IsSuccessStatusCode)
-            {
-                bytes = await response.Content.ReadAsByteArrayAsync(ct);
-            }
-            else
-            {
-                return Results.StatusCode((int)response.StatusCode);
+                        var candidate = await response.Content.ReadAsByteArrayAsync(ct);
+                        if (candidate.Length > 500 && candidate[0] == 0xFF && candidate[1] == 0xD8)
+                        {
+                            bytes = candidate;
+                            break;
+                        }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
+                    catch
+                    {
+                        // next candidate
+                    }
+                }
+
+                if (bytes is not null)
+                {
+                    break;
+                }
             }
 
-            if (bytes.Length < 500)
+            if (bytes is null)
             {
-                return Results.BadRequest(new { error = "Snapshot payload too small." });
+                return Results.StatusCode(StatusCodes.Status502BadGateway);
             }
 
             var name = $"{(device.IpAddress ?? id.ToString("N")).Replace('.', '_')}_{DateTimeOffset.Now:yyyyMMdd_HHmmss}.jpg";

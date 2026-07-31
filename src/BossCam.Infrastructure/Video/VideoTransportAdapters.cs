@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using BossCam.Contracts;
 using BossCam.Core;
+using BossCam.Core.Utilities;
 using BossCam.Infrastructure.Control;
 using BossCam.NativeBridge;
 using Microsoft.Extensions.Options;
@@ -30,7 +31,7 @@ public sealed class StreamDescriptorAdapter(IOptions<BossCamRuntimeOptions> opti
         var user = string.IsNullOrWhiteSpace(device.LoginName) ? "admin" : device.LoginName;
         var password = device.Password ?? string.Empty;
         var authPrefix = BuildAuthPrefix(user, password);
-        var port = device.Port <= 0 ? 80 : device.Port;
+        var ports = NetSdkPortCandidates.For(device.Port);
 
         foreach (var existing in device.TransportProfiles.Where(static profile => profile.Kind is TransportKind.Rtsp or TransportKind.RtspOverHttp or TransportKind.FlvOverHttp or TransportKind.Rtmp or TransportKind.OnvifRtsp))
         {
@@ -96,51 +97,63 @@ public sealed class StreamDescriptorAdapter(IOptions<BossCamRuntimeOptions> opti
                 }
             });
 
-            // NetSDK snapShot is often sub-resolution; keep for tiles only.
-            sources.Add(new VideoSourceDescriptor
+            // NetSDK snapShot is often sub-resolution; keep for tiles only. When discovery recorded
+            // an ONVIF/media port (8888/8899), also emit the :80 candidate so failover / tile
+            // consumers can probe the candidates in recorded-port-first order.
+            foreach (var candidatePort in ports)
             {
-                Kind = TransportKind.LanRest,
-                Url = $"http://{authPrefix}{device.IpAddress}:{port}/NetSDK/Video/encode/channel/101/snapShot",
-                Rank = 25,
-                DisplayName = "JPEG snapshot (NetSDK)",
-                Metadata = new Dictionary<string, string>
+                var isFallback = NetSdkPortCandidates.IsFallback(device.Port, candidatePort);
+                sources.Add(new VideoSourceDescriptor
                 {
-                    ["kind"] = "snapshot",
-                    ["contentType"] = "image/jpg",
-                    ["endpoint"] = "/NetSDK/Video/encode/channel/101/snapShot",
-                    ["highRes"] = "false"
-                }
-            });
+                    Kind = TransportKind.LanRest,
+                    Url = $"http://{authPrefix}{device.IpAddress}:{candidatePort}/NetSDK/Video/encode/channel/101/snapShot",
+                    Rank = isFallback ? 26 : 25,
+                    DisplayName = isFallback ? "JPEG snapshot (NetSDK :80 fallback)" : "JPEG snapshot (NetSDK)",
+                    Metadata = new Dictionary<string, string>
+                    {
+                        ["kind"] = "snapshot",
+                        ["contentType"] = "image/jpg",
+                        ["endpoint"] = "/NetSDK/Video/encode/channel/101/snapShot",
+                        ["highRes"] = "false",
+                        ["port"] = candidatePort.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    }
+                });
+            }
         }
 
         using var client = httpClientFactory.CreateClient("default");
         client.Timeout = TimeSpan.FromSeconds(options.Value.HttpTimeoutSeconds);
-        try
+        var credential = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{user}:{password}"));
+        foreach (var candidatePort in ports)
         {
-            var endpoint = $"http://{device.IpAddress}:{port}/NetSDK/Stream/channel/0";
-            using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
-            var credential = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{user}:{password}"));
-            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", credential);
-            using var response = await client.SendAsync(request, cancellationToken);
-            if (response.IsSuccessStatusCode)
+            try
             {
-                var raw = await response.Content.ReadAsStringAsync(cancellationToken);
-                var node = HttpControlAdapterBase.TryParseNode(raw);
-                foreach (var url in ExtractUrls(node, raw))
+                var endpoint = $"http://{device.IpAddress}:{candidatePort}/NetSDK/Stream/channel/0";
+                using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", credential);
+                using var response = await client.SendAsync(request, cancellationToken);
+                if (response.IsSuccessStatusCode)
                 {
-                    sources.Add(new VideoSourceDescriptor
+                    var raw = await response.Content.ReadAsStringAsync(cancellationToken);
+                    var node = HttpControlAdapterBase.TryParseNode(raw);
+                    foreach (var url in ExtractUrls(node, raw))
                     {
-                        Kind = MapKind(url),
-                        Url = InjectCredentialsIfMissing(url, user, password),
-                        Rank = RankFor(url),
-                        DisplayName = Path.GetFileName(url),
-                        Metadata = new Dictionary<string, string> { ["source"] = "/NetSDK/Stream/channel/0" }
-                    });
+                        sources.Add(new VideoSourceDescriptor
+                        {
+                            Kind = MapKind(url),
+                            Url = InjectCredentialsIfMissing(url, user, password),
+                            Rank = RankFor(url),
+                            DisplayName = Path.GetFileName(url),
+                            Metadata = new Dictionary<string, string> { ["source"] = "/NetSDK/Stream/channel/0" }
+                        });
+                    }
+                    break; // first responsive port wins — stop probing fallback candidates
                 }
             }
-        }
-        catch
-        {
+            catch
+            {
+                // try the next candidate port
+            }
         }
 
         return sources
@@ -282,39 +295,46 @@ public sealed class BubbleFlvAdapter : IVideoTransportAdapter
         var user = string.IsNullOrWhiteSpace(device.LoginName) ? "admin" : device.LoginName;
         var password = device.Password ?? string.Empty;
         var authPrefix = StreamDescriptorAdapter.BuildAuthPrefix(user, password);
-        var port = device.Port <= 0 ? 80 : device.Port;
+        var ports = NetSdkPortCandidates.For(device.Port);
 
-        // Proven live: content-type video/bubble on both 5523-W units.
-        IReadOnlyCollection<VideoSourceDescriptor> sources =
-        [
-            new VideoSourceDescriptor
+        // Proven live: content-type video/bubble on both 5523-W units. When discovery recorded an
+        // ONVIF/media port, also emit :80 candidates so live consumers / failover can fall back.
+        var sources = new List<VideoSourceDescriptor>();
+        foreach (var candidatePort in ports)
+        {
+            var isFallback = NetSdkPortCandidates.IsFallback(device.Port, candidatePort);
+            var rankBase = isFallback ? 32 : 30;
+            sources.Add(new VideoSourceDescriptor
             {
                 Kind = TransportKind.BubbleFlv,
-                Url = $"http://{authPrefix}{device.IpAddress}:{port}/bubble/live?ch=1&stream=0",
-                Rank = 30,
-                DisplayName = "Bubble live main",
+                Url = $"http://{authPrefix}{device.IpAddress}:{candidatePort}/bubble/live?ch=1&stream=0",
+                Rank = rankBase,
+                DisplayName = isFallback ? "Bubble live main (:80 fallback)" : "Bubble live main",
                 Metadata = new Dictionary<string, string>
                 {
                     ["path"] = "/bubble/live?ch=1&stream=0",
                     ["stream"] = "main",
-                    ["contentType"] = "video/bubble"
+                    ["contentType"] = "video/bubble",
+                    ["port"] = candidatePort.ToString(System.Globalization.CultureInfo.InvariantCulture)
                 }
-            },
-            new VideoSourceDescriptor
+            });
+            sources.Add(new VideoSourceDescriptor
             {
                 Kind = TransportKind.BubbleFlv,
-                Url = $"http://{authPrefix}{device.IpAddress}:{port}/bubble/live?ch=1&stream=1",
-                Rank = 31,
-                DisplayName = "Bubble live sub",
+                Url = $"http://{authPrefix}{device.IpAddress}:{candidatePort}/bubble/live?ch=1&stream=1",
+                Rank = rankBase + 1,
+                DisplayName = isFallback ? "Bubble live sub (:80 fallback)" : "Bubble live sub",
                 Metadata = new Dictionary<string, string>
                 {
                     ["path"] = "/bubble/live?ch=1&stream=1",
                     ["stream"] = "sub",
-                    ["contentType"] = "video/bubble"
+                    ["contentType"] = "video/bubble",
+                    ["port"] = candidatePort.ToString(System.Globalization.CultureInfo.InvariantCulture)
                 }
-            }
-        ];
-        return Task.FromResult(sources);
+            });
+        }
+
+        return Task.FromResult<IReadOnlyCollection<VideoSourceDescriptor>>(sources);
     }
 }
 

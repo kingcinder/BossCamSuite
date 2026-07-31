@@ -24,8 +24,94 @@ GUI_PREFIX="${BOSSCAM_GUI_PREFIX:-/opt/bosscam-gui}"
 # rather than /root. Override with BOSSCAM_SERVICE_USER=<user>.
 SERVICE_USER="${BOSSCAM_SERVICE_USER:-${SUDO_USER:-$USER}}"
 
-export DOTNET_ROOT="${DOTNET_ROOT:-$HOME/.dotnet}"
-export PATH="$DOTNET_ROOT:$PATH"
+# Locate the .NET SDK for the invoking user. Under sudo, $HOME points at
+# /root, so resolve the real operator home from SUDO_USER (or /etc/passwd)
+# before defaulting DOTNET_ROOT -- otherwise 'dotnet' is never found.
+INVOKING_HOME="$HOME"
+if [[ -n "${SUDO_USER:-}" ]]; then
+  INVOKING_HOME="$(getent passwd "$SUDO_USER" | cut -d: -f6)" || INVOKING_HOME="$HOME"
+fi
+# getent can succeed but return an empty home field on exotic setups; never
+# export an empty HOME.
+if [[ -z "$INVOKING_HOME" ]]; then
+  INVOKING_HOME="$HOME"
+fi
+
+# Under sudo, HOME points at /root -> dotnet gets a COLD NuGet cache and its
+# first-run experience, which makes `dotnet restore` appear to hang forever.
+# Point the whole script at the operator's real home so the warm package cache
+# is reused and restore completes in seconds.
+export HOME="$INVOKING_HOME"
+if [[ -z "${DOTNET_ROOT:-}" && -x "$INVOKING_HOME/.dotnet/dotnet" ]]; then
+  export DOTNET_ROOT="$INVOKING_HOME/.dotnet"
+elif [[ -z "${DOTNET_ROOT:-}" && -x "$INVOKING_HOME/.local/share/dotnet/dotnet" ]]; then
+  export DOTNET_ROOT="$INVOKING_HOME/.local/share/dotnet"
+elif [[ -z "${DOTNET_ROOT:-}" ]] && command -v dotnet >/dev/null 2>&1; then
+  # Distro-packaged SDK (e.g. /usr/bin/dotnet -> /usr/lib/dotnet/dotnet). The
+  # .NET host honors DOTNET_ROOT over its own self-location, so resolve the
+  # symlink first: a root of /usr/bin has no shared/Microsoft.NETCore.App and
+  # the unit would crash-loop with 'You must install or update .NET'.
+  _dotnet_bin="$(readlink -f "$(command -v dotnet)")"
+  export DOTNET_ROOT="$(dirname "$_dotnet_bin")"
+  unset _dotnet_bin
+fi
+export PATH="${DOTNET_ROOT:+$DOTNET_ROOT:}$PATH"
+
+# Never reuse MSBuild build-server nodes inside the installer. A prior aborted
+# run (or a killed publish) leaves /nodemode nodes behind whose handshake can
+# hang every later dotnet invocation silently at ~0% CPU. Fresh nodes each run.
+export MSBUILDDISABLENODEREUSE=1
+
+export DOTNET_NOLOGO=1
+export DOTNET_CLI_TELEMETRY_OPTOUT=1
+
+# Force IPv4 for NuGet HTTP. Many LANs (including the one this installer was
+# smoke-tested on) blackhole IPv6: DNS returns AAAA-first and the .NET/NuGet
+# client stalls on every package download, so `dotnet restore` appears to hang
+# forever while curl -4 works instantly. Overridable for IPv6-only hosts.
+: "${DOTNET_SYSTEM_NET_DISABLEIPV6:=1}"
+export DOTNET_SYSTEM_NET_DISABLEIPV6
+
+# The systemd unit embeds DOTNET_ROOT; never write a unit with an empty one.
+if [[ -z "${DOTNET_ROOT:-}" ]]; then
+  echo "[BossCam] .NET SDK not found."
+  echo "         Install .NET 8 SDK: https://learn.microsoft.com/dotnet/core/install/linux-ubuntu"
+  exit 1
+fi
+
+# Restore (explicit, so failures are visible) then publish with --no-restore.
+# Publish's implicit restore can hang indefinitely on some hosts (stale local
+# feeds, dead MSBuild nodes); a bounded explicit restore keeps installs honest.
+restore_or_fail() {
+  local project="$1"
+  echo "[BossCam] Restoring $project"
+  # Bounded: a hanging NuGet restore used to stall the whole install at ~0% CPU.
+  # 600s: a genuinely cold operator cache downloads the whole solution on
+  # first install; 300s can false-fail a merely-slow restore on slow links.
+  if ! timeout 600 dotnet restore "$project" --nologo -v m; then
+    echo "[BossCam] Restore FAILED or timed out for $project." >&2
+    echo "         Check network access to nuget.org and the sources in nuget.config." >&2
+    echo "         Tip: run restore as your own user (HOME=~). IPv4 is forced via" >&2
+    echo "         DOTNET_SYSTEM_NET_DISABLEIPV6=1 (override to 0 on IPv6-only hosts)." >&2
+    exit 1
+  fi
+}
+
+publish_project() {
+  local project="$1" out="$2"
+  # Try publish --no-restore first: fast on hosts with valid assets, and it
+  # avoids NuGet restore entirely when everything is cached. If it fails (no
+  # assets, or stale/polluted assets like an obj/ regenerated against a partial
+  # feed), run the bounded restore and retry once.
+  if dotnet publish "$project" -c Release -o "$out" --no-restore --nologo -v q; then
+    echo "[BossCam] Published $project (no restore needed)"
+    return 0
+  fi
+  echo "[BossCam] publish failed for $project (missing/stale assets); restoring..."
+  restore_or_fail "$project"
+  dotnet publish "$project" -c Release -o "$out" --no-restore --nologo -v q
+  echo "[BossCam] Published $project (after restore)"
+}
 
 echo "=== [BossCam] System-wide install ==="
 echo "  Service prefix : $SERVICE_PREFIX"
@@ -42,17 +128,14 @@ need() {
 }
 need ffmpeg ffmpeg
 need rsync rsync
-if ! command -v dotnet >/dev/null 2>&1 && [ ! -x "$DOTNET_ROOT/dotnet" ]; then
-  echo "[BossCam] .NET SDK not found."
-  echo "         Install .NET 8 SDK: https://learn.microsoft.com/dotnet/core/install/linux-ubuntu"
-  exit 1
-fi
+# DOTNET_ROOT is guaranteed non-empty by the fail-fast above; the explicit
+# restore_or_fail helper validates assets before each publish.
 
 # ── 1. Publish + install the service (systemd) ──────────────────────
 if [[ "${BOSSCAM_SKIP_SERVICE:-0}" != "1" ]]; then
   echo
   echo "=== [BossCam] Publishing service (Release) ==="
-  dotnet publish "$ROOT/src/BossCam.Service/BossCam.Service.csproj" -c Release -o /tmp/bosscam-service-publish -v q
+  publish_project "$ROOT/src/BossCam.Service/BossCam.Service.csproj" /tmp/bosscam-service-publish
 
   echo "=== [BossCam] Installing service to $SERVICE_PREFIX ==="
   sudo mkdir -p "$SERVICE_PREFIX"
@@ -93,7 +176,7 @@ fi
 # ── 2. Publish + install the native GUI ─────────────────────────────
 echo
 echo "=== [BossCam] Publishing desktop GUI (Release) ==="
-dotnet publish "$ROOT/src/BossCam.Desktop.Avalonia/BossCam.Desktop.Avalonia.csproj" -c Release -o /tmp/bosscam-gui-publish -v q
+publish_project "$ROOT/src/BossCam.Desktop.Avalonia/BossCam.Desktop.Avalonia.csproj" /tmp/bosscam-gui-publish
 
 echo "=== [BossCam] Installing GUI to $GUI_PREFIX ==="
 sudo mkdir -p "$GUI_PREFIX"

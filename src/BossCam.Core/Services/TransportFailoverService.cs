@@ -1,4 +1,5 @@
 using BossCam.Contracts;
+using BossCam.Core.Utilities;
 using Microsoft.Extensions.Logging;
 
 namespace BossCam.Core;
@@ -173,7 +174,7 @@ public sealed class TransportFailoverService(
         var pass = device.Password ?? string.Empty;
         var auth = $"{Uri.EscapeDataString(user)}:{Uri.EscapeDataString(pass)}@";
 
-        var fallbackUrls = new[]
+        var fallbackUrls = new List<VideoSourceDescriptor>
         {
             new VideoSourceDescriptor
             {
@@ -187,14 +188,23 @@ public sealed class TransportFailoverService(
                 DisplayName = "RTSP sub (ch0_1.264 fallback)",
                 Metadata = new Dictionary<string, string> { ["stream"] = "sub" }
             },
-            new VideoSourceDescriptor
+        };
+        // Snapshot last resort — try the recorded port first, then :80 when discovery recorded an
+        // ONVIF/media port. NetSdkPortCandidates.For also normalizes a non-positive port to 80,
+        // which the old `ip:{Port}` string form did not (it emitted a broken `ip:0` URL).
+        var snapshotPorts = NetSdkPortCandidates.For(device.Port);
+        foreach (var candidatePort in snapshotPorts)
+        {
+            var isFallback = NetSdkPortCandidates.IsFallback(device.Port, candidatePort);
+            fallbackUrls.Add(new VideoSourceDescriptor
             {
                 Kind = TransportKind.LanRest,
-                Url = $"http://{device.IpAddress}:{device.Port}/NetSDK/Video/encode/channel/101/snapShot",
-                Rank = 25, DisplayName = "JPEG snapshot (fallback)",
+                Url = $"http://{device.IpAddress}:{candidatePort}/NetSDK/Video/encode/channel/101/snapShot",
+                Rank = isFallback ? 26 : 25,
+                DisplayName = isFallback ? "JPEG snapshot (:80 fallback)" : "JPEG snapshot (fallback)",
                 Metadata = new Dictionary<string, string> { ["kind"] = "snapshot" }
-            }
-        };
+            });
+        }
 
         foreach (var source in fallbackUrls)
         {
