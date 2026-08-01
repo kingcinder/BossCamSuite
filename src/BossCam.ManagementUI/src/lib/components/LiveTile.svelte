@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import type { DeviceIdentity } from '../types';
   import { AppState } from '../store';
   import { api } from '../api';
@@ -9,25 +10,99 @@
     return d.displayName || d.ipAddress || d.id;
   }
 
-  // MJPEG stream handling
+  // Authenticated MJPEG stream handling. An <img src> cannot send X-LAN-Token, so
+  // consume the multipart response with fetch and expose only short-lived JPEG blob URLs.
   let streamUrl = $derived(api.liveMjpegUrl(device.id, appState.streamQuality));
+  let streamImageUrl = $state('');
   let streamFailed = $state(false);
   let streamErrorMsg = $state('Connecting live stream…');
-  let imgKey = $state(0);
+  let streamAbortController: AbortController | undefined;
+  let streamObjectUrl: string | undefined;
+  let streamRun = 0;
   let isDragging = $state(false);
   let isDragOver = $state(false);
 
-  function onStreamLoad() {
+  const lanHeaders = () => ({
+    'X-LAN-Token': localStorage.getItem('bosscam.lanToken') || '',
+  });
+
+  function findBytes(haystack: Uint8Array, needle: number[], start = 0): number {
+    for (let i = start; i <= haystack.length - needle.length; i += 1) {
+      let found = true;
+      for (let j = 0; j < needle.length; j += 1) {
+        if (haystack[i + j] !== needle[j]) { found = false; break; }
+      }
+      if (found) return i;
+    }
+    return -1;
+  }
+
+  function publishFrame(frame: Uint8Array, run: number) {
+    if (run !== streamRun) return;
+    const nextUrl = URL.createObjectURL(new Blob([frame], { type: 'image/jpeg' }));
+    const previous = streamObjectUrl;
+    streamObjectUrl = nextUrl;
+    streamImageUrl = nextUrl;
+    if (previous) URL.revokeObjectURL(previous);
     streamFailed = false;
   }
 
-  function onStreamError() {
-    streamFailed = true;
-    streamErrorMsg = 'Stream failed — retrying…';
-    setTimeout(() => {
-      imgKey += 1;
-      streamFailed = false;
-    }, 1500);
+  function stopStream() {
+    streamRun += 1;
+    streamAbortController?.abort();
+    streamAbortController = undefined;
+    if (streamObjectUrl) URL.revokeObjectURL(streamObjectUrl);
+    streamObjectUrl = undefined;
+    streamImageUrl = '';
+  }
+
+  async function startStream() {
+    stopStream();
+    const run = streamRun;
+    const controller = new AbortController();
+    streamAbortController = controller;
+    streamFailed = false;
+    streamErrorMsg = 'Connecting live stream…';
+    try {
+      const response = await fetch(streamUrl, {
+        signal: controller.signal,
+        headers: lanHeaders(),
+        cache: 'no-store',
+      });
+      if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
+      const reader = response.body.getReader();
+      let pending = new Uint8Array(0);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) throw new Error('MJPEG stream ended');
+        if (!value?.length) continue;
+        const merged = new Uint8Array(pending.length + value.length);
+        merged.set(pending); merged.set(value, pending.length);
+        pending = merged;
+        let cursor = 0;
+        while (true) {
+          const soi = findBytes(pending, [0xff, 0xd8], cursor);
+          if (soi < 0) {
+            pending = pending.slice(Math.max(0, pending.length - 1));
+            break;
+          }
+          const eoi = findBytes(pending, [0xff, 0xd9], soi + 2);
+          if (eoi < 0) {
+            pending = pending.slice(soi);
+            break;
+          }
+          publishFrame(pending.slice(soi, eoi + 2), run);
+          cursor = eoi + 2;
+          if (cursor >= pending.length) { pending = new Uint8Array(0); break; }
+        }
+        if (pending.length > 4 * 1024 * 1024) pending = pending.slice(-2);
+      }
+    } catch (error) {
+      if (controller.signal.aborted || run !== streamRun) return;
+      streamFailed = true;
+      streamErrorMsg = `Stream failed — retrying (${String(error)})`;
+      setTimeout(() => { if (run === streamRun) void startStream(); }, 1500);
+    }
   }
 
   function select() {
@@ -104,6 +179,11 @@
   let recordingJob = $derived(appState.recordingJobs.find(j => j.deviceId === device.id && j.isRunning));
   let isRecording = $derived(!!recordingJob);
 
+  onMount(() => {
+    void startStream();
+    return stopStream;
+  });
+
 </script>
 
 <div
@@ -131,16 +211,12 @@
     <span class="sub">#{index + 1}</span>
   </div>
   <div class="view-tile-media">
-    {#key imgKey}
-      <img
-        src={streamUrl}
-        alt={labelOf(device)}
-        class="live-mjpeg"
-        decoding="async"
-        onload={onStreamLoad}
-        onerror={onStreamError}
-      />
-    {/key}
+    <img
+      src={streamImageUrl}
+      alt={labelOf(device)}
+      class="live-mjpeg"
+      decoding="async"
+    />
     {#if streamFailed}
       <div class="fail">{streamErrorMsg}</div>
     {/if}

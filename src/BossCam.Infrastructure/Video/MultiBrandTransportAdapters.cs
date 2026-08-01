@@ -46,8 +46,11 @@ public sealed class MultiBrandHighResTransportAdapter(
         // --- Juan / 5523-W high-res paths (live-proven HEVC 2560x1920) ---
         if (brand is CameraBrand.JuanNetSdk or CameraBrand.Unknown)
         {
-            sources.Add(MainRtsp(device, auth, "/ch0_0.264", "Juan main HEVC (ch0_0.264)", rank: 0, "main", "2560x1920"));
-            sources.Add(SubRtsp(device, auth, "/ch0_1.264", "Juan sub H264 (ch0_1.264)", rank: 50, "sub", "704x480"));
+            sources.Add(MainRtsp(device, auth, "/ch0_0.264", "Juan main HEVC (ch0_0.264)", rank: 0, "main", "2560x1920", "hevc"));
+            // The 5523-W 3.6.103 firmware exposes HEVC on both RTSP paths; the substream
+            // is 704x480/15fps, not H.264. Keep this codec fact in the source contract so
+            // manifest negotiation and diagnostics do not report an unknown or misleading codec.
+            sources.Add(SubRtsp(device, auth, "/ch0_1.264", "Juan sub HEVC (ch0_1.264)", rank: 50, "sub", "704x480", "hevc"));
             // legacy path aliases
             sources.Add(MainRtsp(device, auth, "/11", "Juan RTSP /11 (alias)", rank: 3, "main", null));
             sources.Add(SubRtsp(device, auth, "/12", "Juan RTSP /12 (alias)", rank: 51, "sub", null));
@@ -352,7 +355,7 @@ public sealed class MultiBrandHighResTransportAdapter(
         return builder.Uri.ToString();
     }
 
-    private static VideoSourceDescriptor MainRtsp(DeviceIdentity device, string auth, string path, string name, int rank, string stream, string? res)
+    private static VideoSourceDescriptor MainRtsp(DeviceIdentity device, string auth, string path, string name, int rank, string stream, string? res, string? codec = null)
         => new()
         {
             Kind = TransportKind.Rtsp,
@@ -365,12 +368,13 @@ public sealed class MultiBrandHighResTransportAdapter(
                 ["path"] = path,
                 ["highRes"] = stream == "main" ? "true" : "false",
                 ["resolution"] = res ?? string.Empty,
-                ["auth"] = "digest"
+                ["auth"] = "digest",
+                ["codec"] = codec ?? string.Empty
             }
         };
 
-    private static VideoSourceDescriptor SubRtsp(DeviceIdentity device, string auth, string path, string name, int rank, string stream, string? res)
-        => MainRtsp(device, auth, path, name, rank, stream, res);
+    private static VideoSourceDescriptor SubRtsp(DeviceIdentity device, string auth, string path, string name, int rank, string stream, string? res, string? codec = null)
+        => MainRtsp(device, auth, path, name, rank, stream, res, codec);
 
     internal static CameraBrand DetectBrand(DeviceIdentity device)
     {

@@ -77,6 +77,23 @@ export interface VideoSourceDescriptor {
   metadata: Record<string, string>;
 }
 
+export type LiveMediaMode = 'HevcFmp4' | 'H264Fmp4' | 'H264MpegTs' | 'Mjpeg' | 'Snapshot';
+
+export interface LiveMediaManifest {
+  deviceId: string;
+  sourceCodec: string;
+  sourceRole: string;
+  decisionReason: string;
+  preferredMode: LiveMediaMode;
+  fallbackModes: LiveMediaMode[];
+  snapshotAvailable: boolean;
+  mjpegUrl: string;
+  h264Fmp4Url: string;
+  hevcFmp4Url: string;
+  mpegTsUrl: string;
+  snapshotUrl: string;
+}
+
 export interface MediaStoragePaths {
   continuousRecordings: string;
   highlights: string;

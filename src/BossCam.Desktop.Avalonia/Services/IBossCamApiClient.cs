@@ -14,6 +14,9 @@ namespace BossCam.Desktop.Avalonia.Services;
 /// </summary>
 public interface IBossCamApiClient : IDisposable
 {
+    /// <summary>Optional LAN gate token used by both HTTP requests and media consumers.</summary>
+    string? LanToken { get; set; }
+
     // ── Health / connectivity ────────────────────────────────────────
     /// <summary>GET /api/health</summary>
     Task<JsonElement?> GetHealthAsync();
@@ -152,6 +155,9 @@ public interface IBossCamApiClient : IDisposable
 
     /// <summary>GET /api/devices/{id}/live-info → optional extended device info.</summary>
     Task<JsonElement?> GetLiveInfoAsync(Guid deviceId);
+
+    /// <summary>GET /api/devices/{id}/live-manifest → negotiated live media modes.</summary>
+    Task<LiveMediaManifest?> GetLiveManifestAsync(Guid deviceId, string quality = "sub");
 
     /// <summary>Build a live MJPEG URL for the given device/quality.</summary>
     string GetLiveMjpegUrl(Guid deviceId, string quality = "sub");

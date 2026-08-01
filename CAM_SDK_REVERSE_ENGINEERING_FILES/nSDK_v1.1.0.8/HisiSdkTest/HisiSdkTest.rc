@@ -1,0 +1,325 @@
+// Microsoft Visual C++ generated resource script.
+//
+#include "resource.h"
+
+#define APSTUDIO_READONLY_SYMBOLS
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 2 resource.
+//
+#include "afxres.h"
+
+/////////////////////////////////////////////////////////////////////////////
+#undef APSTUDIO_READONLY_SYMBOLS
+
+/////////////////////////////////////////////////////////////////////////////
+// 中文(中华人民共和国) resources
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_CHS)
+#ifdef _WIN32
+LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED
+#pragma code_page(936)
+#endif //_WIN32
+
+#ifdef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// TEXTINCLUDE
+//
+
+1 TEXTINCLUDE 
+BEGIN
+    "resource.h\0"
+END
+
+2 TEXTINCLUDE 
+BEGIN
+    "#include ""afxres.h""\r\n"
+    "\0"
+END
+
+3 TEXTINCLUDE 
+BEGIN
+    "#define _AFX_NO_SPLITTER_RESOURCES\r\n"
+    "#define _AFX_NO_OLE_RESOURCES\r\n"
+    "#define _AFX_NO_TRACKER_RESOURCES\r\n"
+    "#define _AFX_NO_PROPERTY_RESOURCES\r\n"
+    "\r\n"
+    "#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_CHS)\r\n"
+    "LANGUAGE 4, 2\r\n"
+    "#pragma code_page(936)\r\n"
+    "#include ""res\\HisiSdkTest.rc2""  // 非 Microsoft Visual C++ 编辑的资源\r\n"
+    "#include ""afxres.rc""     // 标准组件\r\n"
+    "#endif\r\n"
+    "\0"
+END
+
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Icon
+//
+
+// Icon with lowest ID value placed first to ensure application icon
+// remains consistent on all systems.
+IDR_MAINFRAME           ICON                    "res\\HisiSdkTest.ico"
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Dialog
+//
+
+IDD_HISISDKTEST_DIALOG DIALOGEX 0, 0, 712, 535
+STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION
+EXSTYLE WS_EX_APPWINDOW
+CAPTION "HisiSdkTest"
+FONT 9, "宋体", 0, 0, 0x1
+BEGIN
+    DEFPUSHBUTTON   "X",IDOK,689,7,16,16
+    GROUPBOX        "Initialize",IDC_STA_INITIALIZE,7,7,174,95
+    EDITTEXT        IDC_EDIT_ESEEID,63,22,76,14,ES_AUTOHSCROLL | ES_NUMBER
+    LTEXT           "ESee ID",IDC_STA_ESEEID,17,25,29,8
+    PUSHBUTTON      "Initialize",IDC_BTN_INITIALIZE,17,47,71,14
+    PUSHBUTTON      "Clear Up",IDC_BTN_CLEAR,101,47,71,14
+    EDITTEXT        IDC_EDIT_LOG,554,45,151,432,ES_MULTILINE | ES_AUTOHSCROLL | ES_READONLY | WS_VSCROLL
+    PUSHBUTTON      "GetSDKVersion",IDC_BTN_GETVERSION,17,73,71,14
+    EDITTEXT        IDC_EDIT_VERSION,101,74,71,14,ES_AUTOHSCROLL | ES_READONLY
+    GROUPBOX        "Login",IDC_STA_INITIALIZE2,189,7,174,95
+    LTEXT           "IP Address",IDC_STA_IP,199,45,41,8
+    CONTROL         "",IDC_IPADDRESS1,"SysIPAddress32",WS_TABSTOP,241,43,111,15
+    LTEXT           "DVR Port",IDC_STA_DVRPORT,199,63,33,8
+    LTEXT           "HTTP Port",IDC_STA_HTTPPORT,279,63,37,8
+    EDITTEXT        IDC_EDIT_DVRPORT,241,61,31,14,ES_AUTOHSCROLL | ES_NUMBER
+    EDITTEXT        IDC_EDIT_HTTPPROT,321,61,31,14,ES_AUTOHSCROLL | ES_NUMBER
+    PUSHBUTTON      "Log in",IDC_BTN_LOGIN,199,82,71,14
+    PUSHBUTTON      "Log out",IDC_BTN_LOGOUT,283,82,71,14
+    PUSHBUTTON      "GetInfoByID",IDC_BTN_GETINFO,199,22,71,14
+    GROUPBOX        "Preview",IDC_STA_PREVIEW,7,254,174,89
+    EDITTEXT        IDC_EDIT_CHANNEL,46,266,28,14,ES_AUTOHSCROLL | ES_NUMBER
+    LTEXT           "Channel",IDC_STATIC,12,268,29,8
+    PUSHBUTTON      "StartRealPlay",IDC_BTN_STARTREALPLAY,17,292,71,14
+    PUSHBUTTON      "StopRealPlay",IDC_BTN_STOPREALPLAY2,101,292,71,14
+    PUSHBUTTON      "SaveRealPlay",IDC_BTN_SAVEREALDATA,17,310,71,14
+    PUSHBUTTON      "StopSave",IDC_BTN_STOPSAVE,101,310,71,14
+    PUSHBUTTON      "Capture",IDC_BTN_CAPTURE,59,328,71,14
+    LTEXT           "Preview",IDC_STA_PLAYWND,7,131,132,93,WS_BORDER,WS_EX_TRANSPARENT
+    LTEXT           "Playback",IDC_STA_PLAKBACKWND,142,131,132,93,WS_BORDER,WS_EX_TRANSPARENT
+    GROUPBOX        "Playback",IDC_STA_PLAYBACK,188,254,174,147
+    PUSHBUTTON      "StartPlayback",IDC_BTN_STARTPLAYBACK,195,301,58,14
+    PUSHBUTTON      "StopPlayback",IDC_BTN_STOPPLAYBACK,299,301,22,14
+    CONTROL         "",IDC_DTP_DATE,"SysDateTimePick32",DTS_RIGHTALIGN | WS_TABSTOP,195,281,56,15
+    CONTROL         "",IDC_DTP_STARTTIME,"SysDateTimePick32",DTS_RIGHTALIGN | DTS_UPDOWN | WS_TABSTOP | 0x8,256,281,47,15
+    CONTROL         "",IDC_DTP_STOPTIME,"SysDateTimePick32",DTS_RIGHTALIGN | DTS_UPDOWN | WS_TABSTOP | 0x8,308,281,47,15
+    LTEXT           "回放日期",IDC_STA_DATE,195,269,33,8
+    LTEXT           "开始时间",IDC_STA_STARTTIME,256,269,33,8
+    LTEXT           "结束时间",IDC_STA_STOPTIME2,308,269,33,8
+    PUSHBUTTON      "=",IDC_BTN_PAUSE,257,301,17,14
+    PUSHBUTTON      ">",IDC_BTN_RESUME,278,301,17,14
+    PUSHBUTTON      "PlaybackSave",IDC_BTN_PLAYBACKSAVE,195,320,71,14
+    PUSHBUTTON      "StopPlaybackSave",IDC_BTN_STOPPLAYBACKSAVE2,286,320,71,14
+    PUSHBUTTON      "GetFileByTime",IDC_BTN_GETFILEBYTIME,195,339,71,14
+    PUSHBUTTON      "StopGettingFile",IDC_BTN_STOPGETFILE,286,339,71,14
+    PUSHBUTTON      "Capture",IDC_BTN_PLAYBACKCAPTURE,195,358,71,14
+    GROUPBOX        "Find",IDC_STA_FIND,188,438,173,90
+    PUSHBUTTON      "FindFile",IDC_BTN_FINDFILE,196,448,44,14
+    PUSHBUTTON      "FindNext",IDC_BTN_FINDNEXT,247,448,44,14
+    PUSHBUTTON      "CloseFind",IDC_BTN_CLOSEFIND,300,448,44,14
+    GROUPBOX        "PTZ Control",IDC_STATIC,7,348,174,34
+    LTEXT           "PlayFile",IDC_STA_PLAYFILEWND,415,131,132,93,WS_BORDER,WS_EX_TRANSPARENT
+    GROUPBOX        "PlayFile",IDC_STA_PLAYFILE,371,7,174,95
+    PUSHBUTTON      "Play_Init",IDC_BTN_PLAY_INIT,379,23,71,14
+    PUSHBUTTON      "Play_Release",IDC_BTN_PLAY_RELEASE,463,23,71,14
+    PUSHBUTTON      "Play_Open",IDC_BTN_PLAY_OPEN,379,41,71,14
+    PUSHBUTTON      "Play_Close",IDC_BTN_PLAY_CLOSE,463,41,71,14
+    PUSHBUTTON      "Play_Play",IDC_BTN_PLAY_PLAY,379,60,71,14
+    PUSHBUTTON      "Play_Stop",IDC_BTN_PLAY_STOP,463,60,71,14
+    PUSHBUTTON      "=",IDC_BTN_PLAY_PAUSE,389,82,17,14
+    PUSHBUTTON      ">",IDC_BTN_PLAY_RESUME,419,82,17,14
+    PUSHBUTTON      ">>",IDC_BTN_FAST,449,82,17,14
+    PUSHBUTTON      "<<",IDC_BTN_SLOW,479,82,17,14
+    GROUPBOX        "PlayFileControl",IDC_STA_PLAYFILECONTROL,371,254,174,91
+    PUSHBUTTON      "Play_GetPos",IDC_BTN_PLAY_GETPOS,381,267,50,14
+    PUSHBUTTON      "Play_SetPos",IDC_BTN_PLAY_SETPOS,468,267,50,14
+    PUSHBUTTON      "PTZ",IDC_BTN_PTZ,19,360,50,14
+    COMBOBOX        IDC_COMBO_PTZ,79,360,93,110,CBS_DROPDOWN | WS_VSCROLL | WS_TABSTOP
+    PUSHBUTTON      "Play_Getport",IDC_BTN_GETPORT,379,287,57,14
+    PUSHBUTTON      "Play_Freeport",IDC_BTN_FREEPORT,444,287,57,14
+    EDITTEXT        IDC_EDIT_FREEPORT,510,287,25,14,ES_AUTOHSCROLL | ES_NUMBER
+    PUSHBUTTON      "抓",IDC_BTN_PLAYCAPTURE,509,82,17,14
+    PUSHBUTTON      "GetConfig",IDC_BTN_GETCONFIG,609,16,50,14
+    PUSHBUTTON      "GetTime",IDC_BTN_PLAY_GETTIME,381,305,50,14
+    PUSHBUTTON      "GetPlayTime",IDC_BTN_PLAY_GETPLAYTIME,453,306,50,14
+    CONTROL         "音频监听",IDC_CHK_OPENSOUND,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,132,268,44,10
+    GROUPBOX        "Broadcast",IDC_STA_BROADCAST,371,351,174,63
+    PUSHBUTTON      "Start",IDC_BTN_BRDC_START,379,367,34,14
+    PUSHBUTTON      "Add",IDC_BTN_BRDC_ADD,419,367,34,14
+    PUSHBUTTON      "Delete",IDC_BTN_BRDC_DEL,459,367,34,14
+    PUSHBUTTON      "Stop",IDC_BTN_BRDC_STOP,499,367,34,14
+    CONTROL         "",IDC_IP_BRDC,"SysIPAddress32",WS_TABSTOP,379,389,85,15
+    EDITTEXT        IDC_EDIT_BRDC_PORT,505,389,28,14,ES_AUTOHSCROLL | ES_NUMBER
+    LTEXT           "Port",IDC_STATIC,485,393,15,8
+    PUSHBUTTON      "Clear Log",IDC_BTN_CLEARLOG,554,16,50,14
+    GROUPBOX        "Stream",IDC_STATIC,371,425,174,40
+    PUSHBUTTON      "OpenStream",IDC_BTN_STREAM_OPEN,377,441,45,14
+    PUSHBUTTON      "Input",IDC_BTN_STREAM_INPUT,431,441,45,14
+    PUSHBUTTON      "Close",IDC_BTN_STREAM_CLOSE,485,441,45,14
+    GROUPBOX        "Alarm",IDC_STATIC,8,438,173,90
+    CONTROL         "开启报警",IDC_CHECK_ALARM,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,126,480,48,10
+    CONTROL         "",IDC_IP_ALARM,"SysIPAddress32",WS_TABSTOP,17,454,85,15
+    EDITTEXT        IDC_EDIT_ALARM_PORT,143,454,28,14,ES_AUTOHSCROLL | ES_NUMBER
+    LTEXT           "Port",IDC_STATIC,123,458,15,8
+    LTEXT           "User Name",IDC_STA_ALARM_USRNAME,17,500,37,8,WS_DISABLED
+    LTEXT           "Password",IDC_STA_HTTPPORT2,104,500,33,8,WS_DISABLED
+    EDITTEXT        IDC_EDIT_ALARM_USRNAME,59,498,36,14,ES_AUTOHSCROLL | ES_NUMBER | WS_DISABLED
+    EDITTEXT        IDC_EDIT_ALARM_PASSWD,139,498,31,14,ES_PASSWORD | ES_AUTOHSCROLL | ES_NUMBER | WS_DISABLED
+    CONTROL         "",IDC_LIST_FINDFILE,"SysListView32",LVS_REPORT | LVS_ALIGNLEFT | WS_BORDER | WS_TABSTOP,188,477,173,51
+    PUSHBUTTON      "PlayByName",IDC_BUTTON_PLAYBYNAME,286,358,27,14
+    PUSHBUTTON      "GetFileByName",IDC_BTN_GETFILEBYNAME,274,463,29,14
+    PUSHBUTTON      "GetFilePos",IDC_BUTTON_GETFILEPOS,197,463,50,14
+    PUSHBUTTON      "PlayByName",IDC_BUTTON_PLAYBYNAME2,323,358,27,14
+    LTEXT           "Playback",IDC_STA_PLAKBACKWND2,279,131,132,93,WS_BORDER,WS_EX_TRANSPARENT
+    PUSHBUTTON      "StopPlayback",IDC_BTN_STOPPLAYBACK2,329,301,22,14
+    PUSHBUTTON      "GetFileByName",IDC_BTN_GETFILEBYNAME2,311,463,29,14
+    PUSHBUTTON      "Step",IDC_BUTTON_STEP,195,375,50,14
+    PUSHBUTTON      "GetPlayPose",IDC_BUTTON_GETPLAYPOS,274,373,32,14
+    PUSHBUTTON      "GetPlayPose",IDC_BUTTON_GETPLAYPOS2,315,373,32,14
+    LTEXT           "Stream",IDC_STATIC,77,268,25,8
+    EDITTEXT        IDC_EDIT1,105,266,24,14,ES_AUTOHSCROLL
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Version
+//
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 1,0,0,1
+ PRODUCTVERSION 1,0,0,1
+ FILEFLAGSMASK 0x3fL
+#ifdef _DEBUG
+ FILEFLAGS 0x1L
+#else
+ FILEFLAGS 0x0L
+#endif
+ FILEOS 0x4L
+ FILETYPE 0x1L
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "080403a8"
+        BEGIN
+            VALUE "CompanyName", "TODO: <公司名>"
+            VALUE "FileDescription", "TODO: <文件说明>"
+            VALUE "FileVersion", "1.0.0.1"
+            VALUE "InternalName", "HisiSdkTest.exe"
+            VALUE "LegalCopyright", "TODO: (C) <公司名>。保留所有权利。"
+            VALUE "OriginalFilename", "HisiSdkTest.exe"
+            VALUE "ProductName", "TODO: <产品名>"
+            VALUE "ProductVersion", "1.0.0.1"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x804, 936
+    END
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// DESIGNINFO
+//
+
+#ifdef APSTUDIO_INVOKED
+GUIDELINES DESIGNINFO 
+BEGIN
+    IDD_HISISDKTEST_DIALOG, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 705
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 528
+    END
+END
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Dialog Info
+//
+
+IDD_HISISDKTEST_DIALOG DLGINIT
+BEGIN
+    IDC_COMBO_PTZ, 0x403, 9, 0
+0x694c, 0x6867, 0x2074, 0x6e4f, "\000" 
+    IDC_COMBO_PTZ, 0x403, 9, 0
+0x6957, 0x6570, 0x2072, 0x6e4f, "\000" 
+    IDC_COMBO_PTZ, 0x403, 7, 0
+0x6146, 0x206e, 0x6e4f, "\000" 
+    IDC_COMBO_PTZ, 0x403, 8, 0
+0x5541, 0x5f58, 0x6e4f, 0x0031, 
+    IDC_COMBO_PTZ, 0x403, 8, 0
+0x5541, 0x5f58, 0x6e4f, 0x0032, 
+    IDC_COMBO_PTZ, 0x403, 8, 0
+0x6f5a, 0x6d6f, 0x6920, 0x006e, 
+    IDC_COMBO_PTZ, 0x403, 9, 0
+0x6f5a, 0x6d6f, 0x6f20, 0x7475, "\000" 
+    IDC_COMBO_PTZ, 0x403, 11, 0
+0x6f46, 0x7563, 0x2073, 0x656e, 0x7261, "\000" 
+    IDC_COMBO_PTZ, 0x403, 10, 0
+0x6f46, 0x7563, 0x2073, 0x6166, 0x0072, 
+    IDC_COMBO_PTZ, 0x403, 10, 0
+0x7249, 0x7369, 0x6f20, 0x6570, 0x006e, 
+    IDC_COMBO_PTZ, 0x403, 11, 0
+0x7249, 0x7369, 0x6320, 0x6f6c, 0x6573, "\000" 
+    IDC_COMBO_PTZ, 0x403, 8, 0
+0x6954, 0x746c, 0x7520, 0x0070, 
+    IDC_COMBO_PTZ, 0x403, 10, 0
+0x6954, 0x746c, 0x6420, 0x776f, 0x006e, 
+    IDC_COMBO_PTZ, 0x403, 9, 0
+0x6150, 0x206e, 0x656c, 0x7466, "\000" 
+    IDC_COMBO_PTZ, 0x403, 10, 0
+0x6150, 0x206e, 0x6972, 0x6867, 0x0074, 
+    IDC_COMBO_PTZ, 0x403, 12, 0
+0x6954, 0x746c, 0x7520, 0x6c70, 0x6665, 0x0074, 
+    IDC_COMBO_PTZ, 0x403, 13, 0
+0x6954, 0x746c, 0x7520, 0x7270, 0x6769, 0x7468, "\000" 
+    IDC_COMBO_PTZ, 0x403, 14, 0
+0x6954, 0x746c, 0x6420, 0x776f, 0x6c6e, 0x6665, 0x0074, 
+    IDC_COMBO_PTZ, 0x403, 15, 0
+0x6954, 0x656c, 0x6420, 0x776f, 0x726e, 0x6769, 0x7468, "\000" 
+    IDC_COMBO_PTZ, 0x403, 9, 0
+0x6150, 0x206e, 0x7561, 0x6f74, "\000" 
+    0
+END
+
+#endif    // 中文(中华人民共和国) resources
+/////////////////////////////////////////////////////////////////////////////
+
+
+
+#ifndef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 3 resource.
+//
+#define _AFX_NO_SPLITTER_RESOURCES
+#define _AFX_NO_OLE_RESOURCES
+#define _AFX_NO_TRACKER_RESOURCES
+#define _AFX_NO_PROPERTY_RESOURCES
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_CHS)
+LANGUAGE 4, 2
+#pragma code_page(936)
+#include "res\HisiSdkTest.rc2"  // 非 Microsoft Visual C++ 编辑的资源
+#include "afxres.rc"     // 标准组件
+#endif
+
+/////////////////////////////////////////////////////////////////////////////
+#endif    // not APSTUDIO_INVOKED
+

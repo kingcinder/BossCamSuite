@@ -290,6 +290,31 @@ public sealed class HttpBossCamApiClient : IBossCamApiClient
         }
     }
 
+    public async Task<LiveMediaManifest?> GetLiveManifestAsync(Guid deviceId, string quality = "sub")
+    {
+        try
+        {
+            var manifest = await GetJsonAsync<LiveMediaManifest?>(
+                $"/api/devices/{deviceId}/live-manifest?quality={Uri.EscapeDataString(quality)}").ConfigureAwait(false);
+            return manifest is null ? null : NormalizeManifestUrls(manifest);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Live manifest fetch failed for device {DeviceId}", deviceId);
+            return null;
+        }
+    }
+
+    private LiveMediaManifest NormalizeManifestUrls(LiveMediaManifest manifest)
+        => manifest with
+        {
+            MjpegUrl = BuildAbsolute(manifest.MjpegUrl),
+            H264Fmp4Url = BuildAbsolute(manifest.H264Fmp4Url),
+            HevcFmp4Url = BuildAbsolute(manifest.HevcFmp4Url),
+            MpegTsUrl = BuildAbsolute(manifest.MpegTsUrl),
+            SnapshotUrl = BuildAbsolute(manifest.SnapshotUrl)
+        };
+
     public string GetLiveMjpegUrl(Guid deviceId, string quality = "sub")
         => BuildAbsolute($"/api/devices/{deviceId}/live.mjpeg?quality={Uri.EscapeDataString(quality)}&t={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}");
 

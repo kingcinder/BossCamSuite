@@ -241,6 +241,130 @@ public sealed class MainWindowViewModelTests
         Assert.Throws<ArgumentNullException>(() => new MainWindowViewModel(null!));
     }
 
+    // ── Live playback command construction ───────────────────────
+
+    [Fact]
+    public void DesktopPlayback_Prefers_Shared_H264_Fmp4_Manifest_Output()
+    {
+        var manifest = new LiveMediaManifest
+        {
+            PreferredMode = LiveMediaModeContract.H264Fmp4,
+            FallbackModes = [LiveMediaModeContract.H264Fmp4, LiveMediaModeContract.Mjpeg, LiveMediaModeContract.Snapshot],
+            H264Fmp4Url = "http://127.0.0.1:5317/api/devices/device/live.h264.mp4",
+            MpegTsUrl = "http://127.0.0.1:5317/api/devices/device/live.ts"
+        };
+
+        Assert.Equal(manifest.H264Fmp4Url, MainWindowViewModel.SelectDesktopStreamUrl(manifest));
+    }
+
+    [Fact]
+    public void DesktopPlayback_Includes_Preferred_Mode_Before_Stale_Fallback_List()
+    {
+        var manifest = new LiveMediaManifest
+        {
+            PreferredMode = LiveMediaModeContract.H264Fmp4,
+            // Older services could omit PreferredMode from FallbackModes.
+            FallbackModes = [LiveMediaModeContract.Mjpeg, LiveMediaModeContract.Snapshot],
+            H264Fmp4Url = "http://127.0.0.1:5317/api/devices/device/live.h264.mp4",
+            MjpegUrl = "http://127.0.0.1:5317/api/devices/device/live.mjpeg",
+            SnapshotAvailable = true,
+            SnapshotUrl = "http://127.0.0.1:5317/api/devices/device/snapshot"
+        };
+
+        Assert.Equal(
+            [manifest.H264Fmp4Url, manifest.MjpegUrl, manifest.SnapshotUrl],
+            MainWindowViewModel.SelectDesktopStreamUrls(manifest));
+    }
+
+    [Fact]
+    public void DesktopPlayback_Uses_Mjpeg_When_Backend_Negotiates_Mjpeg_First()
+    {
+        var manifest = new LiveMediaManifest
+        {
+            PreferredMode = LiveMediaModeContract.Mjpeg,
+            FallbackModes = [LiveMediaModeContract.Mjpeg, LiveMediaModeContract.Snapshot],
+            H264Fmp4Url = "http://127.0.0.1:5317/api/devices/device/live.h264.mp4",
+            MjpegUrl = "http://127.0.0.1:5317/api/devices/device/live.mjpeg",
+            SnapshotAvailable = true,
+            SnapshotUrl = "http://127.0.0.1:5317/api/devices/device/snapshot"
+        };
+
+        Assert.Equal(manifest.MjpegUrl, MainWindowViewModel.SelectDesktopStreamUrl(manifest));
+    }
+
+    [Fact]
+    public void DesktopPlayback_Uses_Snapshot_When_Only_Snapshot_Is_Negotiated()
+    {
+        var manifest = new LiveMediaManifest
+        {
+            PreferredMode = LiveMediaModeContract.Snapshot,
+            FallbackModes = [LiveMediaModeContract.Snapshot],
+            SnapshotAvailable = true,
+            SnapshotUrl = "http://127.0.0.1:5317/api/devices/device/snapshot"
+        };
+
+        Assert.Equal(manifest.SnapshotUrl, MainWindowViewModel.SelectDesktopStreamUrl(manifest));
+    }
+
+    [Fact]
+    public void DesktopPlayback_Exposes_Ordered_Fallback_Urls()
+    {
+        var manifest = new LiveMediaManifest
+        {
+            PreferredMode = LiveMediaModeContract.H264Fmp4,
+            FallbackModes = [LiveMediaModeContract.H264Fmp4, LiveMediaModeContract.H264MpegTs, LiveMediaModeContract.Mjpeg, LiveMediaModeContract.Snapshot],
+            H264Fmp4Url = "http://127.0.0.1:5317/live.h264.mp4",
+            MpegTsUrl = "http://127.0.0.1:5317/live.ts",
+            MjpegUrl = "http://127.0.0.1:5317/live.mjpeg",
+            SnapshotAvailable = true,
+            SnapshotUrl = "http://127.0.0.1:5317/snapshot"
+        };
+
+        Assert.Equal(
+            [manifest.H264Fmp4Url, manifest.MpegTsUrl, manifest.MjpegUrl, manifest.SnapshotUrl],
+            MainWindowViewModel.SelectDesktopStreamUrls(manifest));
+    }
+
+    [Fact]
+    public void DesktopPlayback_Advances_To_Next_Fallback_After_Stream_Failure()
+    {
+        Assert.Equal(1, MainWindowViewModel.NextDesktopStreamIndex(0, 3));
+        Assert.Equal(2, MainWindowViewModel.NextDesktopStreamIndex(1, 3));
+        Assert.Equal(0, MainWindowViewModel.NextDesktopStreamIndex(2, 3));
+        Assert.Equal(0, MainWindowViewModel.NextDesktopStreamIndex(0, 0));
+    }
+
+    [Fact]
+    public void LiveVideoFfmpegArguments_Add_Lan_Token_Without_Embedding_It_In_The_Url()
+    {
+        var args = MainWindowViewModel.BuildLiveVideoFfmpegArguments(
+            "http://127.0.0.1:5317/api/devices/1/live.ts",
+            "secret-token");
+
+        Assert.Contains("-headers", args);
+        var headerIndex = args.ToList().IndexOf("-headers");
+        Assert.Equal("X-LAN-Token: secret-token\r\n", args[headerIndex + 1]);
+        Assert.DoesNotContain("secret-token", args[args.ToList().IndexOf("-i") + 1]);
+    }
+
+    [Fact]
+    public void LiveVideoFfmpegArguments_Omit_Empty_Lan_Token()
+    {
+        var args = MainWindowViewModel.BuildLiveVideoFfmpegArguments(
+            "http://127.0.0.1:5317/api/devices/1/live.ts",
+            null);
+
+        Assert.DoesNotContain("-headers", args);
+    }
+
+    [Fact]
+    public void DesktopLanToken_Uses_Environment_Then_Configured_Fallback()
+    {
+        Assert.Equal("from-env", App.ResolveConfiguredLanToken("from-env", "from-config"));
+        Assert.Equal("from-config", App.ResolveConfiguredLanToken(null, "from-config"));
+        Assert.Null(App.ResolveConfiguredLanToken("   ", " "));
+    }
+
     // ── Dispose ──────────────────────────────────────────────────
 
     [Fact]

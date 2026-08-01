@@ -6,6 +6,8 @@ TestResults/
 *.user
 *.suo
 *.cache
+*.ncb
+*.aps
 *.db
 *.db-shm
 *.db-wal

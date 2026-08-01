@@ -1,4 +1,4 @@
-import type { HealthResponse, DeviceIdentity, VideoSourceDescriptor, MediaStoragePaths, RecordingJob, RecordingSegment, HighlightState, WritePlan, FieldDef, FirmwareArtifact, UserAccount, PersistenceVerificationResult, ControlPointInventoryReport, WriteResult, TypedSettingGroupSnapshot, ClipExportRequest, ClipExportResult, EnrollDeviceRequest, EnrollDeviceResult } from './types';
+import type { HealthResponse, DeviceIdentity, VideoSourceDescriptor, LiveMediaManifest, MediaStoragePaths, RecordingJob, RecordingSegment, HighlightState, WritePlan, FieldDef, FirmwareArtifact, UserAccount, PersistenceVerificationResult, ControlPointInventoryReport, WriteResult, TypedSettingGroupSnapshot, ClipExportRequest, ClipExportResult, EnrollDeviceRequest, EnrollDeviceResult } from './types';
 
 const LS_LAN_TOKEN = 'bosscam.lanToken';
 
@@ -97,6 +97,10 @@ export const api = {
 
   /** Snapshot URL (not an API call, returns an image) */
   snapshotUrl: (id: string) => `/api/devices/${id}/snapshot?t=${Date.now()}`,
+
+  /** GET /api/devices/{id}/live-manifest — negotiated media modes and fallback URLs */
+  liveManifest: (id: string, quality = 'sub') =>
+    request<LiveMediaManifest>(`/api/devices/${id}/live-manifest?quality=${encodeURIComponent(quality)}`),
 
   /** Live MJPEG URL */
   liveMjpegUrl: (id: string, quality = 'sub') =>

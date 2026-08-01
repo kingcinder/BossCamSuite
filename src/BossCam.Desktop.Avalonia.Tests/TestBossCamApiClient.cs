@@ -13,6 +13,8 @@ namespace BossCam.Desktop.Avalonia.Tests;
 /// </summary>
 public sealed class TestBossCamApiClient : IBossCamApiClient
 {
+    public string? LanToken { get; set; }
+
     // ── Devices ───────────────────────────────────────────────────
     public List<DeviceIdentity>? DevicesResult { get; set; }
     public int GetDevicesCallCount { get; private set; }
@@ -87,6 +89,16 @@ public sealed class TestBossCamApiClient : IBossCamApiClient
         }
         return Task.FromResult(LiveInfoResult);
     }
+
+    public Task<LiveMediaManifest?> GetLiveManifestAsync(Guid deviceId, string quality = "sub")
+        => Task.FromResult<LiveMediaManifest?>(new LiveMediaManifest
+        {
+            DeviceId = deviceId,
+            PreferredMode = LiveMediaModeContract.H264MpegTs,
+            FallbackModes = [LiveMediaModeContract.H264MpegTs, LiveMediaModeContract.Mjpeg, LiveMediaModeContract.Snapshot],
+            MpegTsUrl = GetLiveTsUrl(deviceId, quality),
+            MjpegUrl = GetLiveMjpegUrl(deviceId, quality)
+        });
 
     public Task<byte[]?> GetSnapshotAsync(Guid deviceId)
     {

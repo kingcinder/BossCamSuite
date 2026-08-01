@@ -6,12 +6,21 @@
 
     <TextBlock Text="Live View" FontSize="18" FontWeight="Bold" Foreground="#fff"
                c:InfoExplainer.Title="Live View"
-               c:InfoExplainer.Explanation="Streams a live snapshot of the selected camera every two seconds. Choose a camera from the list, then use the buttons below." />
+               c:InfoExplainer.Explanation="Streams the selected camera through the negotiated backend media session. The desktop player uses bounded H.264 compatibility output and reconnects after transient drops; snapshots remain as a visible fallback." />
 
     <Border Background="#0c0c18" CornerRadius="8" Height="340"
             c:InfoExplainer.Title="Live picture"
-            c:InfoExplainer.Explanation="Current live snapshot of the selected camera. Updates automatically while a camera is selected.">
-      <Image Source="{Binding LiveFrame}" Stretch="Uniform" />
+            c:InfoExplainer.Explanation="Live decoded video from the service's negotiated H.264 stream. If the media session is unavailable, the snapshot layer remains available below it.">
+      <Grid>
+        <Image Source="{Binding LiveFrame}" Stretch="Uniform" />
+        <Image Source="{Binding LiveVideoFrame}" Stretch="Uniform" />
+      </Grid>
+    </Border>
+
+    <Border Background="#20203a" CornerRadius="6" Padding="8"
+            c:InfoExplainer.Title="Playback status"
+            c:InfoExplainer.Explanation="Shows the negotiated playback mode and reconnect state. A reconnecting message means the backend stream or ffmpeg decoder is being restarted without crashing the desktop client.">
+      <TextBlock Text="{Binding LivePlaybackStatus}" FontSize="12" Foreground="#ffb06a" TextWrapping="Wrap" />
     </Border>
 
     <Border Background="#20203a" CornerRadius="8" Padding="10"

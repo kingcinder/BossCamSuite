@@ -131,6 +131,8 @@ public static class ApiDevicesStreamingEndpoints
             }
         });
 
+        // Preserve the original /live.mp4 contract as the direct HEVC fMP4 path. Browsers
+        // that cannot decode it use /live.h264.mp4 from the negotiated manifest.
         app.MapGet("/api/devices/{id:guid}/live.mp4", async (Guid id, string? quality, HttpContext http, LiveStreamService live, CancellationToken ct) =>
         {
             http.Response.ContentType = "video/mp4";
@@ -152,7 +154,43 @@ public static class ApiDevicesStreamingEndpoints
             }
             catch (OperationCanceledException)
             {
+            }
+        });
+
+        app.MapGet("/api/devices/{id:guid}/live.h264.mp4", async (Guid id, string? quality, HttpContext http, LiveStreamService live, CancellationToken ct) =>
+        {
+            http.Response.ContentType = "video/mp4";
+            http.Response.Headers.CacheControl = "no-cache, no-store";
+            http.Response.Headers["X-Accel-Buffering"] = "no";
+            http.Features.Get<IHttpResponseBodyFeature>()?.DisableBuffering();
+            try
+            {
+                await http.Response.StartAsync(ct);
+                await live.StreamH264Fmp4Async(id, http.Response.Body, quality ?? "sub", ct);
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (!http.Response.HasStarted)
+                {
+                    http.Response.StatusCode = StatusCodes.Status400BadRequest;
+                    await http.Response.WriteAsJsonAsync(new { error = ex.Message }, ct);
+                }
+            }
+            catch (OperationCanceledException)
+            {
                 // client hung up
+            }
+        });
+
+        app.MapGet("/api/devices/{id:guid}/live-manifest", async (Guid id, string? quality, LiveStreamService live, CancellationToken ct) =>
+        {
+            try
+            {
+                return Results.Ok(await live.BuildManifestAsync(id, quality ?? "sub", ct));
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.NotFound(new { error = ex.Message });
             }
         });
 

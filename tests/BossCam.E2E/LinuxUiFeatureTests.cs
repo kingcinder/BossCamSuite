@@ -181,10 +181,10 @@ public sealed class LinuxUiFeatureTests : IClassFixture<BossCamWebAppFactory>
             $"persistence results -> {(int)res.StatusCode}");
     }
 
-    // ── fMP4 live stream endpoint ────────────────────────────────
+    // ── negotiated live stream endpoints ─────────────────────────
 
     [Fact]
-    public async Task Fmp4_Stream_Sets_Correct_Content_Type()
+    public async Task Direct_Hevc_Fmp4_Stream_Sets_Correct_Content_Type()
     {
         // The fMP4 endpoint sets Content-Type: video/mp4 before starting ffmpeg.
         // For a missing device, the response starts with 200 + video/mp4 headers

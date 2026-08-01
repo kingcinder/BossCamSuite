@@ -26,6 +26,12 @@ public partial class App : Application
 
             var apiClient = new HttpBossCamApiClient(
                 logger: _loggerFactory.CreateLogger<HttpBossCamApiClient>());
+            // Keep the desktop media consumer authenticated with the same LAN gate as its
+            // manifest/snapshot requests. Environment variables are used here rather than
+            // embedding a secret in the executable or diagnostic output.
+            apiClient.LanToken = ResolveConfiguredLanToken(
+                Environment.GetEnvironmentVariable("BOSSCAM_LAN_TOKEN"),
+                Environment.GetEnvironmentVariable("BossCam__LanAuthToken"));
             desktop.MainWindow = new MainWindow
             {
                 DataContext = new MainWindowViewModel(
@@ -38,4 +44,22 @@ public partial class App : Application
     }
 
     private ILoggerFactory? _loggerFactory;
+
+    /// <summary>
+    /// Resolves the LAN token using the same precedence as BossCam.Service: the dedicated
+    /// environment variable wins, then the .NET double-underscore configuration form.
+    /// Whitespace-only values are treated as unset so ffmpeg never receives a blank header.
+    /// Internal for regression tests; the value is never logged.
+    /// </summary>
+    internal static string? ResolveConfiguredLanToken(string? environmentToken, string? configurationToken)
+    {
+        var environment = environmentToken?.Trim();
+        if (!string.IsNullOrWhiteSpace(environment))
+        {
+            return environment;
+        }
+
+        var configuration = configurationToken?.Trim();
+        return string.IsNullOrWhiteSpace(configuration) ? null : configuration;
+    }
 }
