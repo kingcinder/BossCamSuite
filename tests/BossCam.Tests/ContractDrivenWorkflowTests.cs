@@ -35,6 +35,25 @@ public sealed class ContractDrivenWorkflowTests : IDisposable
     }
 
     [Fact]
+    public async Task Seed_Contracts_Never_Have_Null_Scope()
+    {
+        // Regression: OnvifDeviceScope was declared AFTER SeedContracts = BuildSeedContracts(), and
+        // C# static fields initialize in declaration order — so at BuildSeedContracts() time the
+        // scope was still null and every ONVIF seed contract carried Scope = null, NRE-ing in
+        // ScopeMatches on any contract-driven flow. Declaration order is the contract; this test
+        // locks it so a future reorder cannot silently reintroduce the NRE.
+        var store = CreateStore();
+        await store.InitializeAsync(CancellationToken.None);
+        var catalog = new EndpointContractCatalogService(store, NullLogger<EndpointContractCatalogService>.Instance);
+
+        var contracts = await catalog.GetContractsAsync(CancellationToken.None);
+
+        Assert.NotEmpty(contracts);
+        Assert.All(contracts, contract => Assert.NotNull(contract.Scope));
+        Assert.Contains(contracts, contract => contract.ContractKey.StartsWith("image.onvif.", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task Promotes_Transcript_Evidence_To_Fixtures()
     {
         var store = CreateStore();

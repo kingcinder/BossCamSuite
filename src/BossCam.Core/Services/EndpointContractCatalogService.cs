@@ -9,8 +9,10 @@ public sealed class EndpointContractCatalogService(
     IApplicationStore store,
     ILogger<EndpointContractCatalogService> logger) : IEndpointContractCatalog
 {
-    private static readonly IReadOnlyCollection<EndpointContract> SeedContracts = BuildSeedContracts();
-
+    // Declared BEFORE SeedContracts: C# initializes static fields in declaration order, and
+    // BuildSeedContracts() references OnvifDeviceScope at static-init time — if this field came
+    // after SeedContracts it would still be null while the ONVIF seed contracts were built, and
+    // ScopeMatches would NRE on every null-scope contract (regression seen on 5523-W pass).
     // ONVIF-discovered devices (GenericOnvif / WVC) only — never NetSDK "IPC" devices. Shared
     // across every ONVIF seed contract so DeviceType scoping cannot drift between call sites.
     private static readonly ContractScope OnvifDeviceScope = new()
@@ -18,6 +20,8 @@ public sealed class EndpointContractCatalogService(
         FirmwareFingerprintPattern = "*",
         DeviceType = "ONVIF"
     };
+
+    private static readonly IReadOnlyCollection<EndpointContract> SeedContracts = BuildSeedContracts();
 
     public async Task<IReadOnlyCollection<EndpointContract>> GetContractsAsync(CancellationToken cancellationToken)
     {
