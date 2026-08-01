@@ -40,6 +40,10 @@ public sealed class HiChipMulticastDiscoveryProvider(IOptions<BossCamRuntimeOpti
                     Name = DiscoveryHelpers.FirstValue(values, "Device-Name", "device_name") ?? $"HiChip {received.RemoteEndPoint.Address}",
                     IpAddress = DiscoveryHelpers.FirstValue(values, "IP", "ipaddr", "ip") ?? received.RemoteEndPoint.Address.ToString(),
                     Port = int.TryParse(DiscoveryHelpers.FirstValue(values, "HttpPort", "httpport", "HTTP"), out var port) ? port : 80,
+                    // HiChip advertises the NetSDK/HTTP control port directly — record it as the
+                    // explicit HttpControlPort so later enroll/port-learning never confuses it
+                    // with a media/ONVIF port recorded elsewhere on this identity.
+                    HttpControlPort = int.TryParse(DiscoveryHelpers.FirstValue(values, "HttpPort", "httpport", "HTTP"), out var httpPort) ? httpPort : 80,
                     MacAddress = DiscoveryHelpers.FirstValue(values, "MAC", "hwaddr"),
                     FirmwareVersion = DiscoveryHelpers.FirstValue(values, "Version", "version"),
                     HardwareModel = DiscoveryHelpers.FirstValue(values, "Model", "Type", "type"),
@@ -209,6 +213,10 @@ public sealed class OnvifDiscoveryProvider(
                 Name = $"ONVIF {host}",
                 IpAddress = host,
                 Port = port.Value,
+                // WS-Discovery XAddrs are the ONVIF device-service endpoints — record the port as
+                // the OnvifMediaPort hint (8888/8899 for 5523-W, WVC: 8899) so control/RTSP probing
+                // can prefer the NetSDK HTTP port (often :80) without losing the ONVIF surface.
+                OnvifMediaPort = port.Value,
                 MacAddress = mac,
                 DeviceType = "ONVIF",
                 TransportProfiles =
@@ -361,6 +369,10 @@ public sealed class SubnetScanDiscoveryProvider(
                 {
                     IpAddress = ip,
                     Port = port,
+                    // The scanner found the NetSDK REST surface on this port — it is the HTTP control
+                    // port, never the media port. Recording it explicitly prevents a later merge
+                    // from treating a differently-scanned port as the control plane.
+                    HttpControlPort = port,
                     MacAddress = string.IsNullOrWhiteSpace(mac) ? null : mac,
                     DeviceType = "IPC",
                     Name = $"Scanned {ip}:{port}",

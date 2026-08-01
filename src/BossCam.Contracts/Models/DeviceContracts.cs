@@ -114,6 +114,19 @@ public sealed record DiscoverRequest
     public string? IpRangeOverride { get; init; }
 }
 
+/// <summary>
+/// How the operator expects a camera to be connected — LAN (wired, usually stable) or Wi‑Fi
+/// (flaky: repeated-failure-before-Offline + longer backoff applies). Discovery providers and
+/// enrollment tag this when the model/fleet knowledge says so; <c>Unknown</c> is the default.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum LinkHint
+{
+    Unknown,
+    Lan,
+    Wifi
+}
+
 public sealed record DeviceIdentity
 {
     public Guid Id { get; init; } = Guid.NewGuid();
@@ -122,6 +135,26 @@ public sealed record DeviceIdentity
     public string? Name { get; init; }
     public string? IpAddress { get; init; }
     public int Port { get; init; } = 80;
+    /// <summary>
+    /// NetSDK/HTTP control plane port (deviceInfo / snapshot / settings). When non-positive the
+    /// consumer falls back to <see cref="Port"/> then 80. Discovery may record the ONVIF/media
+    /// port in <see cref="Port"/> while the NetSDK REST surface actually listens here (5523-W:
+    /// ONVIF 8888/8899 vs HTTP 80) — adapters probe <c>HttpControlPort → Port → 80</c> in order
+    /// and persist the working value back via the port-learning pass.
+    /// </summary>
+    public int HttpControlPort { get; init; }
+    /// <summary>ONVIF device/media service port when known (8888/8899 for 5523-W, WVC: 8899). Optional.</summary>
+    public int? OnvifMediaPort { get; init; }
+    /// <summary>RTSP port (default 554). Optional; most brands are 554.</summary>
+    public int? RtspPort { get; init; }
+    /// <summary>Last URL that actually served deviceInfo/snapshot on this device (credentials redacted at rest).</summary>
+    public string? LastGoodControlUrl { get; init; }
+    /// <summary>Last RTSP URL that passed the playability probe (credentials redacted at rest).</summary>
+    public string? LastGoodRtspUrl { get; init; }
+    /// <summary>Wired vs Wi‑Fi hint (drives watchdog/failover backoff aggressiveness).</summary>
+    public LinkHint LinkHint { get; init; } = LinkHint.Unknown;
+    /// <summary>When true, the lifecycle worker keeps a continuous recording job running for this device.</summary>
+    public bool ContinuousRecord { get; init; }
     public string? MacAddress { get; init; }
     public string? WirelessMacAddress { get; init; }
     public string? FirmwareVersion { get; init; }
