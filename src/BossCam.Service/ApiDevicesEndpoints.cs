@@ -42,6 +42,12 @@ public static class ApiDevicesEndpoints
         app.MapPost("/api/devices/register", async (DeviceRegisterRequest request, DeviceRegistrationService registrationService, CancellationToken ct) =>
             Results.Ok(await registrationService.RegisterAsync(request, ct)));
 
+        app.MapPost("/api/devices/enroll", async (EnrollDeviceRequest request, EnrollService enrollService, CancellationToken ct) =>
+            Results.Ok(await enrollService.EnrollDeviceAsync(request, ct)));
+
+        app.MapPost("/api/devices/enroll-batch", async (List<EnrollDeviceRequest>? requests, EnrollService enrollService, CancellationToken ct) =>
+            Results.Ok(await enrollService.EnrollManyAsync(requests ?? [], ct)));
+
         app.MapPost("/api/devices/register-many", async (List<DeviceRegisterRequest> requests, DeviceRegistrationService registrationService, CancellationToken ct) =>
             Results.Ok(await registrationService.RegisterManyAsync(requests ?? [], ct)));
 

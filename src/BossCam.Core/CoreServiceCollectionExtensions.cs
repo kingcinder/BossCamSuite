@@ -29,6 +29,7 @@ public static class CoreServiceCollectionExtensions
         services.AddSingleton<LiveStreamService>();
         services.AddSingleton<HighlightBoardService>();
         services.AddSingleton<DeviceRegistrationService>();
+        services.AddSingleton<EnrollService>();
         services.AddSingleton<NvrPlaybackService>();
         services.AddSingleton<FirmwareCatalogService>();
         services.AddSingleton<TransportFailoverService>();
