@@ -3,6 +3,8 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using BossCam.Contracts;
 using BossCam.Desktop.Avalonia.Models;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace BossCam.Desktop.Avalonia.Services;
 
@@ -18,20 +20,26 @@ namespace BossCam.Desktop.Avalonia.Services;
 public sealed class HttpBossCamApiClient : IBossCamApiClient
 {
     private readonly HttpClient _http;
+    private readonly ILogger _logger;
     private readonly JsonSerializerOptions _json = new(JsonSerializerDefaults.Web);
 
     /// <summary>Creates a client pointing at the given <paramref name="baseAddress"/>.</summary>
-    public HttpBossCamApiClient(string baseAddress = "http://127.0.0.1:5317")
+    public HttpBossCamApiClient(string baseAddress = "http://127.0.0.1:5317", ILogger<HttpBossCamApiClient>? logger = null)
     {
         _http = new HttpClient
         {
             BaseAddress = new Uri(baseAddress),
             Timeout = TimeSpan.FromSeconds(30)
         };
+        _logger = logger ?? NullLogger<HttpBossCamApiClient>.Instance;
     }
 
     /// <summary>Internal constructor that takes an existing <see cref="HttpClient"/>.</summary>
-    internal HttpBossCamApiClient(HttpClient http) => _http = http;
+    internal HttpBossCamApiClient(HttpClient http, ILogger<HttpBossCamApiClient>? logger = null)
+    {
+        _http = http;
+        _logger = logger ?? NullLogger<HttpBossCamApiClient>.Instance;
+    }
 
     /// <summary>Optional LAN bearer token sent as X-LAN-Token on every request.</summary>
     public string? LanToken
@@ -258,11 +266,11 @@ public sealed class HttpBossCamApiClient : IBossCamApiClient
             var bytes = await res.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
             return bytes.Length > 100 ? bytes : null;
         }
-        catch
+        catch (Exception ex)
         {
             // Polled on a 2s timer by the live view — a failed fetch simply means "no new
-            // frame" this tick. Logging every miss would spam the 2s loop; the caller
-            // already treats null as "no frame" and the GUI state is unchanged.
+            // frame" this tick. Debug so the failures are traceable without spamming the loop.
+            _logger.LogDebug(ex, "Snapshot fetch failed for device {DeviceId}", deviceId);
             return null;
         }
     }
@@ -273,10 +281,11 @@ public sealed class HttpBossCamApiClient : IBossCamApiClient
         {
             return await GetJsonAsync<JsonElement?>($"/api/devices/{deviceId}/live-info").ConfigureAwait(false);
         }
-        catch
+        catch (Exception ex)
         {
             // Optional live-info enrichment only: the caller guards with HasValue, so null
             // just means the RTSP line is omitted from the info panel — never fatal.
+            _logger.LogDebug(ex, "Live-info fetch failed for device {DeviceId}", deviceId);
             return null;
         }
     }
@@ -294,10 +303,11 @@ public sealed class HttpBossCamApiClient : IBossCamApiClient
             using var res = await _http.PostAsJsonAsync($"/api/storage/save-snapshot/{deviceId}", new { }, _json).ConfigureAwait(false);
             return res.IsSuccessStatusCode;
         }
-        catch
+        catch (Exception ex)
         {
             // The failure is surfaced to the user by the caller (SnapshotAsync maps false to
-            // "Snapshot failed" in the status bar), so returning false is sufficient here.
+            // "Snapshot failed" in the status bar); Debug keeps the cause traceable.
+            _logger.LogDebug(ex, "Save-snapshot request failed for device {DeviceId}", deviceId);
             return false;
         }
     }

@@ -3,6 +3,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using BossCam.Desktop.Avalonia.Services;
 using BossCam.Desktop.Avalonia.ViewModels;
+using Microsoft.Extensions.Logging;
 
 namespace BossCam.Desktop.Avalonia;
 
@@ -17,16 +18,24 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            // Production wiring: create the HTTP client and inject into the ViewModel.
-            // The parameterless constructor also works (it internally creates HttpBossCamApiClient),
-            // but this explicit form makes the dependency visible and is ready for DI container swap.
-            var apiClient = new HttpBossCamApiClient();
+            // Production wiring: a shared LoggerFactory (console sink) so the API client and
+            // ViewModels can log failures instead of swallowing them. Avalonia's own logging
+            // stays on LogToTrace() in Program.cs; this factory is for app-layer diagnostics.
+            _loggerFactory = LoggerFactory.Create(builder =>
+                builder.AddConsole().SetMinimumLevel(LogLevel.Debug));
+
+            var apiClient = new HttpBossCamApiClient(
+                logger: _loggerFactory.CreateLogger<HttpBossCamApiClient>());
             desktop.MainWindow = new MainWindow
             {
-                DataContext = new MainWindowViewModel(apiClient),
+                DataContext = new MainWindowViewModel(
+                    apiClient,
+                    _loggerFactory.CreateLogger<MainWindowViewModel>()),
             };
         }
 
         base.OnFrameworkInitializationCompleted();
     }
+
+    private ILoggerFactory? _loggerFactory;
 }

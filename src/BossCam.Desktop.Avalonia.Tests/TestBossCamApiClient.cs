@@ -21,6 +21,7 @@ public sealed class TestBossCamApiClient : IBossCamApiClient
     public JsonElement? LiveInfoResult { get; set; }
     public byte[]? SnapshotResult { get; set; }
     public bool SaveSnapshotResult { get; set; } = true;
+    public bool ThrowOnLiveInfo { get; set; }
     public int GetLiveInfoCallCount { get; private set; }
     public int GetSnapshotCallCount { get; private set; }
     public int SaveSnapshotCallCount { get; private set; }
@@ -80,6 +81,10 @@ public sealed class TestBossCamApiClient : IBossCamApiClient
     public Task<JsonElement?> GetLiveInfoAsync(Guid deviceId)
     {
         GetLiveInfoCallCount++;
+        if (ThrowOnLiveInfo)
+        {
+            return Task.FromException<JsonElement?>(new HttpRequestException("Simulated live-info failure"));
+        }
         return Task.FromResult(LiveInfoResult);
     }
 

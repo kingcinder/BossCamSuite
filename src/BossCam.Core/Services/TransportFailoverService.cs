@@ -135,7 +135,9 @@ public sealed class TransportFailoverService(
         }
     }
 
-    private async Task<VideoSourceDescriptor?> ProbeTransportAsync(
+    /// <summary>Internal for unit tests (InternalsVisibleTo BossCam.Tests) so the Debug log
+    /// on probe failure can be asserted with a captured logger.</summary>
+    internal async Task<VideoSourceDescriptor?> ProbeTransportAsync(
         DeviceIdentity device,
         VideoSourceDescriptor source,
         CancellationToken cancellationToken)

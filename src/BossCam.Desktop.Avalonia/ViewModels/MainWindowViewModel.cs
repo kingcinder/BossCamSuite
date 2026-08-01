@@ -4,6 +4,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using BossCam.Contracts;
 using BossCam.Desktop.Avalonia.Services;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace BossCam.Desktop.Avalonia.ViewModels;
 
@@ -15,6 +17,7 @@ namespace BossCam.Desktop.Avalonia.ViewModels;
 public sealed partial class MainWindowViewModel : ObservableObject, ISectionViewModel, IDisposable
 {
     private readonly IBossCamApiClient _api;
+    private readonly ILogger<MainWindowViewModel> _logger;
     private Timer? _liveTimer;
 
     /// <summary>Default constructor — real HTTP client at http://127.0.0.1:5317.</summary>
@@ -24,10 +27,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, ISectionView
     }
 
     /// <summary>DI-friendly constructor for production wiring and tests.</summary>
-    public MainWindowViewModel(IBossCamApiClient apiClient)
+    public MainWindowViewModel(IBossCamApiClient apiClient, ILogger<MainWindowViewModel>? logger = null)
     {
         ArgumentNullException.ThrowIfNull(apiClient);
         _api = apiClient;
+        _logger = logger ?? NullLogger<MainWindowViewModel>.Instance;
 
         DashboardSection = new DashboardViewModel(apiClient, this);
         DevicesSection = new DevicesViewModel(apiClient, this);
@@ -174,10 +178,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, ISectionView
                 DeviceInfoText += $"\nMain RTSP: {main}";
             }
         }
-        catch
+        catch (Exception ex)
         {
             // Optional enrichment only — GetLiveInfoAsync already returns null on failure,
-            // so the live view must not break if live-info is temporarily unavailable.
+            // so the live view must not break if live-info is temporarily unavailable. The
+            // Debug log keeps transient failures traceable without spamming the 2s poll loop.
+            _logger.LogDebug(ex, "Live-info enrichment failed for device {DeviceId}", id);
         }
 
         _liveTimer?.Dispose();

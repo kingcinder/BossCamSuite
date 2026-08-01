@@ -1137,7 +1137,9 @@ public sealed class RecordingService(
         return sb.ToString();
     }
 
-    private async Task DrainProcessOutputAsync(Process process, int processId)
+    /// <summary>Internal for unit tests (InternalsVisibleTo BossCam.Tests) so the Debug log
+    /// on stderr-drain failure can be asserted with a captured logger.</summary>
+    internal async Task DrainProcessOutputAsync(Process process, int processId)
     {
         try
         {
@@ -1219,7 +1221,9 @@ public sealed class RecordingService(
         return false;
     }
 
-    private bool TryDelete(FileInfo info, ref int filesDeleted, ref long bytesDeleted)
+    /// <summary>Internal for unit tests (InternalsVisibleTo BossCam.Tests) so the Debug log
+    /// on housekeeping delete failure can be asserted with a captured logger.</summary>
+    internal bool TryDelete(FileInfo info, ref int filesDeleted, ref long bytesDeleted)
     {
         try
         {
