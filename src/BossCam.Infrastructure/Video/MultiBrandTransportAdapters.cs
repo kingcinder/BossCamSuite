@@ -1138,35 +1138,40 @@ public sealed class OnvifImagingControlAdapter(
             return null;
         }
 
-        var values = new Dictionary<string, SettingValue>(StringComparer.OrdinalIgnoreCase);
-        foreach (var (fieldKey, displayName, localName) in new[]
+        // Object-shaped per-endpoint payload so contract-driven normalization (TypedSettingsService)
+        // can extract fields via their SourcePaths ("$.manufacturer" etc.) exactly like NetSDK adapters.
+        var payload = new System.Text.Json.Nodes.JsonObject();
+        foreach (var (fieldKey, localName) in new[]
         {
-            ("manufacturer", "Manufacturer", "Manufacturer"),
-            ("model", "Model", "Model"),
-            ("firmware", "Firmware Version", "FirmwareVersion"),
-            ("serial", "Serial Number", "SerialNumber")
+            ("manufacturer", "Manufacturer"),
+            ("model", "Model"),
+            ("firmware", "FirmwareVersion"),
+            ("serial", "SerialNumber")
         })
         {
             var element = doc.Descendants().FirstOrDefault(e => e.Name.LocalName.Equals(localName, StringComparison.OrdinalIgnoreCase));
             if (element is not null)
             {
-                values[fieldKey] = new SettingValue
-                {
-                    Key = fieldKey,
-                    DisplayName = displayName,
-                    Value = System.Text.Json.Nodes.JsonValue.Create(element.Value.Trim()),
-                    ValueKind = SettingValueKind.String,
-                    SourceEndpoint = "onvif:GetDeviceInformation"
-                };
+                payload[fieldKey] = System.Text.Json.Nodes.JsonValue.Create(element.Value.Trim());
             }
         }
 
-        return values.Count == 0 ? null : new SettingGroup
+        return payload.Count == 0 ? null : new SettingGroup
         {
             Name = "Device",
             DisplayName = "ONVIF Device",
             RawPayload = new System.Text.Json.Nodes.JsonObject { ["xml"] = xml },
-            Values = values
+            Values = new Dictionary<string, SettingValue>
+            {
+                ["deviceInfo"] = new()
+                {
+                    Key = "deviceInfo",
+                    DisplayName = "Device Information",
+                    Value = payload,
+                    ValueKind = SettingValueKind.Object,
+                    SourceEndpoint = "onvif:GetDeviceInformation"
+                }
+            }
         };
     }
 
@@ -1178,7 +1183,9 @@ public sealed class OnvifImagingControlAdapter(
             return null;
         }
 
-        var values = new Dictionary<string, SettingValue>(StringComparer.OrdinalIgnoreCase);
+        // Object-shaped per-endpoint payload (same model as NetSDK adapters) so the
+        // video.onvif.profiles contract extracts profile/resolution/frameRate cleanly.
+        var payload = new System.Text.Json.Nodes.JsonObject();
         var tokens = doc.Descendants()
             .Where(element => element.Name.LocalName.Equals("Profiles", StringComparison.OrdinalIgnoreCase))
             .Select(element => element.Attribute("token")?.Value)
@@ -1186,49 +1193,38 @@ public sealed class OnvifImagingControlAdapter(
             .ToList();
         if (tokens.Count > 0)
         {
-            values["profile"] = new SettingValue
-            {
-                Key = "profile",
-                DisplayName = "Profile",
-                Value = System.Text.Json.Nodes.JsonValue.Create(string.Join(",", tokens)),
-                ValueKind = SettingValueKind.String,
-                SourceEndpoint = "onvif:GetProfiles"
-            };
+            payload["profile"] = System.Text.Json.Nodes.JsonValue.Create(string.Join(",", tokens));
         }
 
         var width = doc.Descendants().FirstOrDefault(e => e.Name.LocalName.Equals("Width", StringComparison.OrdinalIgnoreCase))?.Value;
         var height = doc.Descendants().FirstOrDefault(e => e.Name.LocalName.Equals("Height", StringComparison.OrdinalIgnoreCase))?.Value;
         if (width is not null && height is not null)
         {
-            values["resolution"] = new SettingValue
-            {
-                Key = "resolution",
-                DisplayName = "Resolution",
-                Value = System.Text.Json.Nodes.JsonValue.Create($"{width}x{height}"),
-                ValueKind = SettingValueKind.String,
-                SourceEndpoint = "onvif:GetProfiles"
-            };
+            payload["resolution"] = System.Text.Json.Nodes.JsonValue.Create($"{width}x{height}");
         }
 
         var frameRate = doc.Descendants().FirstOrDefault(e => e.Name.LocalName.Equals("FrameRate", StringComparison.OrdinalIgnoreCase))?.Value;
         if (frameRate is not null)
         {
-            values["frameRate"] = new SettingValue
-            {
-                Key = "frameRate",
-                DisplayName = "Frame Rate",
-                Value = System.Text.Json.Nodes.JsonValue.Create(frameRate),
-                ValueKind = SettingValueKind.Number,
-                SourceEndpoint = "onvif:GetProfiles"
-            };
+            payload["frameRate"] = System.Text.Json.Nodes.JsonValue.Create(frameRate);
         }
 
-        return values.Count == 0 ? null : new SettingGroup
+        return payload.Count == 0 ? null : new SettingGroup
         {
             Name = "Video",
             DisplayName = "ONVIF Media",
             RawPayload = new System.Text.Json.Nodes.JsonObject { ["xml"] = xml },
-            Values = values
+            Values = new Dictionary<string, SettingValue>
+            {
+                ["mediaProfiles"] = new()
+                {
+                    Key = "mediaProfiles",
+                    DisplayName = "Media Profiles",
+                    Value = payload,
+                    ValueKind = SettingValueKind.Object,
+                    SourceEndpoint = "onvif:GetProfiles"
+                }
+            }
         };
     }
 
@@ -1240,56 +1236,55 @@ public sealed class OnvifImagingControlAdapter(
             return null;
         }
 
-        var values = new Dictionary<string, SettingValue>(StringComparer.OrdinalIgnoreCase);
-        AddScalar(doc, values, "brightness", "Brightness", "Brightness");
-        AddScalar(doc, values, "contrast", "Contrast", "Contrast");
-        AddScalar(doc, values, "saturation", "Saturation", "ColorSaturation");
-        AddScalar(doc, values, "sharpness", "Sharpness", "Sharpness");
-        AddScalar(doc, values, "gamma", "Gamma", "Gamma");
-        AddMode(doc, values, "exposure", "Exposure", "Exposure");
-        AddMode(doc, values, "wdr", "WDR", "WideDynamicRange");
-        AddMode(doc, values, "dayNight", "Day/Night", "IrCutFilter");
-        AddMode(doc, values, "awb", "AWB", "WhiteBalance");
+        // Object-shaped per-endpoint payload: the imaging contracts (image.onvif.brightness etc.)
+        // extract each field via its SourcePath, exactly like the NetSDK payload model. Keys are
+        // lowercase to match the contract field keys and the SetImagingSettings mapping.
+        var payload = new System.Text.Json.Nodes.JsonObject();
+        AddScalar(doc, payload, "brightness", "Brightness");
+        AddScalar(doc, payload, "contrast", "Contrast");
+        AddScalar(doc, payload, "saturation", "ColorSaturation");
+        AddScalar(doc, payload, "sharpness", "Sharpness");
+        AddScalar(doc, payload, "gamma", "Gamma");
+        AddMode(doc, payload, "exposure", "Exposure");
+        AddMode(doc, payload, "wdr", "WideDynamicRange");
+        AddMode(doc, payload, "daynight", "IrCutFilter");
+        AddMode(doc, payload, "awb", "WhiteBalance");
 
-        return values.Count == 0 ? null : new SettingGroup
+        return payload.Count == 0 ? null : new SettingGroup
         {
             Name = "Image",
             DisplayName = "ONVIF Imaging",
             RawPayload = new System.Text.Json.Nodes.JsonObject { ["xml"] = xml },
-            Values = values
+            Values = new Dictionary<string, SettingValue>
+            {
+                ["imagingSettings"] = new()
+                {
+                    Key = "imagingSettings",
+                    DisplayName = "Imaging Settings",
+                    Value = payload,
+                    ValueKind = SettingValueKind.Object,
+                    SourceEndpoint = "onvif:GetImagingSettings"
+                }
+            }
         };
     }
 
-    private static void AddScalar(XDocument doc, Dictionary<string, SettingValue> values, string fieldKey, string displayName, string localName)
+    private static void AddScalar(XDocument doc, System.Text.Json.Nodes.JsonObject payload, string fieldKey, string localName)
     {
         var element = doc.Descendants().FirstOrDefault(e => e.Name.LocalName.Equals(localName, StringComparison.OrdinalIgnoreCase));
         if (element is not null)
         {
-            values[fieldKey] = new SettingValue
-            {
-                Key = fieldKey,
-                DisplayName = displayName,
-                Value = System.Text.Json.Nodes.JsonValue.Create(element.Value.Trim()),
-                ValueKind = SettingValueKind.Number,
-                SourceEndpoint = "onvif:GetImagingSettings"
-            };
+            payload[fieldKey] = System.Text.Json.Nodes.JsonValue.Create(element.Value.Trim());
         }
     }
 
-    private static void AddMode(XDocument doc, Dictionary<string, SettingValue> values, string fieldKey, string displayName, string parentLocalName)
+    private static void AddMode(XDocument doc, System.Text.Json.Nodes.JsonObject payload, string fieldKey, string parentLocalName)
     {
         var parent = doc.Descendants().FirstOrDefault(e => e.Name.LocalName.Equals(parentLocalName, StringComparison.OrdinalIgnoreCase));
         var mode = parent?.Descendants().FirstOrDefault(e => e.Name.LocalName.Equals("Mode", StringComparison.OrdinalIgnoreCase));
         if (mode is not null)
         {
-            values[fieldKey] = new SettingValue
-            {
-                Key = fieldKey,
-                DisplayName = displayName,
-                Value = System.Text.Json.Nodes.JsonValue.Create(mode.Value.Trim()),
-                ValueKind = SettingValueKind.String,
-                SourceEndpoint = "onvif:GetImagingSettings"
-            };
+            payload[fieldKey] = System.Text.Json.Nodes.JsonValue.Create(mode.Value.Trim());
         }
     }
 

@@ -32,7 +32,8 @@ public enum ContractSurface
 {
     NetSdkRest,
     PrivateCgiXml,
-    NativeFallback
+    NativeFallback,
+    OnvifSoap
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]

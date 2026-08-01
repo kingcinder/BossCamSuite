@@ -198,7 +198,7 @@
 
   function eligibleControls(familyControls: ControlPointInventoryItem[]): ControlPointInventoryItem[] {
     return familyControls.filter(c =>
-      (c.recommendedWidget === 'Toggle' || c.recommendedWidget === 'Slider') &&
+      (c.recommendedWidget === 'Toggle' || c.recommendedWidget === 'Slider' || c.recommendedWidget === 'Dropdown') &&
       c.normalUiEligible &&
       !c.exactBlocker &&
       !c.fieldKey.endsWith('Object') &&
@@ -208,13 +208,13 @@
 
   function expertControls(familyControls: ControlPointInventoryItem[]): ControlPointInventoryItem[] {
     return familyControls.filter(c =>
-      (c.recommendedWidget === 'Toggle' || c.recommendedWidget === 'Slider') &&
+      (c.recommendedWidget === 'Toggle' || c.recommendedWidget === 'Slider' || c.recommendedWidget === 'Dropdown') &&
       (!c.normalUiEligible || !!c.exactBlocker || c.fieldKey.endsWith('Object'))
     );
   }
 
   function widgetIcon(item: ControlPointInventoryItem): string {
-    return item.recommendedWidget === 'Toggle' ? '🔘' : '🎚️';
+    return item.recommendedWidget === 'Toggle' ? '🔘' : item.recommendedWidget === 'Dropdown' ? '🔽' : '🎚️';
   }
 
   function stateLabel(item: ControlPointInventoryItem): string {

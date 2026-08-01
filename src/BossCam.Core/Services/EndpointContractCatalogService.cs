@@ -11,6 +11,14 @@ public sealed class EndpointContractCatalogService(
 {
     private static readonly IReadOnlyCollection<EndpointContract> SeedContracts = BuildSeedContracts();
 
+    // ONVIF-discovered devices (GenericOnvif / WVC) only — never NetSDK "IPC" devices. Shared
+    // across every ONVIF seed contract so DeviceType scoping cannot drift between call sites.
+    private static readonly ContractScope OnvifDeviceScope = new()
+    {
+        FirmwareFingerprintPattern = "*",
+        DeviceType = "ONVIF"
+    };
+
     public async Task<IReadOnlyCollection<EndpointContract>> GetContractsAsync(CancellationToken cancellationToken)
     {
         var existing = await store.GetEndpointContractsAsync(cancellationToken);
@@ -196,6 +204,10 @@ public sealed class EndpointContractCatalogService(
     {
         // Keep scope broad when hardware model is missing; field evidence still tracks proven vs inferred.
         var scope = new ContractScope { FirmwareFingerprintPattern = "*", HardwareModelPattern = "*" };
+        // ONVIF imaging contracts apply only to ONVIF-discovered devices (GenericOnvif / WVC); the
+        // OnvifImagingControlAdapter emits these endpoints so the SPA Features panel surfaces the
+        // real field→SOAP controls instead of dumping them into "unmapped:onvif:*" diagnostics.
+        var onvifScope = OnvifDeviceScope;
         return
         [
             // Video / Image
@@ -624,6 +636,58 @@ public sealed class EndpointContractCatalogService(
                             Notes = "Mapped from iOemInFraRedTypeIndex."
                         }
                     }
+                ]
+            },
+            // ── ONVIF imaging (GenericOnvif / WVC) ─────────────────────────
+            // Single-field contracts whose trailing key segment equals the ONVIF field key so
+            // OnvifImagingControlAdapter.ResolveFieldKey derives the exact SetImagingSettings
+            // element to write. ONVIF imaging scalars are signed -100..100 on the wire.
+            OnvifImagingContract("brightness", "Brightness", "$.brightness", -100, 100),
+            OnvifImagingContract("contrast", "Contrast", "$.contrast", -100, 100),
+            OnvifImagingContract("saturation", "Saturation", "$.saturation", -100, 100),
+            OnvifImagingContract("sharpness", "Sharpness", "$.sharpness", -100, 100),
+            OnvifImagingContract("gamma", "Gamma", "$.gamma", -100, 100),
+            OnvifModeContract("exposure", "Exposure", "$.exposure", ["MANUAL", "AUTO"]),
+            OnvifModeContract("awb", "AWB", "$.awb", ["MANUAL", "AUTO"]),
+            OnvifModeContract("wdr", "WDR", "$.wdr", ["AUTO", "ON", "OFF"]),
+            OnvifModeContract("daynight", "Day/Night", "$.daynight", ["AUTO", "ON", "OFF"]),
+            new EndpointContract
+            {
+                ContractKey = "video.onvif.profiles",
+                Endpoint = "onvif:GetProfiles",
+                Method = "GET",
+                Surface = ContractSurface.OnvifSoap,
+                GroupKind = TypedSettingGroupKind.VideoImage,
+                GroupName = "Video / Image",
+                Scope = onvifScope,
+                DisruptionClass = DisruptionClass.Safe,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = false },
+                Fields =
+                [
+                    StringField("profile", "Profile", "$.profile", writable: false),
+                    StringField("resolution", "Resolution", "$.resolution", writable: false),
+                    NumericField("frameRate", "Frame Rate", "$.frameRate", 1, 120) with { Writable = false }
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "device.onvif.info",
+                Endpoint = "onvif:GetDeviceInformation",
+                Method = "GET",
+                Surface = ContractSurface.OnvifSoap,
+                GroupKind = TypedSettingGroupKind.UsersMaintenance,
+                GroupName = "Users / Maintenance",
+                Scope = onvifScope,
+                DisruptionClass = DisruptionClass.Safe,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = false },
+                Fields =
+                [
+                    StringField("manufacturer", "Manufacturer", "$.manufacturer", writable: false),
+                    StringField("model", "Model", "$.model", writable: false),
+                    StringField("firmware", "Firmware", "$.firmware", writable: false),
+                    StringField("serial", "Serial", "$.serial", writable: false)
                 ]
             },
             new EndpointContract
@@ -1215,6 +1279,60 @@ public sealed class EndpointContractCatalogService(
             DisruptionClass = DisruptionClass.Safe,
             Validation = new ContractValidationRule { Min = min, Max = max },
             Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "manifest" }
+        };
+
+    private static EndpointContract OnvifImagingContract(string fieldKey, string displayName, string path, decimal min, decimal max)
+        => new()
+        {
+            ContractKey = $"image.onvif.{fieldKey}",
+            Endpoint = "onvif:GetImagingSettings",
+            Method = "PUT",
+            Surface = ContractSurface.OnvifSoap,
+            GroupKind = TypedSettingGroupKind.VideoImage,
+            GroupName = "Video / Image",
+            Scope = OnvifDeviceScope,
+            DisruptionClass = DisruptionClass.Safe,
+            TruthState = ContractTruthState.Inferred,
+            ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = false, PartialWriteAllowed = true },
+            Fields =
+            [
+                NumericField(fieldKey, displayName, path, min, max) with
+                {
+                    Evidence = new ContractEvidence
+                    {
+                        TruthState = ContractTruthState.Inferred,
+                        Source = "onvif-imaging",
+                        Notes = "ONVIF imaging scalar (signed -100..100)."
+                    }
+                }
+            ]
+        };
+
+    private static EndpointContract OnvifModeContract(string fieldKey, string displayName, string path, IReadOnlyCollection<string> modes)
+        => new()
+        {
+            ContractKey = $"image.onvif.{fieldKey}",
+            Endpoint = "onvif:GetImagingSettings",
+            Method = "PUT",
+            Surface = ContractSurface.OnvifSoap,
+            GroupKind = TypedSettingGroupKind.VideoImage,
+            GroupName = "Video / Image",
+            Scope = OnvifDeviceScope,
+            DisruptionClass = DisruptionClass.Safe,
+            TruthState = ContractTruthState.Inferred,
+            ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = false, PartialWriteAllowed = true },
+            Fields =
+            [
+                EnumField(fieldKey, displayName, path, modes) with
+                {
+                    Evidence = new ContractEvidence
+                    {
+                        TruthState = ContractTruthState.Inferred,
+                        Source = "onvif-imaging",
+                        Notes = "ONVIF imaging mode element (Exposure/WhiteBalance/WideDynamicRange/IrCutFilter)."
+                    }
+                }
+            ]
         };
 
     private static ContractField EnumField(string key, string name, string path, IReadOnlyCollection<string> values, bool required = false, bool expertOnly = false)
