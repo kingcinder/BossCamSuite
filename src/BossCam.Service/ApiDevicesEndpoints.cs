@@ -34,8 +34,10 @@ public static class ApiDevicesEndpoints
             return Results.Ok(withIp.Concat(withoutIp).OrderByDescending(static device => device.DiscoveredAt).ToList());
         });
 
-        app.MapPost("/api/devices/discover", async (DiscoveryCoordinator coordinator, CancellationToken ct) =>
-            Results.Ok(await coordinator.RunAsync(ct)));
+        app.MapPost("/api/devices/discover", async (DiscoveryCoordinator coordinator, DiscoverRequest? request, CancellationToken ct) =>
+            // DiscoverRequest.IpRangeOverride forces the subnet sweep ("Scan subnet" button);
+            // an empty body keeps the multicast-first behavior with subnet scan as fallback.
+            Results.Ok(await coordinator.RunAsync(string.IsNullOrWhiteSpace(request?.IpRangeOverride) ? null : request.IpRangeOverride, ct)));
 
         app.MapPost("/api/devices/register", async (DeviceRegisterRequest request, DeviceRegistrationService registrationService, CancellationToken ct) =>
             Results.Ok(await registrationService.RegisterAsync(request, ct)));

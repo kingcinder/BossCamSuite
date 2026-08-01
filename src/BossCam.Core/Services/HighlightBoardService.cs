@@ -484,6 +484,11 @@ public sealed class DeviceRegistrationService(
                     FirmwareVersion = node?["firmwareVersion"]?.GetValue<string>(),
                     DeviceId = node?["serialNumber"]?.GetValue<string>(),
                     EseeId = node?["eseeID"]?.GetValue<string>(),
+                    // Also populate the MacAddress property (not just Metadata): MAC-first merge
+                    // keying in the coordinator/store means a registration that only fills
+                    // Metadata["macAddress"] would fragment from the HiChip-discovered copy of the
+                    // same camera into a separate identity.
+                    MacAddress = node?["macAddress"]?.GetValue<string>() ?? node?["mac"]?.GetValue<string>(),
                     DeviceType = "IPC",
                     DiscoveredAt = DateTimeOffset.UtcNow,
                     TransportProfiles =

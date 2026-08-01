@@ -103,6 +103,17 @@ public sealed record DeviceConnectivitySnapshot
     public Dictionary<string, string> ReconnectAttempts { get; init; } = [];
 }
 
+/// <summary>
+/// Optional body for <c>POST /api/devices/discover</c>. When <see cref="IpRangeOverride"/> is
+/// non-empty the discovery pass forces the subnet sweep (the "Scan subnet" button) instead of
+/// treating it as a multicast-only fallback. "auto" scans all local /24 subnets; a CIDR such as
+/// <c>10.0.0.0/24</c> restricts the sweep to that subnet.
+/// </summary>
+public sealed record DiscoverRequest
+{
+    public string? IpRangeOverride { get; init; }
+}
+
 public sealed record DeviceIdentity
 {
     public Guid Id { get; init; } = Guid.NewGuid();

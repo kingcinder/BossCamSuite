@@ -9,6 +9,23 @@ public interface IDiscoveryProvider
     Task<IReadOnlyCollection<DeviceIdentity>> DiscoverAsync(CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// A discovery provider that aggressively sweeps the LAN (e.g. subnet port scans) and is only
+/// run as a <b>fallback</b> — when passive discovery (multicast/broadcast) yields no devices,
+/// or when an operator explicitly triggers a range scan. <see cref="DiscoveryCoordinator"/>
+/// consults this marker before invoking the provider so the coordinator can defer it.
+/// </summary>
+public interface ISubnetScanDiscoveryProvider : IDiscoveryProvider
+{
+    /// <summary>
+    /// Optional CIDR / IPv4 override controlling which subnet(s) to sweep. Null (or "auto")
+    /// means all local /24 subnets. Set by <see cref="DiscoveryCoordinator"/> immediately before
+    /// <see cref="IDiscoveryProvider.DiscoverAsync"/> and cleared after — the value is a transient
+    /// per-pass input, not persistent state.
+    /// </summary>
+    string? SubnetRangeOverride { get; set; }
+}
+
 public interface IDeviceImportProvider
 {
     string Name { get; }

@@ -198,9 +198,10 @@ All **104 E2E tests pass** (offline `BOSSCAM_E2E_LIVE=0` **and** live mode):
 | `RecordingSnapshotFallbackE2ETests` | 2 | ✅ Passed |
 | **Total** | **104** | **✅ All Passed** |
 
-Unit suites: **BossCam.Tests 203/203** (incl. the port-fallback suites
+Unit suites: **BossCam.Tests 255/255** (incl. the port-fallback suites
 `HttpAdapterPortFallbackTests`, `CoreServicePortFallbackTests`, `VideoAdapterPortFallbackTests`,
-`SnapshotConsumerProbeTests`, `RtspPlayabilityTests`, plus the earlier `RecordingResilienceTests`
+`SnapshotConsumerProbeTests`, `RtspPlayabilityTests`, the audit suite
+`DiscoveryAndOnvifAuditTests`, plus the earlier `RecordingResilienceTests`
 and `DependencyInjectionCycleTests`), **BossCam.Desktop.Avalonia.Tests 42/42**.
 
 ## July 31 addendum — NetSDK port-fallback + standalone GUI
@@ -213,7 +214,7 @@ Since this report was written, two major passes landed:
 | **RTSP health semantics** | `RtspProbe` performs an RTSP `OPTIONS` handshake so an RTSP peer is only reported up/recordable when it answers RTSP — a bare TCP-open `:554` is no longer treated as a live stream. Wired into `TransportFailoverService`, the connectivity watchdog, and the diagnostic battery. |
 | **Standalone Avalonia GUI** | `src/BossCam.Desktop.Avalonia/` wraps every feature behind a single window (live view, devices, features apply, recordings, highlights, playback, diagnostics, firmware, connectivity, storage) with explainer popups, plus a system-wide installer (`scripts/install-bosscam-gui.sh`, hardened for sudo/HOME/DOTNET_ROOT and bounded restore/publish). |
 
-Both passes are fully covered by the 203 unit + 104 E2E totals above.
+Both passes are fully covered by the 255 unit + 104 E2E totals above.
 
 ## Six-point gap review (July 31 close-out)
 
@@ -227,7 +228,7 @@ closed by the July 31 passes:
 | **2** | Recording persist hygiene incomplete | ✅ Already satisfied | All five `SaveRecordingJobsAsync` call sites log `LogWarning` in `catch` (`StartAsync`, `StopAsync`, `CheckStalledJobsAsync`, `ReconcilePersistedJobsAsync`, exit handler). `ReconcilePersistedJobsAsync` implements the full PID re-attach design: `TryGetLiveProcess` (start-time PID-reuse guard) re-attaches live recorders via `_running[job.Id] = reattachedEntry; WireExitCleanup(...)`; only genuinely dead processes are marked stopped, and `WireExitCleanup` uses a reference-identity guard so a stale `Exited` event can never orphan a newer re-attached entry. |
 | **3** | Audio path inconsistency risk | ✅ Fixed | Documented at all three `-an` sites in `LiveStreamService`: live preview/transcode is video-only by design (low-latency); recording routes through `DirectFfmpegRecordingPipeline`/`BuildFfmpegArgs`, which map audio (`-map 0:a:0? -c:a copy`). The two argvs deliberately differ. |
 | **4** | Health semantics — RTSP “up” ≠ playable | ✅ Fixed | New `RtspProbe` (RTSP `OPTIONS` handshake; only an `RTSP/1.x` status line counts) wired into `TransportFailoverService`, the connectivity watchdog, and the diagnostic battery. Composite verdict + connectivity status now key off `rtsp:playable`, not bare `tcp:554`; recovery actions distinguish open-but-not-playable from unreachable. 5 new unit tests. |
-| **5** | Docs drift | ✅ Fixed | This report refreshed to 203 unit / 104 E2E / 42 Avalonia with the July 31 addendum; README gained the connectivity-health semantics section, the port-fallback `Test Index` rows, and the corrected 28-class unit count. |
+| **5** | Docs drift | ✅ Fixed | This report refreshed to 255 unit / 104 E2E / 42 Avalonia with the July 31 addendum; README gained the connectivity-health semantics section, the port-fallback `Test Index` rows, and the corrected 28-class unit count. |
 | **6** | SPA api.ts surface | ✅ Already satisfied | `applyTypedField`, `apply-batch`, and `recordingExport` methods all exist in `src/BossCam.ManagementUI/src/lib/api.ts` and are consumed by `FeaturesPanel.svelte` (apply) and `RecordPanel.svelte` (export). |
 
 > **Post-review addition (parity close-out):** the SPA is now explicitly documented
@@ -236,6 +237,20 @@ closed by the July 31 passes:
 > Features-apply and recordings/clip-export parity between the web console and the
 > Avalonia desktop frontend — both thin clients over the same `BossCam.Service`
 > REST routes. See `README.md`.
+>
+> **Discovery & ONVIF audit pass (July 31):** a deep audit of the discovery pipeline
+> and ONVIF control path closed five clusters plus a redaction seam — MAC-first
+> identity merge/dedupe (DHCP renumber no longer fragments; IP reuse no longer
+> merges foreign hosts), subnet scan demoted to a true fallback with a 200+
+> NetSDK-shaped acceptance bar, ONVIF WS-Discovery rewritten (per-interface,
+> jittered retries, fresh `urn:uuid:` MessageID, `NetworkVideoTransmitter` filter,
+> all-XAddr traversal, scope-MAC extraction), `OnvifImagingControlAdapter` now does
+> real field→SOAP writes (the old stub silently wrote `Exposure.MANUAL`) plus real
+> `GetProfiles`/`GetImagingSettings` reads, XDocument SOAP parsing (`&amp;` decode),
+> HTTP-status checks, discovered-XAddr-first service resolution, WS-Security
+> `UsernameToken` on all four SOAP envelopes, and uniform snapshot redaction.
+> Full design: `docs/reports/2026-07-31-discovery-onvif-audit-pass.md`.
+> Unit totals refreshed to **255/255**.
 
 ## Stability Pass (commits `8ba4a38` → `9e113a0`)
 
@@ -301,7 +316,7 @@ SqliteApplicationStore
 | `new HttpClient()` sites | 24 | 3 (intentional: Digest auth needs per-call handler) |
 | Build warnings | Several | 0 (`TreatWarningsAsErrors=true`) |
 | E2E tests passing | ~85/91 | **104/104** |
-| Unit tests passing | — | **203/203** (BossCam.Tests) + **42/42** (Avalonia) |
+| Unit tests passing | — | **255/255** (BossCam.Tests) + **42/42** (Avalonia) |
 | DI host startup | Circular-dependency crash | **Clean** (ValidateOnBuild regression test added) |
 | Password exposure | Plaintext in serialized JSON | AES-GCM/DPAPI encrypted at rest |
 | ONVIF ApplyAsync | Stub | Real `SetImagingSettings` SOAP |

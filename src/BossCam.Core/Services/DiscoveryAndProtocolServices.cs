@@ -64,13 +64,34 @@ public sealed class DiscoveryCoordinator(
             }
         }
 
+        // Subnet scans are fallback-only by design (see ISubnetScanDiscoveryProvider): they sweep
+        // every /24 × 6 ports (~1,500 probes), so running them unconditionally on every cycle
+        // fights the documented "fallback when multicast yields nothing" contract. Partition the
+        // providers so passive (multicast/broadcast) discovery runs first, and the subnet sweep
+        // only when it found nothing OR the caller explicitly requested a range scan.
+        var passiveProviders = new List<IDiscoveryProvider>();
+        var subnetProviders = new List<ISubnetScanDiscoveryProvider>();
         foreach (var discoveryProvider in discoveryProviders)
+        {
+            if (discoveryProvider is ISubnetScanDiscoveryProvider subnet)
+            {
+                subnetProviders.Add(subnet);
+            }
+            else
+            {
+                passiveProviders.Add(discoveryProvider);
+            }
+        }
+
+        var passiveFound = 0;
+        foreach (var discoveryProvider in passiveProviders)
         {
             try
             {
                 // PR: Report discovery progress per provider
                 _ = broadcaster.DiscoveryProgressAsync(all.Count, discoveryProvider.Name, false, null, cancellationToken);
                 var found = await discoveryProvider.DiscoverAsync(cancellationToken);
+                passiveFound += found.Count;
                 all.AddRange(found);
                 _ = broadcaster.DiscoveryProgressAsync(all.Count, discoveryProvider.Name, true, null, cancellationToken);
             }
@@ -79,6 +100,37 @@ public sealed class DiscoveryCoordinator(
                 logger.LogWarning(ex, "Discovery provider {Provider} failed", discoveryProvider.Name);
                 _ = broadcaster.DiscoveryProgressAsync(all.Count, discoveryProvider.Name, true, ex.Message, cancellationToken);
             }
+        }
+
+        // Subnet sweep: only when passive discovery yielded nothing, or on explicit request.
+        if (ipRangeOverride is not null || passiveFound == 0)
+        {
+            foreach (var subnetProvider in subnetProviders)
+            {
+                subnetProvider.SubnetRangeOverride = ipRangeOverride;
+                try
+                {
+                    _ = broadcaster.DiscoveryProgressAsync(all.Count, subnetProvider.Name, false, null, cancellationToken);
+                    var found = await subnetProvider.DiscoverAsync(cancellationToken);
+                    all.AddRange(found);
+                    _ = broadcaster.DiscoveryProgressAsync(all.Count, subnetProvider.Name, true, null, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Discovery provider {Provider} failed", subnetProvider.Name);
+                    _ = broadcaster.DiscoveryProgressAsync(all.Count, subnetProvider.Name, true, ex.Message, cancellationToken);
+                }
+                finally
+                {
+                    subnetProvider.SubnetRangeOverride = null;
+                }
+            }
+        }
+        else if (subnetProviders.Count > 0)
+        {
+            logger.LogDebug(
+                "Subnet scan skipped: passive discovery found {Count} device(s); run it explicitly via a range scan to force a sweep",
+                passiveFound);
         }
 
         var merged = Merge(all).Values.ToList();
@@ -140,9 +192,29 @@ public sealed class DiscoveryCoordinator(
     }
 
     private static string BuildMergeKey(DeviceIdentity device)
-        => !string.IsNullOrWhiteSpace(device.IpAddress)
-            ? device.IpAddress
-            : device.DeviceId ?? device.EseeId ?? device.Id.ToString("N");
+    {
+        // MAC address is the durable identity across DHCP lease changes and IP reuse. Keying on
+        // the bare IP means a 5523-W whose lease renews to a new address fragments into a
+        // duplicate, and — worse — a foreign host (laptop/phone) that inherits a dead camera's IP
+        // silently merges into its slot and can inherit its credentials. Key on MAC first, falling
+        // back to IP only when no MAC was captured, then to stable identifiers.
+        if (!string.IsNullOrWhiteSpace(device.MacAddress))
+        {
+            return $"mac:{device.MacAddress}";
+        }
+
+        if (!string.IsNullOrWhiteSpace(device.IpAddress))
+        {
+            return $"ip:{device.IpAddress}";
+        }
+
+        if (!string.IsNullOrWhiteSpace(device.DeviceId))
+        {
+            return $"deviceId:{device.DeviceId}";
+        }
+
+        return $"esee:{device.EseeId ?? device.Id.ToString("N")}";
+    }
 
     private static DeviceIdentity PickPrimary(DeviceIdentity left, DeviceIdentity right)
     {

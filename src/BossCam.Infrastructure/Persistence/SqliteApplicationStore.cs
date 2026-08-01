@@ -994,10 +994,26 @@ public sealed class SqliteApplicationStore : IApplicationStore
     private SqliteConnection OpenConnection()
         => new($"Data Source={DatabasePath}");
 
+    /// <summary>
+    /// Durable identity for the devices.dedupe_key UNIQUE column. MAC-first mirrors the
+    /// coordinator's <see cref="DiscoveryCoordinator"/> merge key so a DHCP-renumbered camera (new
+    /// IP, same MAC) collapses into one row and a foreign host that inherits a dead camera's IP
+    /// (different MAC) stays separate. Prefixes keep MAC/IP/other namespaces collision-free.
+    /// </summary>
     private static string BuildDedupeKey(DeviceIdentity device)
-        => !string.IsNullOrWhiteSpace(device.IpAddress)
-            ? device.IpAddress
-            : device.DeviceId ?? device.EseeId ?? device.Id.ToString("N");
+    {
+        if (!string.IsNullOrWhiteSpace(device.MacAddress))
+        {
+            return $"mac:{device.MacAddress}";
+        }
+
+        if (!string.IsNullOrWhiteSpace(device.IpAddress))
+        {
+            return $"ip:{device.IpAddress}";
+        }
+
+        return device.DeviceId ?? device.EseeId ?? device.Id.ToString("N");
+    }
 
     private static string BuildValidationKey(EndpointValidationResult result)
         => $"{result.DeviceId:N}:{result.AdapterName}:{result.Method}:{result.Endpoint}:{result.FirmwareFingerprint}";

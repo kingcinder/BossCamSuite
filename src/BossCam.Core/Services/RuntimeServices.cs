@@ -166,6 +166,11 @@ public sealed class SettingsService(
         if (plan.SnapshotBeforeWrite)
         {
             beforeSnapshot = await adapter.SnapshotAsync(device, cancellationToken);
+            // Defense-in-depth: the pre-write snapshot is persisted AND echoed back through
+            // WriteResult.SnapshotBeforeWrite, so both boundaries must pass through the same
+            // redaction. Not currently exploitable (the only adapter that embeds a password-shaped
+            // field is OwnedRemoteCommandAdapter, fixed at source) but keeps the call sites uniform.
+            beforeSnapshot = RedactSnapshot(beforeSnapshot);
             await store.SaveSettingsSnapshotAsync(beforeSnapshot, cancellationToken);
         }
 

@@ -49,7 +49,9 @@
   async function scanSubnet() {
     scanEnabled = true;
     try {
-      await api.discover();
+      // Force the subnet sweep (ipRangeOverride='auto') so the button does what its label says
+      // even when multicast discovery already found devices.
+      await api.scanSubnet();
     } catch (e: unknown) {
       appState.showToast(String(e), false);
     } finally {
