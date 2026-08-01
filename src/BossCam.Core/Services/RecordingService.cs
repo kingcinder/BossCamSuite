@@ -779,6 +779,64 @@ public sealed class RecordingService(
     }
 
     /// <summary>
+    /// Fleet continuous-record policy: for every enrolled device flagged <see cref="DeviceIdentity.ContinuousRecord"/>
+    /// with no running job, start a continuous job on the best playable source (snapshot pipeline
+    /// when no RTSP answers). Runs after <see cref="ReconcilePersistedJobsAsync"/> at startup and on
+    /// the worker cycle, so an enrolled camera whose recorder died (crash, reboot, stall, manual
+    /// stop) is brought back automatically. The worker cycle is the backoff cadence; per-device
+    /// failures are logged (and surfaced through the job's LastError / the record step in
+    /// <c>EnrollService</c>) without throwing or blocking other devices. A persisted running job is
+    /// the dedup guard, so a surviving/re-attached recorder is never double-started.
+    /// </summary>
+    public async Task<IReadOnlyCollection<RecordingJob>> ReconcileContinuousAsync(CancellationToken cancellationToken)
+    {
+        var devices = (await store.GetDevicesAsync(cancellationToken))
+            .Where(static device => device.ContinuousRecord)
+            .ToList();
+        var started = new List<RecordingJob>();
+        foreach (var device in devices)
+        {
+            try
+            {
+                var running = (await store.GetRecordingJobsAsync(device.Id, cancellationToken))
+                    .FirstOrDefault(job => job.IsRunning);
+                if (running is not null)
+                {
+                    continue;
+                }
+
+                // Also guard on the in-memory map: a job spawned but not yet persisted (persist
+                // step failed) must not be double-started by the next cycle — that would be the
+                // runaway-ffmpeg case the persisted-store check alone cannot see.
+                var runningInMemory = false;
+                await _gate.WaitAsync(cancellationToken);
+                try
+                {
+                    runningInMemory = _running.Values.Any(entry => entry.Job.DeviceId == device.Id);
+                }
+                finally
+                {
+                    _gate.Release();
+                }
+                if (runningInMemory)
+                {
+                    continue;
+                }
+
+                var job = await StartAsync(new RecordingStartRequest { DeviceId = device.Id }, cancellationToken);
+                started.Add(job);
+                logger.LogInformation("Continuous-record policy started job {JobId} for {Device}", job.Id, device.DisplayName);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogWarning(ex, "Continuous-record policy start failed for {Device}", device.DisplayName);
+            }
+        }
+
+        return started;
+    }
+
+    /// <summary>
     /// PR-R2: Enhanced segment indexer that populates DurationSec, StreamRole, Container,
     /// HasAudio, and JobId. Uses ffprobe for duration (cached per file via mtime/size key)
     /// and parses strftime patterns from filenames for stream role inference.

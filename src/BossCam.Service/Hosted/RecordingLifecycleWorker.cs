@@ -18,8 +18,12 @@ public sealed class RecordingLifecycleWorker(
             await Task.Delay(TimeSpan.FromSeconds(Math.Max(1, options.Value.RecordingStartupReconcileDelaySeconds)), stoppingToken);
             var reconciled = await recordingService.ReconcilePersistedJobsAsync(stoppingToken);
             var autoStarted = await recordingService.ReconcileAutoStartAsync(stoppingToken);
+            // Fleet policy: enrolled devices flagged ContinuousRecord are restarted after the
+            // persisted-job reconcile, so a camera whose recorder died before restart comes back
+            // automatically (no duplicate runaway: a persisted running job is the dedup guard).
+            var continuous = await recordingService.ReconcileContinuousAsync(stoppingToken);
             var running = reconciled.Count(static j => j.IsRunning);
-            logger.LogInformation("Recording reconcile: {Total} jobs ({Running} running), {Auto} auto-started", reconciled.Count, running, autoStarted.Count);
+            logger.LogInformation("Recording reconcile: {Total} jobs ({Running} running), {Auto} auto-started, {Continuous} continuous-record started", reconciled.Count, running, autoStarted.Count, continuous.Count);
         }
         catch (Exception ex)
         {
@@ -87,6 +91,20 @@ public sealed class RecordingLifecycleWorker(
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Recording reconcile failed.");
+            }
+
+            // Fleet continuous-record policy (the cycle is the restart/backoff cadence)
+            try
+            {
+                var continuous = await recordingService.ReconcileContinuousAsync(stoppingToken);
+                if (continuous.Count > 0)
+                {
+                    logger.LogInformation("Continuous-record reconcile started {Count} job(s)", continuous.Count);
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Continuous-record reconcile failed.");
             }
         }
     }
