@@ -49,32 +49,9 @@ public sealed class TransportFailoverService(
             return await ProbeFallbackSourcesAsync(device, cancellationToken);
         }
 
-        // Build prioritized probe list: RTSP main first, then sub, then HTTP, then snap
-        var probeList = new List<(VideoSourceDescriptor Source, int Order)>();
-
-        foreach (var source in sources)
-        {
-            var order = source.Kind switch
-            {
-                TransportKind.Rtsp when source.Metadata.TryGetValue("stream", out var s) && s == "main" => 0,
-                TransportKind.Rtsp when source.Url.Contains("ch0_0", StringComparison.OrdinalIgnoreCase) => 0,
-                TransportKind.Rtsp when source.Url.EndsWith("/11", StringComparison.Ordinal) => 0,
-                TransportKind.OnvifRtsp when source.Metadata.TryGetValue("stream", out var s2) && s2 == "main" => 1,
-                TransportKind.Rtsp when source.Metadata.TryGetValue("stream", out var s3) && s3 == "sub" => 2,
-                TransportKind.Rtsp when source.Url.Contains("ch0_1", StringComparison.OrdinalIgnoreCase) => 2,
-                TransportKind.OnvifRtsp => 3,
-                TransportKind.RtspOverHttp => 4,
-                TransportKind.FlvOverHttp or TransportKind.BubbleFlv => 5,
-                TransportKind.Rtmp => 6,
-                TransportKind.LanRest when source.Metadata.TryGetValue("kind", out var k) && k == "snapshot" => 7,
-                TransportKind.EseeJuanP2P or TransportKind.Kp2p or TransportKind.LinkVision => 8,
-                _ => 9
-            };
-            probeList.Add((source, order));
-        }
-
-        // Sort by order, probe until one works
-        foreach (var (source, _) in probeList.OrderBy(p => p.Order))
+        // The playable-source policy owns the shared fallback ordering used by recording,
+        // live streaming, highlights, and failover.
+        foreach (var source in PlayableSourcePolicy.BuildProbeOrder(sources))
         {
             if (cancellationToken.IsCancellationRequested) break;
 

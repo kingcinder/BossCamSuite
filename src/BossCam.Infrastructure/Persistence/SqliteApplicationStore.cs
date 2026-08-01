@@ -548,6 +548,35 @@ public sealed class SqliteApplicationStore : IApplicationStore
         return await QueryPayloadListAsync<RecordingSegment>($"SELECT payload FROM recording_segments WHERE device_id = $id ORDER BY indexed_at DESC LIMIT {Math.Max(1, limit)}", parameters => parameters.AddWithValue("$id", deviceId.Value.ToString()), cancellationToken);
     }
 
+    public async Task<int> DeleteRecordingSegmentsAsync(IEnumerable<Guid> ids, CancellationToken cancellationToken)
+    {
+        var idList = ids.ToList();
+        if (idList.Count == 0)
+        {
+            return 0;
+        }
+
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            await using var connection = OpenConnection();
+            await connection.OpenAsync(cancellationToken);
+            var removed = 0;
+            foreach (var id in idList)
+            {
+                await using var command = connection.CreateCommand();
+                command.CommandText = "DELETE FROM recording_segments WHERE id = $id";
+                command.Parameters.AddWithValue("$id", id.ToString());
+                removed += await command.ExecuteNonQueryAsync(cancellationToken);
+            }
+            return removed;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     public async Task SaveSemanticWriteObservationsAsync(IEnumerable<SemanticWriteObservation> observations, CancellationToken cancellationToken)
     {
         await _gate.WaitAsync(cancellationToken);

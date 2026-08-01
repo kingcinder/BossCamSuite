@@ -383,7 +383,7 @@
   :global(.kv dt) { color: var(--muted); }
   :global(.kv dd) { margin: 0; word-break: break-word; }
   .plain { margin: 0; padding-left: 18px; }
-  .plain li { margin: 4px 0; word-break: break-all; }
+  :global(.plain li) { margin: 4px 0; word-break: break-all; }
   .muted { color: var(--muted); font-size: .9rem; margin: 0; }
 
   @media (max-width: 1000px) {

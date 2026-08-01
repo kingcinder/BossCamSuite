@@ -149,7 +149,7 @@ public sealed class ImageTruthClassificationTests : IDisposable
         var settings = new SettingsService(adapters, store, validation, NullLogger<SettingsService>.Instance);
         var persistence = new PersistenceVerificationService(adapters, store, NullLogger<PersistenceVerificationService>.Instance);
         var semantic = new SemanticTrustService(store, catalog, settings, NullLogger<SemanticTrustService>.Instance);
-        var typed = new TypedSettingsService(store, settings, persistence, semantic, catalog, new CapabilityPromotionService(store, catalog), NullLogger<TypedSettingsService>.Instance);
+        var typed = new TypedSettingsService(settings, persistence, semantic, catalog, new CapabilityPromotionService(store, catalog), NullLogger<TypedSettingsService>.Instance, new ApplicationStoreTypedControlStore(store));
         var imageTruth = new ImageTruthService(store, typed, catalog, NullLogger<ImageTruthService>.Instance);
 
         var inventory = await imageTruth.DiscoverInventoryAsync(device.Id, refreshFromDevice: false, CancellationToken.None);

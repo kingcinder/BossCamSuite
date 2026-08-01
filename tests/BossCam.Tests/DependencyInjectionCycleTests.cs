@@ -51,6 +51,9 @@ public sealed class DependencyInjectionCycleTests
         _ = provider.GetRequiredService<TransportFailoverService>();
         _ = provider.GetRequiredService<RecordingService>();
         _ = provider.GetRequiredService<LiveStreamService>();
+        Assert.IsType<RecordingProcessSupervisor>(provider.GetRequiredService<RecordingProcessSupervisor>());
+        Assert.IsType<ApplicationStoreRecordingStore>(provider.GetRequiredService<IRecordingStore>());
+        Assert.IsType<ApplicationStoreTypedControlStore>(provider.GetRequiredService<ITypedControlStore>());
     }
 
     [Fact]

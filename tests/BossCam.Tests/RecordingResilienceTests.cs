@@ -32,7 +32,9 @@ public sealed class RecordingResilienceTests : IDisposable
             new TestRecordingPipelineResolver(),
             NullBossCamEventBroadcaster.Instance,
             new HttpClientFactoryMock(), // reconcile/stall tests never probe snapshot URLs
-            NullLogger<RecordingService>.Instance);
+            NullLogger<RecordingService>.Instance,
+            new ApplicationStoreRecordingStore(store),
+            new RecordingProcessSupervisor());
         return (store, service);
     }
 
@@ -66,6 +68,66 @@ public sealed class RecordingResilienceTests : IDisposable
             // reject the legitimately-surviving process and mark the job stopped instead.
             StartedAt = startedAt ?? DateTimeOffset.UtcNow
         };
+
+    [Fact]
+    public async Task StartAsync_ExplicitSnapshot_Does_Not_Query_Transport_Sources()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        var store = new SqliteApplicationStore(Options.Create(new BossCamRuntimeOptions { DatabasePath = _dbPath }));
+        await store.InitializeAsync(CancellationToken.None);
+        var device = new DeviceIdentity
+        {
+            Id = Guid.NewGuid(),
+            Name = "explicit-snapshot",
+            IpAddress = "192.0.2.1",
+            Port = 9,
+            DeviceType = "IPC"
+        };
+        await store.UpsertDevicesAsync([device], CancellationToken.None);
+
+        var adapter = new CountingVideoAdapter();
+        var broker = new TransportBroker([adapter], store, null, NullLogger<TransportBroker>.Instance);
+        var fakeFfmpeg = Path.Combine(_outputDir, $"fake-ffmpeg-{Guid.NewGuid():N}.sh");
+        Directory.CreateDirectory(_outputDir);
+        await File.WriteAllTextAsync(fakeFfmpeg, "#!/usr/bin/env bash\nsleep 30\n");
+        using (var chmod = Process.Start("chmod", $"+x {fakeFfmpeg}"))
+        {
+            chmod?.WaitForExit(2000);
+        }
+
+        var previousFfmpeg = Environment.GetEnvironmentVariable("BOSSCAM_FFMPEG_PATH");
+        Environment.SetEnvironmentVariable("BOSSCAM_FFMPEG_PATH", fakeFfmpeg);
+        RecordingService? service = null;
+        try
+        {
+            service = new RecordingService(
+                store,
+                broker,
+                new TestRecordingPipelineResolver(),
+                NullBossCamEventBroadcaster.Instance,
+                new HttpClientFactoryMock(),
+                NullLogger<RecordingService>.Instance,
+                new ApplicationStoreRecordingStore(store),
+                new RecordingProcessSupervisor());
+
+            var job = await service.StartAsync(new RecordingStartRequest
+            {
+                DeviceId = device.Id,
+                SourceUrl = "snapshot"
+            }, CancellationToken.None);
+
+            Assert.Equal(0, adapter.GetSourcesCalls);
+            await service.StopAsync(job.Id, CancellationToken.None);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("BOSSCAM_FFMPEG_PATH", previousFfmpeg);
+        }
+    }
 
     [Fact]
     public async Task ReconcilePersistedJobsAsync_DeadPid_Marks_Job_Stopped()
@@ -225,6 +287,20 @@ public sealed class RecordingResilienceTests : IDisposable
 
         Assert.Empty(stalled);
         Assert.False(live.HasExited);
+    }
+
+    private sealed class CountingVideoAdapter : IVideoTransportAdapter
+    {
+        public int GetSourcesCalls { get; private set; }
+        public string Name => "Counting";
+        public TransportKind TransportKind => TransportKind.Rtsp;
+        public int Priority => 1;
+
+        public Task<IReadOnlyCollection<VideoSourceDescriptor>> GetSourcesAsync(DeviceIdentity device, CancellationToken cancellationToken)
+        {
+            GetSourcesCalls++;
+            return Task.FromResult<IReadOnlyCollection<VideoSourceDescriptor>>([]);
+        }
     }
 
     public void Dispose()

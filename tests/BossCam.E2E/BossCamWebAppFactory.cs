@@ -44,7 +44,10 @@ public sealed class BossCamWebAppFactory : WebApplicationFactory<Program>
                 ["BossCam:RateLimitEnabled"] = "false",
                 // Storage-root validator: tests must submit paths inside the
                 // configured root or /api/storage/paths would 400 the override.
-                ["BossCam:StorageRoot"] = Path.Combine(TempRoot, "recordings")
+                ["BossCam:StorageRoot"] = Path.Combine(TempRoot, "recordings"),
+                // Clip-export write root: without it /api/recordings/export is fail-closed
+                // (Success=false) and the success path could never be exercised in E2E.
+                ["BossCam:ExportAllowedDirectories"] = Path.Combine(TempRoot, "exports")
             });
         });
     }

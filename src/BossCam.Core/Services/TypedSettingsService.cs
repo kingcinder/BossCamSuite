@@ -7,14 +7,16 @@ using Microsoft.Extensions.Logging;
 namespace BossCam.Core;
 
 public sealed class TypedSettingsService(
-    IApplicationStore store,
     SettingsService settingsService,
     PersistenceVerificationService persistenceVerificationService,
     SemanticTrustService semanticTrustService,
     IEndpointContractCatalog contractCatalog,
     CapabilityPromotionService capabilityPromotionService,
-    ILogger<TypedSettingsService> logger)
+    ILogger<TypedSettingsService> logger,
+    ITypedControlStore typedControlStore)
 {
+    private readonly ITypedControlStore _typedControlStore = typedControlStore;
+
     public async Task<IReadOnlyCollection<TypedSettingGroupSnapshot>> NormalizeDeviceAsync(Guid deviceId, bool refreshFromDevice, CancellationToken cancellationToken)
     {
         if (refreshFromDevice)
@@ -22,7 +24,7 @@ public sealed class TypedSettingsService(
             _ = await settingsService.ReadAsync(deviceId, cancellationToken);
         }
 
-        var device = await store.GetDeviceAsync(deviceId, cancellationToken);
+        var device = await _typedControlStore.GetDeviceAsync(deviceId, cancellationToken);
         if (device is null)
         {
             return [];
@@ -35,7 +37,7 @@ public sealed class TypedSettingsService(
         }
 
         var contracts = await contractCatalog.GetContractsForDeviceAsync(device, cancellationToken);
-        var validations = (await store.GetEndpointValidationResultsAsync(deviceId, cancellationToken))
+        var validations = (await _typedControlStore.GetEndpointValidationResultsAsync(deviceId, cancellationToken))
             .GroupBy(static result => NormalizeEndpoint(result.Endpoint), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(static group => group.Key, static group => group.OrderByDescending(result => result.CapturedAt).First(), StringComparer.OrdinalIgnoreCase);
 
@@ -80,7 +82,7 @@ public sealed class TypedSettingsService(
                     var validation = validations.GetValueOrDefault(endpoint);
                     foreach (var field in contract.Fields)
                     {
-                        var rawNode = TryGetPathValue(value.Value, field.SourcePath);
+                        var rawNode = TypedPayloadValidationPolicy.GetPathValue(value.Value, field.SourcePath);
                         if (rawNode is null)
                         {
                             if (field.Required)
@@ -90,7 +92,7 @@ public sealed class TypedSettingsService(
                             continue;
                         }
 
-                        var conversion = ConvertValue(rawNode, field);
+                        var conversion = TypedPayloadValidationPolicy.Convert(rawNode, field);
                         if (!conversion.Success)
                         {
                             normalized.Add(BuildInvalidField(deviceId, snapshot.AdapterName, endpoint, contract, field, conversion.Message, rawNode));
@@ -133,22 +135,22 @@ public sealed class TypedSettingsService(
             .Select(static group => group.OrderByDescending(field => field.CapturedAt).ThenByDescending(field => field.ReadVerified).ThenByDescending(field => field.WriteVerified).First())
             .ToList();
 
-        await store.SaveNormalizedSettingFieldsAsync(deduped, cancellationToken);
+        await _typedControlStore.SaveNormalizedSettingFieldsAsync(deduped, cancellationToken);
         logger.LogInformation("Contract-driven normalization produced {Count} fields for {DeviceId}", deduped.Count, deviceId);
         var firmware = deduped.Select(static field => field.FirmwareFingerprint).FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value));
-        var constraints = await store.GetFieldConstraintProfilesAsync(firmware, cancellationToken);
-        var dependencies = await store.GetDependencyMatrixProfilesAsync(firmware, cancellationToken);
+        var constraints = await _typedControlStore.GetFieldConstraintProfilesAsync(firmware, cancellationToken);
+        var dependencies = await _typedControlStore.GetDependencyMatrixProfilesAsync(firmware, cancellationToken);
         return ToSnapshots(deviceId, snapshot.AdapterName, deduped, contracts, constraints, dependencies);
     }
 
     public async Task<IReadOnlyCollection<TypedSettingGroupSnapshot>> GetTypedSettingsAsync(Guid deviceId, CancellationToken cancellationToken)
     {
-        var fields = await store.GetNormalizedSettingFieldsAsync(deviceId, cancellationToken);
-        var device = await store.GetDeviceAsync(deviceId, cancellationToken);
+        var fields = await _typedControlStore.GetNormalizedSettingFieldsAsync(deviceId, cancellationToken);
+        var device = await _typedControlStore.GetDeviceAsync(deviceId, cancellationToken);
         var contracts = device is null ? [] : await contractCatalog.GetContractsForDeviceAsync(device, cancellationToken);
         var firmware = fields.Select(static field => field.FirmwareFingerprint).FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value));
-        var constraints = await store.GetFieldConstraintProfilesAsync(firmware, cancellationToken);
-        var dependencies = await store.GetDependencyMatrixProfilesAsync(firmware, cancellationToken);
+        var constraints = await _typedControlStore.GetFieldConstraintProfilesAsync(firmware, cancellationToken);
+        var dependencies = await _typedControlStore.GetDependencyMatrixProfilesAsync(firmware, cancellationToken);
         return ToSnapshots(deviceId, string.Empty, fields, contracts, constraints, dependencies);
     }
 
@@ -160,15 +162,15 @@ public sealed class TypedSettingsService(
 
     public async Task<IReadOnlyCollection<WriteResult>> ApplyTypedChangesAsync(Guid deviceId, IReadOnlyCollection<TypedFieldChange> changes, bool expertOverride, CancellationToken cancellationToken)
     {
-        var device = await store.GetDeviceAsync(deviceId, cancellationToken);
+        var device = await _typedControlStore.GetDeviceAsync(deviceId, cancellationToken);
         if (device is null)
         {
             return [];
         }
 
-        var fields = await store.GetNormalizedSettingFieldsAsync(deviceId, cancellationToken);
+        var fields = await _typedControlStore.GetNormalizedSettingFieldsAsync(deviceId, cancellationToken);
         var contracts = await contractCatalog.GetContractsForDeviceAsync(device, cancellationToken);
-        var groupedResults = (await store.GetGroupedRetestResultsAsync(deviceId, 1000, cancellationToken))
+        var groupedResults = (await _typedControlStore.GetGroupedRetestResultsAsync(deviceId, 1000, cancellationToken))
             .GroupBy(static result => result.FieldKey, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(static group => group.Key, static group => group.OrderByDescending(result => result.CapturedAt).First(), StringComparer.OrdinalIgnoreCase);
         var latestFields = fields
@@ -186,15 +188,16 @@ public sealed class TypedSettingsService(
                 continue;
             }
 
-            if (!expertOverride && !IsOperatorWritable(field, groupedResults.GetValueOrDefault(change.FieldKey)))
+            var writeDecision = TypedControlWritePolicy.Decide(field, groupedResults.GetValueOrDefault(change.FieldKey), expertOverride);
+            if (!writeDecision.Allowed)
             {
                 blocked.Add(new WriteResult
                 {
                     Success = false,
-                    Message = $"Field '{change.FieldKey}' blocked: write is not proven, grouped-tested writable, and supported.",
+                    Message = $"Field '{change.FieldKey}' blocked: {writeDecision.Reason}",
                     SemanticStatus = SemanticWriteStatus.ContractViolation,
                     ContractKey = field.ContractKey,
-                    ContractViolations = ["Write verification missing, grouped retest missing, or field unsupported"]
+                    ContractViolations = [writeDecision.Reason]
                 });
                 continue;
             }
@@ -214,7 +217,7 @@ public sealed class TypedSettingsService(
                 continue;
             }
 
-            var converted = ConvertValue(change.Value ?? JsonValue.Create(string.Empty), contractField);
+            var converted = TypedPayloadValidationPolicy.Convert(change.Value ?? JsonValue.Create(string.Empty), contractField);
             if (!converted.Success)
             {
                 blocked.Add(new WriteResult
@@ -293,8 +296,8 @@ public sealed class TypedSettingsService(
             var semanticContext = BuildSemanticContext(fields);
             foreach (var item in group)
             {
-                var baseline = TryGetPathValue(write.PreWriteValue, item.ContractField.SourcePath);
-                var actual = TryGetPathValue(write.PostWriteValue, item.ContractField.SourcePath);
+                var baseline = TypedPayloadValidationPolicy.GetPathValue(write.PreWriteValue, item.ContractField.SourcePath);
+                var actual = TypedPayloadValidationPolicy.GetPathValue(write.PostWriteValue, item.ContractField.SourcePath);
                 JsonNode? delayed = null;
                 if (item.Contract.DisruptionClass == DisruptionClass.Safe || item.ContractField.DisruptionClass == DisruptionClass.Safe)
                 {
@@ -302,7 +305,7 @@ public sealed class TypedSettingsService(
                     var delayedSnapshot = await settingsService.ReadAsync(deviceId, cancellationToken);
                     var delayedEndpoint = delayedSnapshot?.Groups.SelectMany(static value => value.Values.Values)
                         .FirstOrDefault(candidate => NormalizeEndpoint(candidate.SourceEndpoint ?? candidate.Key).Equals(NormalizeEndpoint(seed.Field.SourceEndpoint), StringComparison.OrdinalIgnoreCase));
-                    delayed = TryGetPathValue(delayedEndpoint?.Value, item.ContractField.SourcePath);
+                    delayed = TypedPayloadValidationPolicy.GetPathValue(delayedEndpoint?.Value, item.ContractField.SourcePath);
                 }
 
                 var observation = await semanticTrustService.CaptureObservationAsync(
@@ -327,14 +330,14 @@ public sealed class TypedSettingsService(
 
             if (group.Any(item => item.Contract.DisruptionClass == DisruptionClass.NetworkChanging || item.ContractField.DisruptionClass == DisruptionClass.NetworkChanging))
             {
-                var previousUrl = BuildControlUrl(device.IpAddress, TryGetPathValue(write.PreWriteValue, "$.httpPort"));
-                var predictedUrl = BuildControlUrl(GetPotentialIpFromPostWrite(write.PostWriteValue, device.IpAddress), TryGetPathValue(write.PostWriteValue, "$.httpPort"));
+                var previousUrl = BuildControlUrl(device.IpAddress, TypedPayloadValidationPolicy.GetPathValue(write.PreWriteValue, "$.httpPort"));
+                var predictedUrl = BuildControlUrl(GetPotentialIpFromPostWrite(write.PostWriteValue, device.IpAddress), TypedPayloadValidationPolicy.GetPathValue(write.PostWriteValue, "$.httpPort"));
                 var recovery = await semanticTrustService.RecoverNetworkAsync(new NetworkRecoveryContext
                 {
                     DeviceId = deviceId,
                     PreviousIp = device.IpAddress,
-                    PreviousGateway = TryGetPathValue(write.PreWriteValue, "$.gateway")?.ToJsonString().Trim('\"'),
-                    PreviousDns = TryGetPathValue(write.PreWriteValue, "$.dns")?.ToJsonString().Trim('\"'),
+                    PreviousGateway = TypedPayloadValidationPolicy.GetPathValue(write.PreWriteValue, "$.gateway")?.ToJsonString().Trim('\"'),
+                    PreviousDns = TypedPayloadValidationPolicy.GetPathValue(write.PreWriteValue, "$.dns")?.ToJsonString().Trim('\"'),
                     PreviousControlUrl = previousUrl,
                     PredictedControlUrl = predictedUrl
                 }, cancellationToken);
@@ -366,7 +369,7 @@ public sealed class TypedSettingsService(
 
         foreach (var result in writes)
         {
-            await store.AddAuditEntryAsync(new WriteAuditEntry
+            await _typedControlStore.AddAuditEntryAsync(new WriteAuditEntry
             {
                 DeviceId = deviceId,
                 AdapterName = result.AdapterName,
@@ -383,32 +386,15 @@ public sealed class TypedSettingsService(
         return writes;
     }
 
-    private static bool IsOperatorWritable(NormalizedSettingField field, GroupedUnsupportedRetestResult? grouped)
-    {
-        if (field.Validity == FieldValidityState.Invalid || field.ExpertOnly)
-        {
-            return false;
-        }
-
-        if (field.WriteVerified && field.SupportState == ContractSupportState.Supported)
-        {
-            return true;
-        }
-
-        return grouped?.Classification is ForcedFieldClassification.Writable
-            or ForcedFieldClassification.WritableNeedsCommitTrigger
-            or ForcedFieldClassification.DelayedApply;
-    }
-
     public async Task<IReadOnlyCollection<PersistenceEligibleField>> GetPersistenceEligibleFieldsAsync(Guid deviceId, CancellationToken cancellationToken)
     {
-        var device = await store.GetDeviceAsync(deviceId, cancellationToken);
+        var device = await _typedControlStore.GetDeviceAsync(deviceId, cancellationToken);
         if (device is null)
         {
             return [];
         }
 
-        var fields = await store.GetNormalizedSettingFieldsAsync(deviceId, cancellationToken);
+        var fields = await _typedControlStore.GetNormalizedSettingFieldsAsync(deviceId, cancellationToken);
         var contracts = await contractCatalog.GetContractsForDeviceAsync(device, cancellationToken);
         return fields
             .GroupBy(field => field.FieldKey, StringComparer.OrdinalIgnoreCase)
@@ -437,13 +423,13 @@ public sealed class TypedSettingsService(
 
     public async Task<PersistenceVerificationResult?> VerifyPersistenceForFieldAsync(Guid deviceId, string fieldKey, JsonNode? value, bool rebootForVerification, bool expertOverride, CancellationToken cancellationToken)
     {
-        var device = await store.GetDeviceAsync(deviceId, cancellationToken);
+        var device = await _typedControlStore.GetDeviceAsync(deviceId, cancellationToken);
         if (device is null)
         {
             return null;
         }
 
-        var fields = await store.GetNormalizedSettingFieldsAsync(deviceId, cancellationToken);
+        var fields = await _typedControlStore.GetNormalizedSettingFieldsAsync(deviceId, cancellationToken);
         var field = fields.Where(item => item.FieldKey.Equals(fieldKey, StringComparison.OrdinalIgnoreCase)).OrderByDescending(static item => item.CapturedAt).FirstOrDefault();
         if (field is null)
         {
@@ -464,7 +450,7 @@ public sealed class TypedSettingsService(
             return new PersistenceVerificationResult { DeviceId = deviceId, Endpoint = field.SourceEndpoint, Notes = "No matching contract field." };
         }
 
-        var converted = ConvertValue(value ?? field.TypedValue ?? JsonValue.Create(string.Empty), contractField);
+        var converted = TypedPayloadValidationPolicy.Convert(value ?? field.TypedValue ?? JsonValue.Create(string.Empty), contractField);
         if (!converted.Success)
         {
             return new PersistenceVerificationResult { DeviceId = deviceId, Endpoint = field.SourceEndpoint, Notes = converted.Message };
@@ -498,7 +484,7 @@ public sealed class TypedSettingsService(
 
     private static string? GetPotentialIpFromPostWrite(JsonNode? postWriteNode, string? fallbackIp)
     {
-        var ip = TryGetPathValue(postWriteNode, "$.ip")?.ToJsonString().Trim('"');
+        var ip = TypedPayloadValidationPolicy.GetPathValue(postWriteNode, "$.ip")?.ToJsonString().Trim('"');
         return string.IsNullOrWhiteSpace(ip) ? fallbackIp : ip;
     }
 
@@ -583,7 +569,7 @@ public sealed class TypedSettingsService(
             }
 
             var valueToSet = changes.TryGetValue(field.FieldKey, out var changedValue) ? changedValue : field.TypedValue;
-            var converted = ConvertValue(valueToSet ?? JsonValue.Create(string.Empty), mapped);
+            var converted = TypedPayloadValidationPolicy.Convert(valueToSet ?? JsonValue.Create(string.Empty), mapped);
             if (!converted.Success)
             {
                 // keep payload build deterministic; validation handles final block semantics
@@ -604,109 +590,10 @@ public sealed class TypedSettingsService(
             SetPathValue(payload, changed.SourcePath, change.Value?.DeepClone());
         }
 
-        var validation = ValidateContractPayload(contract, payload, changes.Keys.ToList(), expertOverride);
+        var validation = TypedPayloadValidationPolicy.Validate(contract, payload, changes.Keys.ToList(), expertOverride);
         return validation.IsValid || !validation.Blocked
             ? (true, payload, null, validation)
             : (false, null, "Payload blocked by contract validation.", validation);
-    }
-
-    private ContractValidationResult ValidateContractPayload(EndpointContract contract, JsonObject payload, IReadOnlyCollection<string> changedFields, bool expertOverride)
-    {
-        var errors = new List<string>();
-
-        if (!contract.ObjectShape.PartialWriteAllowed && changedFields.Count > 1 && !contract.ObjectShape.FullObjectWriteRequired)
-        {
-            errors.Add("partial multi-field write attempted on endpoint without partial-write support");
-        }
-
-        foreach (var required in contract.ObjectShape.RequiredRootFields)
-        {
-            if (TryGetPathValue(payload, $"$.{required}") is null)
-            {
-                errors.Add($"required root field '{required}' missing");
-            }
-        }
-
-        foreach (var requiredField in contract.Fields.Where(static item => item.Required))
-        {
-            if (TryGetPathValue(payload, requiredField.SourcePath) is null)
-            {
-                errors.Add($"required field '{requiredField.Key}' missing at {requiredField.SourcePath}");
-            }
-        }
-
-        if (contract.ObjectShape.FullObjectWriteRequired && payload.Count == 0)
-        {
-            errors.Add("full object payload required but snapshot payload is empty");
-        }
-
-        foreach (var contractField in contract.Fields)
-        {
-            var node = TryGetPathValue(payload, contractField.SourcePath);
-            if (node is null)
-            {
-                if (contractField.Required)
-                {
-                    errors.Add($"required field '{contractField.Key}' missing");
-                }
-                continue;
-            }
-
-            var converted = ConvertValue(node, contractField);
-            if (!converted.Success)
-            {
-                errors.Add($"{contractField.Key}: {converted.Message}");
-            }
-        }
-
-        if (contract.ContractKey.Equals("network.interfaces", StringComparison.OrdinalIgnoreCase))
-        {
-            var dhcp = TryGetPathValue(payload, "$.dhcp");
-            var dhcpEnabled = dhcp is not null && bool.TryParse(dhcp.ToJsonString().Trim('"'), out var parsedDhcp) && parsedDhcp;
-            if (!dhcpEnabled)
-            {
-                if (TryGetPathValue(payload, "$.gateway") is null)
-                {
-                    errors.Add("gateway is required when dhcpMode is false");
-                }
-                if (TryGetPathValue(payload, "$.dns") is null)
-                {
-                    errors.Add("dns is required when dhcpMode is false");
-                }
-            }
-        }
-
-        if (contract.ContractKey.Equals("network.wireless", StringComparison.OrdinalIgnoreCase))
-        {
-            var wirelessMode = TryGetPathValue(payload, "$.wirelessMode")?.ToJsonString().Trim('"');
-            var apMode = TryGetPathValue(payload, "$.ap.mode")?.ToJsonString().Trim('"');
-            var apEnabled = string.Equals(wirelessMode, "AP", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(apMode, "On", StringComparison.OrdinalIgnoreCase);
-            if (apEnabled)
-            {
-                var apSsid = TryGetPathValue(payload, "$.ap.ssid")?.ToJsonString().Trim('"');
-                var apPsk = TryGetPathValue(payload, "$.ap.psk")?.ToJsonString().Trim('"');
-                if (string.IsNullOrWhiteSpace(apSsid))
-                {
-                    errors.Add("apSsid is required when AP mode is enabled");
-                }
-                if (string.IsNullOrWhiteSpace(apPsk))
-                {
-                    errors.Add("apPsk is required when AP mode is enabled");
-                }
-            }
-        }
-
-        var blocked = errors.Count > 0 && !expertOverride;
-        return new ContractValidationResult
-        {
-            IsValid = errors.Count == 0,
-            Blocked = blocked,
-            ExpertOverrideUsed = expertOverride,
-            ContractKey = contract.ContractKey,
-            Endpoint = contract.Endpoint,
-            Errors = errors
-        };
     }
 
     private static NormalizedSettingField BuildInvalidField(Guid deviceId, string adapterName, string endpoint, EndpointContract contract, ContractField field, string? reason, JsonNode? rawValue = null)
@@ -729,150 +616,6 @@ public sealed class TypedSettingsService(
             TruthState = field.Evidence.TruthState,
             Confidence = reason ?? "invalid"
         };
-
-    private static (bool Success, JsonNode? Value, string? Message) ConvertValue(JsonNode source, ContractField field)
-    {
-        try
-        {
-            return field.Kind switch
-            {
-                ContractFieldKind.Number => TryParseNumber(source, field),
-                ContractFieldKind.Integer => TryParseInteger(source, field),
-                ContractFieldKind.Boolean => TryParseBoolean(source),
-                ContractFieldKind.Enum => TryParseEnum(source, field),
-                ContractFieldKind.IpAddress => TryParseIp(source),
-                ContractFieldKind.Port => TryParsePort(source),
-                _ => (true, source.DeepClone(), null)
-            };
-        }
-        catch (Exception ex)
-        {
-            return (false, null, ex.Message);
-        }
-    }
-
-    private static (bool Success, JsonNode? Value, string? Message) TryParseNumber(JsonNode source, ContractField field)
-    {
-        if (source is not JsonValue node || !node.TryGetValue<decimal>(out var value))
-        {
-            if (!decimal.TryParse(source.ToJsonString().Trim('"'), out value))
-            {
-                return (false, null, "expected numeric value");
-            }
-        }
-
-        if (field.Validation.Min is decimal min && value < min)
-        {
-            return (false, null, $"value below min {min}");
-        }
-
-        if (field.Validation.Max is decimal max && value > max)
-        {
-            return (false, null, $"value above max {max}");
-        }
-
-        return (true, JsonValue.Create(value), null);
-    }
-
-    private static (bool Success, JsonNode? Value, string? Message) TryParseInteger(JsonNode source, ContractField field)
-    {
-        var number = TryParseNumber(source, field);
-        if (!number.Success || number.Value is null)
-        {
-            return number;
-        }
-
-        if (number.Value is JsonValue node && node.TryGetValue<decimal>(out var value) && value % 1 != 0)
-        {
-            return (false, null, "expected integer value");
-        }
-
-        return (true, JsonValue.Create((int)decimal.Parse(number.Value.ToJsonString(), System.Globalization.CultureInfo.InvariantCulture)), null);
-    }
-
-    private static (bool Success, JsonNode? Value, string? Message) TryParseBoolean(JsonNode source)
-    {
-        // Direct JSON bool: true / false
-        if (source is JsonValue node && node.TryGetValue<bool>(out var value))
-        {
-            return (true, JsonValue.Create(value), null);
-        }
-
-        var raw = source.ToJsonString().Trim('"');
-
-        // Integer 0/1
-        if (int.TryParse(raw, out var intVal))
-        {
-            return (true, JsonValue.Create(intVal != 0), null);
-        }
-
-        // String "true"/"false"
-        if (bool.TryParse(raw, out value))
-        {
-            return (true, JsonValue.Create(value), null);
-        }
-
-        // String "on"/"off"
-        if (string.Equals(raw, "on", StringComparison.OrdinalIgnoreCase))
-        {
-            return (true, JsonValue.Create(true), null);
-        }
-        if (string.Equals(raw, "off", StringComparison.OrdinalIgnoreCase))
-        {
-            return (true, JsonValue.Create(false), null);
-        }
-
-        // String "yes"/"no"
-        if (string.Equals(raw, "yes", StringComparison.OrdinalIgnoreCase))
-        {
-            return (true, JsonValue.Create(true), null);
-        }
-        if (string.Equals(raw, "no", StringComparison.OrdinalIgnoreCase))
-        {
-            return (true, JsonValue.Create(false), null);
-        }
-
-        // Nested object { enabled: true/false } — extract the enabled key
-        if (source is JsonObject obj)
-        {
-            if (obj.TryGetPropertyValue("enabled", out var enabledNode) && enabledNode is not null)
-            {
-                return TryParseBoolean(enabledNode);
-            }
-            if (obj.TryGetPropertyValue("Enable", out var enableNode) && enableNode is not null)
-            {
-                return TryParseBoolean(enableNode);
-            }
-        }
-
-        return (false, null, $"expected boolean value but got '{raw}'");
-    }
-
-    private static (bool Success, JsonNode? Value, string? Message) TryParseEnum(JsonNode source, ContractField field)
-    {
-        var raw = source.ToJsonString().Trim('"');
-        if (field.EnumValues.Count > 0 && !field.EnumValues.Any(candidate => candidate.Value.Equals(raw, StringComparison.OrdinalIgnoreCase)))
-        {
-            // Unknown enum values are accepted but marked as uncertain — no crash.
-            return (true, JsonValue.Create(raw), null);
-        }
-
-        return (true, JsonValue.Create(raw), null);
-    }
-
-    private static (bool Success, JsonNode? Value, string? Message) TryParseIp(JsonNode source)
-    {
-        var raw = source.ToJsonString().Trim('"');
-        return IPAddress.TryParse(raw, out _)
-            ? (true, JsonValue.Create(raw), null)
-            : (false, null, "invalid IP address");
-    }
-
-    private static (bool Success, JsonNode? Value, string? Message) TryParsePort(JsonNode source)
-    {
-        var parsed = TryParseInteger(source, new ContractField { Validation = new ContractValidationRule { Min = 1, Max = 65535 } });
-        return parsed;
-    }
 
     private static IReadOnlyCollection<TypedSettingGroupSnapshot> ToSnapshots(
         Guid deviceId,
@@ -1047,45 +790,6 @@ public sealed class TypedSettingsService(
 
     private static string BuildFirmwareFingerprint(DeviceIdentity device)
         => $"{device.HardwareModel}|{device.FirmwareVersion}|{device.DeviceType}";
-
-    private static JsonNode? TryGetPathValue(JsonNode? root, string path)
-    {
-        if (root is null || string.IsNullOrWhiteSpace(path))
-        {
-            return null;
-        }
-
-        var segments = ParsePath(path);
-        JsonNode? current = root;
-        foreach (var segment in segments)
-        {
-            if (current is null)
-            {
-                return null;
-            }
-
-            if (segment.Index is int index)
-            {
-                if (current is not JsonArray arr || index < 0 || index >= arr.Count)
-                {
-                    return null;
-                }
-
-                current = arr[index];
-            }
-            else
-            {
-                if (current is not JsonObject obj || !obj.TryGetPropertyValue(segment.Name!, out var next))
-                {
-                    return null;
-                }
-
-                current = next;
-            }
-        }
-
-        return current;
-    }
 
     private static bool IsSemanticErrorPayload(JsonNode? node)
     {

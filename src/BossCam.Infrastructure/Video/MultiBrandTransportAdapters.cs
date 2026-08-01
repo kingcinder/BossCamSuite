@@ -390,6 +390,21 @@ public sealed class MultiBrandHighResTransportAdapter(
             return CameraBrand.WvcOnvif;
         }
 
+        // Wansview / Netvue / Netview currently route through the same generic RTSP-guess + ONVIF
+        // path as truly-unknown devices, but pinning a brand keeps them distinguishable in logs/UI
+        // and stops the Juan/Dahua guess tiers (which run for CameraBrand.Unknown) from being tried
+        // first. Brand-specific fast paths (Wansview's ONVIF port quirks, Netvue cloud-vs-local
+        // mode) are a follow-up pending fixture capture from the owner's actual units.
+        if (model.Contains("wansview"))
+        {
+            return CameraBrand.Wansview;
+        }
+
+        if (model.Contains("netvue") || model.Contains("netview"))
+        {
+            return CameraBrand.Netvue;
+        }
+
         if (string.Equals(device.DeviceType, "ONVIF", StringComparison.OrdinalIgnoreCase))
         {
             return CameraBrand.GenericOnvif;
@@ -405,7 +420,12 @@ public enum CameraBrand
     JuanNetSdk,
     DahuaLorex,
     WvcOnvif,
-    GenericOnvif
+    GenericOnvif,
+    /// <summary>Wansview Wi-Fi IP cams — no brand-specific fast path yet; same generic ONVIF
+    /// handling as Unknown, but distinguishable in logs/UI and kept out of the Juan/Dahua tiers.</summary>
+    Wansview,
+    /// <summary>Netview / Netvue Wi-Fi IP cams — same status as <see cref="Wansview"/>.</summary>
+    Netvue
 }
 
 /// <summary>

@@ -190,15 +190,9 @@ public sealed class HighlightBoardService(
         {
             var sources = await ResolveTileSourcesAsync(device.Id, cancellationToken);
 
-            var mainRtsp = RecordingService.SelectHighResMainSource(sources)
-                ?? sources.FirstOrDefault(s => s.Kind is TransportKind.Rtsp or TransportKind.OnvifRtsp
-                    && !(s.Metadata.TryGetValue("stream", out var st) && st.Equals("sub", StringComparison.OrdinalIgnoreCase)));
-            var subRtsp = sources.FirstOrDefault(s =>
-                (s.Kind is TransportKind.Rtsp or TransportKind.OnvifRtsp)
-                && (s.Url.Contains("ch0_1", StringComparison.OrdinalIgnoreCase)
-                    || s.Url.Contains("/12", StringComparison.OrdinalIgnoreCase)
-                    || s.Url.Contains("subtype=1", StringComparison.OrdinalIgnoreCase)
-                    || (s.Metadata.TryGetValue("stream", out var st) && st.Equals("sub", StringComparison.OrdinalIgnoreCase))));
+            var sourceDecision = PlayableSourcePolicy.Resolve(sources);
+            var mainRtsp = sourceDecision.Main;
+            var subRtsp = sourceDecision.Sub;
             // Probe the snapshot-kind descriptors in rank order (recorded port first, then the
             // :80 fallback the adapters emit) so the tile's SnapshotUrl / live fallback picks a
             // genuinely reachable JPEG — self-healing dead recorded ports like the recording path.

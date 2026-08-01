@@ -353,7 +353,7 @@ public sealed class OnvifSpaFeaturesWiringTests : IDisposable
         var adapters = new IControlAdapter[] { new CapturingOnvifAdapter() };
         var persistence = new PersistenceVerificationService(adapters, store, NullLogger<PersistenceVerificationService>.Instance);
         var semantic = new SemanticTrustService(store, contractCatalog, settingsService, NullLogger<SemanticTrustService>.Instance);
-        return new TypedSettingsService(store, settingsService, persistence, semantic, contractCatalog, new CapabilityPromotionService(store, contractCatalog), NullLogger<TypedSettingsService>.Instance);
+        return new TypedSettingsService(settingsService, persistence, semantic, contractCatalog, new CapabilityPromotionService(store, contractCatalog), NullLogger<TypedSettingsService>.Instance, new ApplicationStoreTypedControlStore(store));
     }
 
     private static SettingsService BuildSettingsService(SqliteApplicationStore store, IEndpointContractCatalog contractCatalog, IControlAdapter adapter)

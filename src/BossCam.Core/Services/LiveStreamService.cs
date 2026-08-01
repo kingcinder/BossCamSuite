@@ -145,14 +145,9 @@ public sealed class LiveStreamService(
         var device = await store.GetDeviceAsync(deviceId, cancellationToken)
             ?? throw new InvalidOperationException("Device not found.");
         var sources = await transportBroker.GetSourcesAsync(deviceId, cancellationToken);
-        var main = RecordingService.SelectHighResMainSource(sources)?.Url
-            ?? BuildJuanUrl(device, "ch0_0.264");
-        var sub = sources.FirstOrDefault(s =>
-            s.Kind is TransportKind.Rtsp or TransportKind.OnvifRtsp
-            && (s.Url.Contains("ch0_1", StringComparison.OrdinalIgnoreCase)
-                || (s.Metadata.TryGetValue("stream", out var st)
-                    && st.Equals("sub", StringComparison.OrdinalIgnoreCase))))?.Url
-            ?? BuildJuanUrl(device, "ch0_1.264");
+        var decision = PlayableSourcePolicy.Resolve(sources);
+        var main = decision.Main?.Url ?? BuildJuanUrl(device, "ch0_0.264");
+        var sub = decision.Sub?.Url ?? BuildJuanUrl(device, "ch0_1.264");
         return (EnsureCredentials(main!, device), EnsureCredentials(sub!, device), EnsureCredentials(sub!, device));
     }
 
@@ -295,21 +290,9 @@ public sealed class LiveStreamService(
 
         var sources = await transportBroker.GetSourcesAsync(deviceId, cancellationToken);
         string? url;
-        if (IsMain(quality))
-        {
-            url = RecordingService.SelectHighResMainSource(sources)?.Url
-                ?? BuildJuanUrl(device, "ch0_0.264");
-        }
-        else
-        {
-            url = sources.FirstOrDefault(s =>
-                    s.Kind is TransportKind.Rtsp or TransportKind.OnvifRtsp
-                    && (s.Url.Contains("ch0_1", StringComparison.OrdinalIgnoreCase)
-                        || s.Url.Contains("/12", StringComparison.OrdinalIgnoreCase)
-                        || (s.Metadata.TryGetValue("stream", out var st)
-                            && st.Equals("sub", StringComparison.OrdinalIgnoreCase))))?.Url
-                ?? BuildJuanUrl(device, "ch0_1.264");
-        }
+        var decision = PlayableSourcePolicy.Resolve(sources, IsMain(quality) ? "main" : "sub");
+        url = decision.Preferred?.Url
+            ?? BuildJuanUrl(device, IsMain(quality) ? "ch0_0.264" : "ch0_1.264");
 
         return (device, EnsureCredentials(url!, device));
     }

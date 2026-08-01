@@ -185,7 +185,9 @@ public sealed class LoggedCatchTests : IDisposable
             new TestRecordingPipelineResolver(),
             NullBossCamEventBroadcaster.Instance,
             new HttpClientFactoryMock(),
-            logger);
+            logger,
+            new ApplicationStoreRecordingStore(store),
+            new RecordingProcessSupervisor());
     }
 
     private TransportFailoverService BuildFailoverService(ILogger<TransportFailoverService> logger)

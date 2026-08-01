@@ -175,7 +175,8 @@
   {/if}
 
   {#if gridData}
-    <div class="grid-wrap" onmouseup={onCellMouseUp} onmouseleave={onCellMouseUp}>
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -- the wrapper captures drag-release outside cells. -->
+    <div class="grid-wrap" role="application" aria-label="Motion detection grid" onmouseup={onCellMouseUp} onmouseleave={onCellMouseUp}>
       <div class="grid" style="grid-template-columns: repeat({GRID_COLS}, 1fr);">
         {#each gridData.gridCells as cell, i (i)}
           {@const row = Math.floor(i / GRID_COLS)}

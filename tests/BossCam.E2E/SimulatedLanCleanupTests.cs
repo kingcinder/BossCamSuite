@@ -18,6 +18,8 @@ public sealed class SimulatedLanCleanupTests : IClassFixture<BossCamWebAppFactor
     private readonly HttpClient _client;
     private readonly BossCamWebAppFactory _factory;
     private readonly List<string> _stubPaths = new();
+    private readonly HashSet<Guid> _ownedDeviceIds = [];
+    private readonly HashSet<string> _ownedSnapshotIps = new(StringComparer.Ordinal);
     private readonly string? _originalFfmpegEnv;
 
     public SimulatedLanCleanupTests(BossCamWebAppFactory factory)
@@ -60,45 +62,63 @@ public sealed class SimulatedLanCleanupTests : IClassFixture<BossCamWebAppFactor
         }
     }
 
-    private static void KillProcessTree()
+    [Fact]
+    public void CleanupPatterns_Are_Scoped_To_Test_Owned_Artifacts()
+    {
+        var deviceId = Guid.NewGuid();
+        var stub = $"/tmp/bosscam-stub-ffmpeg-{Guid.NewGuid():N}.sh";
+        var patterns = BuildCleanupPatterns([deviceId], [stub], ["10.99.99.10"]);
+
+        Assert.Contains($"bosscam-rec-{deviceId:N}", patterns);
+        Assert.Contains(Path.GetFileNameWithoutExtension(stub), patterns);
+        Assert.Contains("curl.*10\\.99\\.99\\.10.*NetSDK.*snapShot", patterns);
+        Assert.DoesNotContain("bosscam-rec-", patterns);
+        Assert.DoesNotContain("bosscam-stub-ffmpeg-", patterns);
+    }
+
+    private void KillProcessTree()
     {
         if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
         {
             return;
         }
 
-        // Patterns matter: the bash wrapper matches "bosscam-rec-", the stub ffmpeg matches
-        // "bosscam-stub-ffmpeg-", but the bash-pipeline child curl does NOT contain either
-        // token on its command line ("curl -fsS -m 4 -u admin: <url>"). Match the snapshot URL
-        // path which is unique to the RecordingService snapshot pipeline -- this will never
-        // collide with a user's normal curls.
-        var patterns = new[]
-        {
-            "-f bosscam-rec-",
-            "-f bosscam-stub-ffmpeg-",
-            "-f 'curl.*NetSDK.*snapShot'",
-        };
-
-        foreach (var pattern in patterns)
+        foreach (var pattern in BuildCleanupPatterns(_ownedDeviceIds, _stubPaths, _ownedSnapshotIps))
         {
             try
             {
-                using var pkill = Process.Start(new ProcessStartInfo
+                var pkill = new ProcessStartInfo
                 {
                     FileName = "pkill",
-                    Arguments = pattern,
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     CreateNoWindow = true
-                });
-                pkill?.WaitForExit(2000);
+                };
+                pkill.ArgumentList.Add("-f");
+                pkill.ArgumentList.Add(pattern);
+                using var process = Process.Start(pkill);
+                process?.WaitForExit(2000);
             }
             catch
             {
                 // pkill not available; nothing else we can do without /proc walking.
             }
         }
+    }
+
+    private static IReadOnlyCollection<string> BuildCleanupPatterns(
+        IEnumerable<Guid> deviceIds,
+        IEnumerable<string> stubPaths,
+        IEnumerable<string> snapshotIps)
+    {
+        var patterns = deviceIds.Select(id => $"bosscam-rec-{id:N}").ToList();
+        patterns.AddRange(stubPaths
+            .Select(Path.GetFileNameWithoutExtension)
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .Cast<string>());
+        patterns.AddRange(snapshotIps.Select(ip => $"curl.*{System.Text.RegularExpressions.Regex.Escape(ip)}.*NetSDK.*snapShot"));
+        return patterns;
     }
 
     [Fact]
@@ -112,7 +132,8 @@ public sealed class SimulatedLanCleanupTests : IClassFixture<BossCamWebAppFactor
         // Clear any leftover recordings carried over from other tests in this class.
         await _client.PostAsync("/api/recordings/stop-all", null);
 
-        var deviceId = await RegisterOfflineDeviceAsync("10.99.99.10");
+        const string ip = "10.99.99.10";
+        var deviceId = await RegisterOfflineDeviceAsync(ip);
         var start = await _client.PostAsJsonAsync("/api/recordings/start", new
         {
             deviceId,
@@ -133,7 +154,6 @@ public sealed class SimulatedLanCleanupTests : IClassFixture<BossCamWebAppFactor
         Assert.False(File.Exists(scriptPath),
             $"snapshot pipeline script was not deleted after StopAsync: {scriptPath}");
 
-        AssertNoLeftoverScripts();
     }
 
     [Fact]
@@ -151,7 +171,8 @@ public sealed class SimulatedLanCleanupTests : IClassFixture<BossCamWebAppFactor
 
         await _client.PostAsync("/api/recordings/stop-all", null);
 
-        var deviceId = await RegisterOfflineDeviceAsync("10.99.99.11");
+        const string ip = "10.99.99.11";
+        var deviceId = await RegisterOfflineDeviceAsync(ip);
         var start = await _client.PostAsJsonAsync("/api/recordings/start", new
         {
             deviceId,
@@ -184,7 +205,6 @@ public sealed class SimulatedLanCleanupTests : IClassFixture<BossCamWebAppFactor
         Assert.False(File.Exists(scriptPath),
             $"snapshot pipeline script was not deleted after spontaneous process exit: {scriptPath}");
 
-        AssertNoLeftoverScripts();
     }
 
     private async Task<Guid> RegisterOfflineDeviceAsync(string ip)
@@ -201,7 +221,9 @@ public sealed class SimulatedLanCleanupTests : IClassFixture<BossCamWebAppFactor
         reg.EnsureSuccessStatusCode();
         var device = await reg.Content.ReadFromJsonAsync<DeviceIdentity>();
         Assert.NotNull(device);
-        return device!.Id;
+        _ownedDeviceIds.Add(device!.Id);
+        _ownedSnapshotIps.Add(ip);
+        return device.Id;
     }
 
     private static async Task WaitForAsync(Func<bool> predicate, TimeSpan timeout)
@@ -215,18 +237,6 @@ public sealed class SimulatedLanCleanupTests : IClassFixture<BossCamWebAppFactor
             }
             await Task.Delay(150);
         }
-    }
-
-    private static void AssertNoLeftoverScripts()
-    {
-        if (!Directory.Exists("/tmp"))
-        {
-            return;
-        }
-
-        var leftovers = Directory.GetFiles("/tmp", "bosscam-rec-*.sh");
-        Assert.True(leftovers.Length == 0,
-            $"unexpected bosscam-rec-*.sh leftover scripts: {string.Join(", ", leftovers)}");
     }
 
     private static string WriteStubFfmpeg(double sleepSeconds, int exitCode)

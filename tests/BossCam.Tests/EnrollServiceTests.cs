@@ -280,7 +280,7 @@ public sealed class EnrollServiceTests : IDisposable
     private static EnrollService BuildEnrollService(IApplicationStore store, IHttpClientFactory httpClientFactory, IEnumerable<IVideoTransportAdapter> videoAdapters)
     {
         var broker = new TransportBroker(videoAdapters, store, null, NullLogger<TransportBroker>.Instance);
-        var recording = new RecordingService(store, broker, new TestRecordingPipelineResolver(), NullBossCamEventBroadcaster.Instance, httpClientFactory, NullLogger<RecordingService>.Instance);
+        var recording = new RecordingService(store, broker, new TestRecordingPipelineResolver(), NullBossCamEventBroadcaster.Instance, httpClientFactory, NullLogger<RecordingService>.Instance, new ApplicationStoreRecordingStore(store), new RecordingProcessSupervisor());
         return new EnrollService(store, httpClientFactory, broker, recording, Options.Create(new BossCamRuntimeOptions()), NullLogger<EnrollService>.Instance);
     }
 

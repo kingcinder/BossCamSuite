@@ -1,5 +1,6 @@
 using BossCam.Contracts;
 using BossCam.Core;
+using BossCam.Infrastructure.Video;
 
 namespace BossCam.Service;
 
@@ -48,6 +49,13 @@ public static class ApiDiagnosticsEndpoints
                 : ips.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             return Results.Ok(await probeSessionService.BuildTruthSweepReportAsync(targetIps, ct));
         });
+
+        // P4 PTZ scoping: capture the WS-Discovery/GetCapabilities/GetConfigurations evidence from a
+        // live camera (by stored DeviceId, or bare IpAddress + optional credentials for an
+        // unenrolled unit) and get a structured verdict. Raw SOAP bodies are persisted as contract
+        // fixtures and echoed back so the operator can save them under fixtures/<brand>/__ONVIF/.
+        app.MapPost("/api/diagnostics/onvif/ptz-capture", async (OnvifPtzCaptureRequest request, OnvifPtzCapabilityProbe probe, CancellationToken ct) =>
+            Results.Ok(await probe.CaptureAsync(request, ct)));
 
         return app;
     }

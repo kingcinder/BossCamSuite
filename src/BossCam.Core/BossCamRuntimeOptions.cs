@@ -37,6 +37,13 @@ public sealed class BossCamRuntimeOptions
     /// </summary>
     public string[] FirmwareAllowedDirectories { get; set; } = [];
     /// <summary>
+    /// Absolute directories that <c>POST /api/recordings/export</c> may write clip files into.
+    /// Empty (default) disables clip exports entirely until the operator sets at least one root.
+    /// Path containment is segment-aware, so a sibling like <c>/mnt/exports-evil</c> cannot
+    /// masquerade as inside <c>/mnt/exports</c>.
+    /// </summary>
+    public string[] ExportAllowedDirectories { get; set; } = [];
+    /// <summary>
     /// Optional list of known cameras registered by <c>POST /api/devices/register-aegon-lan</c>.
     /// Defaults to empty — the historic hardcoded home-LAN topology was removed from the repo.
     /// W5C / Lorex passwords can still be supplied per-call to the endpoint.

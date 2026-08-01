@@ -4,6 +4,7 @@ using BossCam.Contracts;
 using BossCam.Core.Services.Recording;
 using BossCam.Core.Utilities;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace BossCam.Core;
 
@@ -13,11 +14,21 @@ public sealed class RecordingService(
     IRecordingPipelineResolver pipelines,
     IBossCamEventBroadcaster broadcaster,
     IHttpClientFactory httpClientFactory,
-    ILogger<RecordingService> logger)
+    ILogger<RecordingService> logger,
+    IRecordingStore recordingStore,
+    RecordingProcessSupervisor processSupervisor,
+    IOptions<BossCamRuntimeOptions>? options = null)
 {
+    private readonly IRecordingStore _recordingStore = recordingStore;
+
+    /// <summary>Captured runtime options used by the clip-export path allow-list. Null-tolerant
+    /// so existing test call sites (which never configured export roots before) keep compiling;
+    /// production DI always supplies the real <see cref="BossCamRuntimeOptions"/>.</summary>
+    private readonly BossCamRuntimeOptions _runtimeOptions = options?.Value ?? new BossCamRuntimeOptions();
+
     /// <summary>
     /// Bookkeeping record describing a currently-running recording. Internal-only (exposed
-    /// to the test project via InternalsVisibleTo). Held in <see cref="_running"/> keyed
+    /// to the test project via InternalsVisibleTo). Held in the process supervisor keyed
     /// by job id so cleanup paths (StopAsync, process.Exited) can recover the bookkeeping
     /// alongside the process. <see cref="ScriptPath"/> is nullable because the Windows
     /// direct-ffmpeg branch never writes a helper script to /tmp.
@@ -25,7 +36,7 @@ public sealed class RecordingService(
     internal sealed record RunningRecording(RecordingJob Job, Process Process, string? ScriptPath);
 
     private readonly SemaphoreSlim _gate = new(1, 1);
-    private readonly Dictionary<Guid, RunningRecording> _running = [];
+    private readonly RecordingProcessSupervisor _processSupervisor = processSupervisor;
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, (DateTimeOffset mtime, long size)> _indexedCache = new(StringComparer.OrdinalIgnoreCase);
 
     public async Task<RecordingJob> StartAsync(RecordingStartRequest request, CancellationToken cancellationToken)
@@ -40,7 +51,14 @@ public sealed class RecordingService(
             return existing;
         }
 
-        var sources = await transportBroker.GetSourcesAsync(device.Id, cancellationToken);
+        // An explicit snapshot request is already a complete source-selection decision. Avoid
+        // probing every transport adapter (and the failover chain) for an unreachable camera;
+        // ResolveSnapshotUrlAsync will probe only descriptors when discovery was actually needed,
+        // then fall back to the deterministic NetSDK snapshot URL.
+        var explicitSnapshot = string.Equals(request.SourceUrl, "snapshot", StringComparison.OrdinalIgnoreCase);
+        var sources = explicitSnapshot
+            ? Array.Empty<VideoSourceDescriptor>()
+            : await transportBroker.GetSourcesAsync(device.Id, cancellationToken);
         string? sourceUrl = request.SourceUrl;
         if (string.IsNullOrWhiteSpace(sourceUrl))
         {
@@ -65,7 +83,10 @@ public sealed class RecordingService(
             // adapters' snapshot-kind descriptors in rank order (recorded port first, then the
             // :80 fallback they emit) so recording self-heals when the recorded port is dead.
             // Last resort is BuildSnapshotUrl (port normalized via NetSdkPortCandidates.For).
-            sourceUrl = await ResolveSnapshotUrlAsync(device, sources, cancellationToken);
+            sourceUrl = await ResolveSnapshotUrlAsync(
+                device,
+                explicitSnapshot ? BuildSnapshotCandidates(device) : sources,
+                cancellationToken);
             sourceRole = "snapshot";
             degradedReason = selectedMain is null ? "No RTSP main source available — using snapshot pipeline" : "Snapshot forced by request";
         }
@@ -127,7 +148,7 @@ public sealed class RecordingService(
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            _running[started.Id] = startedEntry;
+            _processSupervisor.Add(startedEntry);
         }
         finally
         {
@@ -139,7 +160,7 @@ public sealed class RecordingService(
         // PR-R1: Persist the recording job
         try
         {
-            await store.SaveRecordingJobsAsync([started], cancellationToken);
+            await _recordingStore.SaveRecordingJobsAsync([started], cancellationToken);
         }
         catch (Exception ex)
         {
@@ -159,113 +180,6 @@ public sealed class RecordingService(
 
         return started;
     }
-
-    /// <summary>
-    /// Polls JPEG snapshots and pipes them into ffmpeg segment writer.
-    /// Reliable on 5523-W where /NetSDK/.../snapShot returns image/jpg.
-    /// Returns the spawned process and, on Linux/macOS, the bash script path so the
-    /// caller can clean up the helper script after the process exits.
-    /// </summary>
-    private (Process Process, string? ScriptPath) StartSnapshotPipeline(DeviceIdentity device, string snapshotUrl, string segmentPattern, int segmentSeconds, string ffmpegPath)
-    {
-        var fps = 2;
-        var interval = "0.5";
-        var user = string.IsNullOrWhiteSpace(device.LoginName) ? "admin" : device.LoginName;
-        var password = device.Password ?? string.Empty;
-
-        var plainSnapshot = snapshotUrl;
-        try
-        {
-            if (Uri.TryCreate(snapshotUrl, UriKind.Absolute, out var uri) && !string.IsNullOrEmpty(uri.UserInfo))
-            {
-                var b = new UriBuilder(uri) { UserName = string.Empty, Password = string.Empty };
-                plainSnapshot = b.Uri.ToString();
-            }
-        }
-        catch (Exception ex)
-        {
-            // Malformed snapshot URL from discovery — fall back to the raw URL (credentials
-            // still flow through -u), but trace it so a bad source isn't silently misrouted.
-            logger.LogDebug(ex, "Failed to strip credentials from snapshot URL for {Device}", device.DisplayName);
-        }
-
-        Process process;
-        string? pipelineScriptPath = null;
-        if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
-        {
-            var scriptPath = Path.Combine(Path.GetTempPath(), $"bosscam-rec-{device.Id:N}.sh");
-            var script = new StringBuilder();
-            script.AppendLine("#!/usr/bin/env bash");
-            script.AppendLine("set -euo pipefail");
-            script.Append("while true; do curl -fsS -m 4 -u ")
-                .Append(BashQuote($"{user}:{password}"))
-                .Append(' ')
-                .Append(BashQuote(plainSnapshot))
-                .Append(" || true; sleep ")
-                .Append(interval)
-                .AppendLine("; done \\");
-            // MPEG-TS is robust under kill/restart; no trailing moov required.
-            script.Append("| ")
-                .Append(BashQuote(ffmpegPath))
-                .Append(" -hide_banner -loglevel warning -y -f image2pipe -framerate ")
-                .Append(fps)
-                .Append(" -c:v mjpeg -i - -c:v libx264 -preset veryfast -pix_fmt yuv420p ")
-                .Append("-f segment -segment_time ")
-                .Append(Math.Max(10, segmentSeconds))
-                .Append(" -segment_format mpegts -reset_timestamps 1 -strftime 1 ")
-                .Append(BashQuote(segmentPattern))
-                .AppendLine();
-            File.WriteAllText(scriptPath, script.ToString());
-            try { Process.Start("chmod", $"+x {scriptPath}")?.WaitForExit(2000); } catch { }
-            pipelineScriptPath = scriptPath;
-
-            process = new Process
-            {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = "/bin/bash",
-                    Arguments = scriptPath,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardError = true,
-                    RedirectStandardOutput = true
-                },
-                EnableRaisingEvents = true
-            };
-        }
-        else
-        {
-            process = new Process
-            {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = ffmpegPath,
-                    Arguments = $"-hide_banner -loglevel warning -y -loop 1 -re -i \"{snapshotUrl}\" -c:v libx264 -pix_fmt yuv420p -t 86400 -f segment -segment_time {segmentSeconds} -reset_timestamps 1 -strftime 1 \"{segmentPattern}\"",
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardError = true,
-                    RedirectStandardOutput = true
-                },
-                EnableRaisingEvents = true
-            };
-        }
-
-        if (!process.Start())
-        {
-            // Roll back the helper script if launch failed so we don't leak it on /tmp.
-            if (pipelineScriptPath is not null)
-            {
-                TryDeleteScript(pipelineScriptPath);
-            }
-            throw new InvalidOperationException($"Failed to start snapshot recording pipeline for {device.DisplayName}.");
-        }
-
-        _ = DrainProcessOutputAsync(process, process.Id);
-        return (process, pipelineScriptPath);
-    }
-
-    private static string BashQuote(string value)
-        => "'" + value.Replace("'", "'\"'\"'", StringComparison.Ordinal) + "'";
 
     /// <summary>
     /// Last-resort snapshot URL when no snapshot source descriptor exists. The port is derived
@@ -294,61 +208,42 @@ public sealed class RecordingService(
         DeviceIdentity device,
         IReadOnlyCollection<VideoSourceDescriptor> sources,
         CancellationToken cancellationToken)
-        => (await NetSdkPortCandidates.FirstReachableSnapshotAsync(httpClientFactory, sources, cancellationToken))?.Url
-           ?? BuildSnapshotUrl(device);
+    {
+        // Explicit snapshot requests bypass the expensive adapter/failover discovery above, but
+        // still retain the recorded-port → :80 fallback contract by synthesizing the same two
+        // descriptors the adapters would have emitted for this device.
+        var candidates = sources.Count > 0 ? sources : BuildSnapshotCandidates(device);
+        return (await NetSdkPortCandidates.FirstReachableSnapshotAsync(httpClientFactory, candidates, cancellationToken))?.Url
+            ?? BuildSnapshotUrl(device);
+    }
+
+    private static IReadOnlyCollection<VideoSourceDescriptor> BuildSnapshotCandidates(DeviceIdentity device)
+    {
+        var user = string.IsNullOrWhiteSpace(device.LoginName) ? "admin" : device.LoginName;
+        var password = device.Password ?? string.Empty;
+        return NetSdkPortCandidates.For(device.Port)
+            .Select((port, index) => new VideoSourceDescriptor
+            {
+                Kind = TransportKind.LanRest,
+                Url = $"http://{Uri.EscapeDataString(user)}:{Uri.EscapeDataString(password)}@{device.IpAddress}:{port}/NetSDK/Video/encode/channel/101/snapShot",
+                Rank = 25 + index,
+                DisplayName = index == 0 ? "JPEG snapshot (NetSDK)" : "JPEG snapshot (:80 fallback)",
+                Metadata = new Dictionary<string, string>
+                {
+                    ["kind"] = "snapshot",
+                    ["port"] = port.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                }
+            })
+            .ToList();
+    }
 
     /// <summary>
     /// Picks the highest-priority main/high-res stream. Never selects sub paths like ch0_1, /12, subtype=1.
     /// </summary>
+    /// <summary>Compatibility façade for callers that still need the legacy main-source helper.
+    /// The decision now lives in <see cref="PlayableSourcePolicy"/>.</summary>
     public static VideoSourceDescriptor? SelectHighResMainSource(IEnumerable<VideoSourceDescriptor> sources)
-    {
-        static bool IsSub(VideoSourceDescriptor s)
-        {
-            var url = s.Url ?? string.Empty;
-            if (s.Metadata.TryGetValue("stream", out var stream) && stream.Equals("sub", StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-
-            if (s.Metadata.TryGetValue("highRes", out var hr) && hr.Equals("false", StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-
-            return url.Contains("ch0_1", StringComparison.OrdinalIgnoreCase)
-                || url.Contains("/12", StringComparison.OrdinalIgnoreCase)
-                || url.Contains("subtype=1", StringComparison.OrdinalIgnoreCase)
-                || url.Contains("PROFILE_001", StringComparison.OrdinalIgnoreCase)
-                || (s.DisplayName?.Contains("sub", StringComparison.OrdinalIgnoreCase) ?? false);
-        }
-
-        static bool IsMainHint(VideoSourceDescriptor s)
-        {
-            var url = s.Url ?? string.Empty;
-            if (s.Metadata.TryGetValue("highRes", out var hr) && hr.Equals("true", StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-
-            if (s.Metadata.TryGetValue("stream", out var stream) && stream.Equals("main", StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-
-            return url.Contains("ch0_0", StringComparison.OrdinalIgnoreCase)
-                || url.Contains("subtype=0", StringComparison.OrdinalIgnoreCase)
-                || url.Contains("PROFILE_000", StringComparison.OrdinalIgnoreCase)
-                || url.Contains("/11", StringComparison.OrdinalIgnoreCase);
-        }
-
-        var ordered = sources
-            .Where(static s => s.Kind is TransportKind.Rtsp or TransportKind.OnvifRtsp)
-            .Where(static s => !IsSub(s))
-            .OrderBy(static s => s.Rank)
-            .ToList();
-
-        return ordered.FirstOrDefault(IsMainHint) ?? ordered.FirstOrDefault();
-    }
+        => PlayableSourcePolicy.Resolve(sources).Main;
 
     public async Task<IReadOnlyCollection<RecordingJob>> StartAllAsync(bool preferSubStream, CancellationToken cancellationToken)
     {
@@ -409,7 +304,7 @@ public sealed class RecordingService(
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            if (!_running.TryGetValue(jobId, out var running))
+            if (!_processSupervisor.TryGet(jobId, out var running) || running is null)
             {
                 return null;
             }
@@ -426,10 +321,10 @@ public sealed class RecordingService(
                 logger.LogWarning(ex, "Failed to stop recording process {JobId}", jobId);
             }
 
-            _running.Remove(jobId);
+            _processSupervisor.Remove(jobId, out _);
             var stopped = running.Job with { IsRunning = false, StoppedAt = DateTimeOffset.UtcNow };
             // PR-R1: Persist the stopped job
-            try { await store.SaveRecordingJobsAsync([stopped], cancellationToken); }
+            try { await _recordingStore.SaveRecordingJobsAsync([stopped], cancellationToken); }
             catch (Exception ex) { logger.LogWarning(ex, "Failed to persist stopped recording job {JobId}", stopped.Id); }
             // Push recording stopped to all connected SPA clients.
             _ = broadcaster.RecordingJobStoppedAsync(stopped, CancellationToken.None);
@@ -478,9 +373,9 @@ public sealed class RecordingService(
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            snapshots = _running
-                .Where(kvp => !kvp.Value.Process.HasExited)
-                .Select(kvp => (kvp.Key, kvp.Value))
+            snapshots = _processSupervisor.Snapshot()
+                .Where(static entry => !entry.Process.HasExited)
+                .Select(static entry => (entry.Job.Id, entry))
                 .ToList();
         }
         finally
@@ -499,26 +394,25 @@ public sealed class RecordingService(
 
             // Find the most recent segment file
             var latest = Directory.EnumerateFiles(dir, "*.*")
-                .Where(p => p.EndsWith(".ts", StringComparison.OrdinalIgnoreCase)
-                         || p.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase)
-                         || p.EndsWith(".mkv", StringComparison.OrdinalIgnoreCase))
+                .Where(RecordingSegmentPolicy.IsSupportedSegmentPath)
                 .Select(p => new FileInfo(p))
                 .OrderByDescending(f => f.LastWriteTimeUtc)
                 .FirstOrDefault();
 
             if (latest is null) continue;
 
-            var idle = (now - new DateTimeOffset(latest.LastWriteTimeUtc, TimeSpan.Zero)).TotalSeconds;
-            if (idle < stallTimeoutSeconds) continue;
+            var latestWrite = new DateTimeOffset(latest.LastWriteTimeUtc, TimeSpan.Zero);
+            if (!RecordingLifecyclePolicy.IsStalled(now, latestWrite, stallTimeoutSeconds)) continue;
 
+            var idle = (now - latestWrite).TotalSeconds;
             logger.LogWarning("Stall detected: job={JobId} device={Device} idle={Idle:F0}s threshold={Threshold}s latest={Latest}",
                 jobId, running.Job.DeviceId, idle, stallTimeoutSeconds, latest.FullName);
 
-            // Stop the stalled pipeline (need gate to access _running)
+            // Stop the stalled pipeline while holding the orchestration gate.
             await _gate.WaitAsync(cancellationToken);
             try
             {
-                if (!_running.TryGetValue(jobId, out var current) || current.Process.HasExited)
+                if (!_processSupervisor.TryGet(jobId, out var current) || current is null || current.Process.HasExited)
                     continue;
 
                 var handle = new RecordingHandle(current.Process, current.ScriptPath);
@@ -526,9 +420,9 @@ public sealed class RecordingService(
                 try { await pipeline.StopAsync(handle, cancellationToken); }
                 catch (Exception ex) { logger.LogWarning(ex, "Failed to stop stalled job {JobId}", jobId); }
 
-                _running.Remove(jobId);
+                _processSupervisor.Remove(jobId, out _);
                 var stopped = current.Job with { IsRunning = false, StoppedAt = now, LastError = "Stalled: no segment growth" };
-                try { await store.SaveRecordingJobsAsync([stopped], cancellationToken); }
+                try { await _recordingStore.SaveRecordingJobsAsync([stopped], cancellationToken); }
                 catch (Exception ex) { logger.LogWarning(ex, "Failed to persist stalled recording job {JobId}", stopped.Id); }
                 _ = broadcaster.RecordingJobStoppedAsync(stopped, CancellationToken.None);
                 stalled.Add(stopped);
@@ -565,7 +459,7 @@ public sealed class RecordingService(
     /// </summary>
     public async Task<IReadOnlyCollection<RecordingJob>> ReconcilePersistedJobsAsync(CancellationToken cancellationToken)
     {
-        var persisted = await store.GetRecordingJobsAsync(null, cancellationToken);
+        var persisted = await _recordingStore.GetRecordingJobsAsync(null, cancellationToken);
         var reconciled = new List<RecordingJob>();
         foreach (var job in persisted)
         {
@@ -579,7 +473,7 @@ public sealed class RecordingService(
             try
             {
                 // Fast path: still attached in memory and the process is alive.
-                if (_running.TryGetValue(job.Id, out var running) && !running.Process.HasExited)
+                if (_processSupervisor.TryGet(job.Id, out var running) && running is not null && !running.Process.HasExited)
                 {
                     reconciled.Add(job);
                     continue;
@@ -588,11 +482,16 @@ public sealed class RecordingService(
                 // Restart path: check the OS process by recorded PID so a still-running
                 // ffmpeg / snapshot pipeline is re-attached instead of falsely stopped.
                 var liveProcess = TryGetLiveProcess(job);
-                if (liveProcess is null)
+                var reconciliation = RecordingLifecyclePolicy.DecideReconciliation(
+                    job,
+                    liveProcess is not null,
+                    liveProcess is null ? DateTime.MinValue : liveProcess.StartTime.ToUniversalTime());
+                if (reconciliation.Action == RecordingReconciliationAction.Stop)
                 {
+                    liveProcess?.Dispose();
                     var stopped = job with { IsRunning = false, StoppedAt = DateTimeOffset.UtcNow };
                     reconciled.Add(stopped);
-                    try { await store.SaveRecordingJobsAsync([stopped], cancellationToken); }
+                    try { await _recordingStore.SaveRecordingJobsAsync([stopped], cancellationToken); }
                     catch (Exception ex) { logger.LogWarning(ex, "Failed to persist reconciled stopped job {JobId}", job.Id); }
                     _ = broadcaster.RecordingJobStoppedAsync(stopped, CancellationToken.None);
                     logger.LogWarning("Persisted job {JobId} marked running but process pid={Pid} is gone — reconciled as stopped", job.Id, job.ProcessId);
@@ -613,9 +512,10 @@ public sealed class RecordingService(
                         logger.LogWarning("Re-attaching snapshot job {JobId} but helper script is missing ({Script}); stop will rely on process-tree kill", job.Id, scriptPath);
                     }
 
-                    var reattachedEntry = new RunningRecording(job, liveProcess, scriptPath);
-                    _running[job.Id] = reattachedEntry;
-                    WireExitCleanup(liveProcess, reattachedEntry);
+                    var adoptedProcess = liveProcess ?? throw new InvalidOperationException("Lifecycle policy requested attachment without a live process.");
+                    var reattachedEntry = new RunningRecording(job, adoptedProcess, scriptPath);
+                    _processSupervisor.Add(reattachedEntry);
+                    WireExitCleanup(adoptedProcess, reattachedEntry);
                     logger.LogInformation("Persisted job {JobId} re-attached to live process pid={Pid}", job.Id, job.ProcessId);
                     reconciled.Add(job);
                 }
@@ -701,14 +601,16 @@ public sealed class RecordingService(
             {
                 // Reference-equality guard: only remove if this entry is still the one
                 // tracked for the job id (see summary above).
-                if (_running.TryGetValue(entry.Job.Id, out var current)
+                if (_processSupervisor.TryGet(entry.Job.Id, out var current)
+                    && current is not null
                     && ReferenceEquals(current, entry)
-                    && _running.Remove(entry.Job.Id, out var removed))
+                    && _processSupervisor.RemoveIfCurrent(entry, out var removed)
+                    && removed is not null)
                 {
                     var stopped = removed.Job with { IsRunning = false, StoppedAt = DateTimeOffset.UtcNow };
                     logger.LogWarning("Recording job exited: {JobId}", entry.Job.Id);
                     // PR-R1: Persist the stopped job
-                    try { await store.SaveRecordingJobsAsync([stopped], CancellationToken.None); }
+                    try { await _recordingStore.SaveRecordingJobsAsync([stopped], CancellationToken.None); }
                     catch (Exception ex) { logger.LogWarning(ex, "Failed to persist exited recording job {JobId}", stopped.Id); }
                     // Push recording stopped to all connected SPA clients.
                     _ = broadcaster.RecordingJobStoppedAsync(stopped, CancellationToken.None);
@@ -729,7 +631,7 @@ public sealed class RecordingService(
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            return _running.Values.Select(static entry => entry.Job with { IsRunning = !entry.Process.HasExited }).OrderByDescending(static job => job.StartedAt).ToList();
+            return _processSupervisor.Snapshot().Select(static entry => entry.Job with { IsRunning = !entry.Process.HasExited }).OrderByDescending(static job => job.StartedAt).ToList();
         }
         finally
         {
@@ -742,7 +644,7 @@ public sealed class RecordingService(
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            var entry = _running.Values.FirstOrDefault(item => item.Job.ProfileId == profileId && !item.Process.HasExited);
+            var entry = _processSupervisor.Snapshot().FirstOrDefault(item => item.Job.ProfileId == profileId && !item.Process.HasExited);
             return entry?.Job;
         }
         finally
@@ -753,7 +655,7 @@ public sealed class RecordingService(
 
     public async Task<IReadOnlyCollection<RecordingJob>> ReconcileAutoStartAsync(CancellationToken cancellationToken)
     {
-        var profiles = (await store.GetRecordingProfilesAsync(null, cancellationToken))
+        var profiles = (await _recordingStore.GetRecordingProfilesAsync(null, cancellationToken))
             .Where(static profile => profile.Enabled && profile.AutoStart)
             .ToList();
         var started = new List<RecordingJob>();
@@ -798,7 +700,7 @@ public sealed class RecordingService(
         {
             try
             {
-                var running = (await store.GetRecordingJobsAsync(device.Id, cancellationToken))
+                var running = (await _recordingStore.GetRecordingJobsAsync(device.Id, cancellationToken))
                     .FirstOrDefault(job => job.IsRunning);
                 if (running is not null)
                 {
@@ -812,7 +714,7 @@ public sealed class RecordingService(
                 await _gate.WaitAsync(cancellationToken);
                 try
                 {
-                    runningInMemory = _running.Values.Any(entry => entry.Job.DeviceId == device.Id);
+                    runningInMemory = _processSupervisor.Snapshot().Any(entry => entry.Job.DeviceId == device.Id);
                 }
                 finally
                 {
@@ -844,7 +746,7 @@ public sealed class RecordingService(
     /// </summary>
     public async Task<IReadOnlyCollection<RecordingSegment>> RefreshIndexAsync(Guid? deviceId, CancellationToken cancellationToken)
     {
-        var profiles = await store.GetRecordingProfilesAsync(deviceId, cancellationToken);
+        var profiles = await _recordingStore.GetRecordingProfilesAsync(deviceId, cancellationToken);
         var ffmpegPath = ResolveFfmpegPath();
         // PR-R2: Class-level cache keyed by file path; stores (mtime, size) so unchanged files are skipped across calls.
         var segments = new List<RecordingSegment>();
@@ -856,9 +758,7 @@ public sealed class RecordingService(
             }
 
             foreach (var file in Directory.EnumerateFiles(profile.OutputDirectory, "*.*", SearchOption.TopDirectoryOnly)
-                .Where(static path => path.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase)
-                    || path.EndsWith(".ts", StringComparison.OrdinalIgnoreCase)
-                    || path.EndsWith(".mkv", StringComparison.OrdinalIgnoreCase)))
+                .Where(RecordingSegmentPolicy.IsSupportedSegmentPath))
             {
                 var info = new FileInfo(file);
                 if (info.Length < 8)
@@ -892,15 +792,12 @@ public sealed class RecordingService(
                 }
 
                 // PR-R2: Infer stream role from strftime prefix token (deviceId_YYYYMMDD_HHMMSS)
-                var streamRole = InferStreamRoleFromFileName(info.Name, profile);
+                var (streamRole, hasAudio) = RecordingSegmentPolicy.InferMetadata(info.Name, profile);
 
                 // PR-R2: Probe duration via ffprobe (best-effort)
                 var duration = await ProbeDurationAsync(file, ffmpegPath, cancellationToken);
                 var durationSec = duration ?? Math.Max(5, profile.SegmentSeconds);
 
-                // PR-R2: Determine hasAudio from pipeline mode — direct pipeline has audio, snapshot is video-only
-                // Mode is stored in the job; fall back to true for TS (direct) and false for snapshot
-                var hasAudio = InferHasAudio(info.Name, profile);
 
                 var end = start.AddSeconds(durationSec);
                 segments.Add(new RecordingSegment
@@ -924,37 +821,8 @@ public sealed class RecordingService(
             .GroupBy(static segment => segment.FilePath, StringComparer.OrdinalIgnoreCase)
             .Select(static group => group.OrderByDescending(segment => segment.IndexedAt).First())
             .ToList();
-        await store.SaveRecordingSegmentsAsync(deduped, cancellationToken);
+        await _recordingStore.SaveRecordingSegmentsAsync(deduped, cancellationToken);
         return deduped;
-    }
-
-    /// <summary>
-    /// PR-R2: Infer stream role from the strftime filename pattern.
-    /// The segment pattern is <deviceId>_%Y%m%d_%H%M%S.ts, so we check the deviceId prefix
-    /// against known profile device types. Falls back to directory or profile name hints.
-    /// </summary>
-    private static string InferStreamRoleFromFileName(string fileName, RecordingProfile profile)
-    {
-        var stem = Path.GetFileNameWithoutExtension(fileName);
-        // Segment pattern is deviceId_N_YYYYMMDD_HHMMSS — the role is encoded in the directory structure
-        var dirLower = profile.OutputDirectory.ToLowerInvariant();
-        if (dirLower.Contains("/sub") || dirLower.Contains("\\sub") || dirLower.EndsWith("_sub")) return "sub";
-        if (dirLower.Contains("/snapshot") || dirLower.Contains("\\snapshot") || dirLower.Contains("_snap")) return "snapshot";
-        if (dirLower.Contains("/main") || dirLower.Contains("\\main")) return "main";
-        return "main";
-    }
-
-    /// <summary>
-    /// PR-R2: Infer whether a segment file likely contains audio.
-    /// Direct FFmpeg pipeline maps audio; snapshot pipeline is video-only.
-    /// If the output directory contains "snapshot" or the profile uses snapshot, return false.
-    /// </summary>
-    private static bool InferHasAudio(string fileName, RecordingProfile profile)
-    {
-        var dirLower = profile.OutputDirectory.ToLowerInvariant();
-        if (dirLower.Contains("snapshot") || dirLower.Contains("_snap")) return false;
-        // Default: TS/MP4 direct pipeline segments usually have audio
-        return true;
     }
 
     /// <summary>
@@ -981,15 +849,15 @@ public sealed class RecordingService(
 
         try
         {
-            var psi = new ProcessStartInfo
+            // ArgumentList (one argv element per value) so a path containing quotes/spaces
+            // cannot break argument boundaries — same rule as every other ffmpeg invocation.
+            var psi = ProcessLauncher.Build(probePath, new[]
             {
-                FileName = probePath,
-                Arguments = $"-v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 \"{filePath}\"",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            };
+                "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                filePath
+            });
             using var process = new Process { StartInfo = psi };
             process.Start();
             var output = await process.StandardOutput.ReadToEndAsync(cancellationToken);
@@ -1009,11 +877,11 @@ public sealed class RecordingService(
     }
 
     public Task<IReadOnlyCollection<RecordingSegment>> GetIndexedSegmentsAsync(Guid? deviceId, int limit, CancellationToken cancellationToken)
-        => store.GetRecordingSegmentsAsync(deviceId, limit, cancellationToken);
+        => _recordingStore.GetRecordingSegmentsAsync(deviceId, limit, cancellationToken);
 
     public async Task<RecordingHousekeepingResult> RunHousekeepingAsync(Guid? deviceId, CancellationToken cancellationToken)
     {
-        var profiles = await store.GetRecordingProfilesAsync(deviceId, cancellationToken);
+        var profiles = await _recordingStore.GetRecordingProfilesAsync(deviceId, cancellationToken);
         var now = DateTimeOffset.UtcNow;
         var deletedFiles = 0;
         long deletedBytes = 0;
@@ -1026,19 +894,23 @@ public sealed class RecordingService(
             }
 
             var files = Directory.EnumerateFiles(profile.OutputDirectory, "*.*", SearchOption.TopDirectoryOnly)
-                .Where(static path => path.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase)
-                    || path.EndsWith(".ts", StringComparison.OrdinalIgnoreCase)
-                    || path.EndsWith(".mkv", StringComparison.OrdinalIgnoreCase))
+                .Where(RecordingSegmentPolicy.IsSupportedSegmentPath)
                 .Select(path => new FileInfo(path))
                 .OrderBy(info => info.CreationTimeUtc)
                 .ToList();
+
+            var deletedPaths = new List<string>();
 
             if (profile.RetentionDays > 0)
             {
                 var cutoff = now.AddDays(-profile.RetentionDays);
                 foreach (var info in files.Where(info => info.CreationTimeUtc < cutoff.UtcDateTime).ToList())
                 {
-                    TryDelete(info, ref deletedFiles, ref deletedBytes);
+                    if (TryDelete(info, ref deletedFiles, ref deletedBytes))
+                    {
+                        deletedPaths.Add(info.FullName);
+                        _indexedCache.TryRemove(info.FullName, out _);
+                    }
                     files.Remove(info);
                 }
             }
@@ -1057,8 +929,15 @@ public sealed class RecordingService(
                     if (TryDelete(info, ref deletedFiles, ref deletedBytes))
                     {
                         total -= length;
+                        deletedPaths.Add(info.FullName);
+                        _indexedCache.TryRemove(info.FullName, out _);
                     }
                 }
+            }
+
+            if (deletedPaths.Count > 0)
+            {
+                await ReconcileDeletedSegmentRowsAsync(profile.DeviceId, deletedPaths, cancellationToken);
             }
         }
 
@@ -1071,19 +950,65 @@ public sealed class RecordingService(
     }
 
     /// <summary>
+    /// Removes recording_segments rows whose physical files were just purged by retention, so
+    /// the index table and <see cref="_indexedCache"/> do not grow unbounded and
+    /// <see cref="ExportClipAsync"/> never selects a segment whose file is gone. Best-effort: a
+    /// failed index reconcile must not stop retention from reclaiming disk.
+    /// </summary>
+    private async Task ReconcileDeletedSegmentRowsAsync(Guid deviceId, IReadOnlyCollection<string> deletedPaths, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var segments = await _recordingStore.GetRecordingSegmentsAsync(deviceId, 100_000, cancellationToken);
+            var ids = segments
+                .Where(segment => deletedPaths.Contains(segment.FilePath, StringComparer.OrdinalIgnoreCase))
+                .Select(static segment => segment.Id)
+                .ToList();
+            if (ids.Count > 0)
+            {
+                var removed = await _recordingStore.DeleteRecordingSegmentsAsync(ids, cancellationToken);
+                logger.LogDebug("Housekeeping removed {Removed} recording segment index rows for purged files", removed);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Failed to reconcile recording segment index after housekeeping purge");
+        }
+    }
+
+    /// <summary>Internal for unit tests (InternalsVisibleTo) so cache eviction after a
+    /// housekeeping purge can be asserted without reflection.</summary>
+    internal bool IsFileIndexed(string filePath) => _indexedCache.ContainsKey(filePath);
+
+    /// <summary>
     /// PR-R3: Clip export with copy-first optimization. Uses concat demuxer with -c copy for segments
     /// that share compatible codecs. Falls back to re-encode only when timestamps or codecs force it.
     /// Returns result with path, bytes, duration, and whether re-encode was required.
+    /// <para>
+    /// Hardened: <c>OutputPath</c> is validated against <see cref="ExportOutputPathPolicy"/> before
+    /// anything touches the filesystem, and both ffmpeg invocations go through
+    /// <see cref="ProcessLauncher.Build"/> (ArgumentList, one argv element per value) so no
+    /// caller-supplied path can break argument boundaries or inject ffmpeg flags. Segments whose
+    /// physical files were already purged by retention are dropped and reported instead of failing
+    /// the concat demuxer opaquely.
+    /// </para>
     /// </summary>
     public async Task<ClipExportResult> ExportClipAsync(ClipExportRequest request, CancellationToken cancellationToken)
     {
+        // Write-side allow-list: reject before creating directories or spawning ffmpeg. Without
+        // this, OutputPath could write the clip anywhere the process has permission.
+        if (!ExportOutputPathPolicy.IsAllowed(request.OutputPath, _runtimeOptions, out var policyReason))
+        {
+            return new ClipExportResult { Success = false, OutputPath = request.OutputPath, Message = policyReason };
+        }
+
         var ffmpegPath = ResolveFfmpegPath();
         if (ffmpegPath is null)
         {
             return new ClipExportResult { Success = false, OutputPath = request.OutputPath, Message = "ffmpeg not found." };
         }
 
-        var segments = (await store.GetRecordingSegmentsAsync(request.DeviceId, 5000, cancellationToken))
+        var segments = (await _recordingStore.GetRecordingSegmentsAsync(request.DeviceId, 5000, cancellationToken))
             .Where(segment => segment.EndTime >= request.StartTime && segment.StartTime <= request.EndTime)
             .OrderBy(segment => segment.StartTime)
             .ToList();
@@ -1093,23 +1018,32 @@ public sealed class RecordingService(
             return new ClipExportResult { Success = false, OutputPath = request.OutputPath, Message = "No indexed segments overlap the requested window." };
         }
 
+        // Retention may have purged files after they were indexed — drop them before writing the
+        // concat list so the demuxer can't fail opaquely, and report the skip honestly.
+        var existing = segments.Where(static segment => File.Exists(segment.FilePath)).ToList();
+        var missingCount = segments.Count - existing.Count;
+        if (existing.Count == 0)
+        {
+            return new ClipExportResult
+            {
+                Success = false,
+                OutputPath = request.OutputPath,
+                Message = "All segments overlapping the requested window have been purged by retention."
+            };
+        }
+
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(request.OutputPath))!);
         var listFile = Path.GetTempFileName();
         try
         {
-            await File.WriteAllLinesAsync(listFile, segments.Select(segment => $"file '{segment.FilePath.Replace("'", "''")}'"), cancellationToken);
+            await File.WriteAllLinesAsync(listFile, existing.Select(segment => $"file '{segment.FilePath.Replace("'", "''")}'"), cancellationToken);
+            var skippedSuffix = missingCount > 0 ? $" (skipped {missingCount} purged)" : string.Empty;
 
-            // PR-R3: Copy-first — try concat with -c copy; fall back to re-encode if that fails
+            // PR-R3: Copy-first — try concat with -c copy; fall back to re-encode if that fails.
+            // Both go through ArgumentList (no shell quoting) via BuildExportFfmpegStartInfo.
             var process = new Process
             {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = ffmpegPath,
-                    Arguments = $"-hide_banner -loglevel warning -f concat -safe 0 -i \"{listFile}\" -c copy \"{request.OutputPath}\"",
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardError = true
-                }
+                StartInfo = BuildExportFfmpegStartInfo(ffmpegPath, listFile, request.OutputPath, reEncode: false)
             };
             process.Start();
             await process.WaitForExitAsync(cancellationToken);
@@ -1122,14 +1056,7 @@ public sealed class RecordingService(
                 // Fallback: re-encode with libx264
                 process = new Process
                 {
-                    StartInfo = new ProcessStartInfo
-                    {
-                        FileName = ffmpegPath,
-                        Arguments = $"-hide_banner -loglevel warning -f concat -safe 0 -i \"{listFile}\" -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 128k \"{request.OutputPath}\"",
-                        UseShellExecute = false,
-                        CreateNoWindow = true,
-                        RedirectStandardError = true
-                    }
+                    StartInfo = BuildExportFfmpegStartInfo(ffmpegPath, listFile, request.OutputPath, reEncode: true)
                 };
                 process.Start();
                 await process.WaitForExitAsync(cancellationToken);
@@ -1146,9 +1073,9 @@ public sealed class RecordingService(
                     Success = true,
                     OutputPath = request.OutputPath,
                     Bytes = fi.Length,
-                    DurationSec = segments.Sum(static s => s.DurationSec > 0 ? s.DurationSec : 30),
+                    DurationSec = existing.Sum(static s => s.DurationSec > 0 ? s.DurationSec : 30),
                     ReEncoded = true,
-                    Message = "Copy-first failed; re-encode fallback was used."
+                    Message = $"Copy-first failed; re-encode fallback was used.{skippedSuffix}"
                 };
             }
 
@@ -1158,15 +1085,45 @@ public sealed class RecordingService(
                 Success = true,
                 OutputPath = request.OutputPath,
                 Bytes = fileInfo.Length,
-                DurationSec = segments.Sum(static s => s.DurationSec > 0 ? s.DurationSec : 30),
+                DurationSec = existing.Sum(static s => s.DurationSec > 0 ? s.DurationSec : 30),
                 ReEncoded = false,
-                Message = $"Copied {segments.Count} segment(s)"
+                Message = $"Copied {existing.Count} segment(s){skippedSuffix}"
             };
         }
         finally
         {
             try { File.Delete(listFile); } catch { }
         }
+    }
+
+    /// <summary>
+    /// Builds the ffmpeg <see cref="ProcessStartInfo"/> for a clip export via
+    /// <see cref="ProcessLauncher.Build"/> — every value travels as its own
+    /// <c>ArgumentList</c> element, so a caller-supplied <c>OutputPath</c> containing a quote
+    /// or shell metacharacter can never break argument boundaries or inject ffmpeg flags.
+    /// Internal for unit tests (InternalsVisibleTo) to pin the ArgumentList shape.
+    /// </summary>
+    internal static ProcessStartInfo BuildExportFfmpegStartInfo(string ffmpegPath, string listFile, string outputPath, bool reEncode)
+    {
+        var args = new List<string>
+        {
+            "-hide_banner", "-loglevel", "warning",
+            "-f", "concat", "-safe", "0",
+            "-i", listFile
+        };
+        if (reEncode)
+        {
+            args.AddRange(new[] { "-c:v", "libx264", "-preset", "medium", "-crf", "23", "-c:a", "aac", "-b:a", "128k" });
+        }
+        else
+        {
+            args.Add("-c");
+            args.Add("copy");
+        }
+        args.Add(outputPath);
+        // stdout is not consumed by the export path (ffmpeg writes diagnostics to stderr), so
+        // keep it unredirected to match the original ProcessStartInfo exactly.
+        return ProcessLauncher.Build(ffmpegPath, args, redirectStdout: false);
     }
 
     /// <summary>
@@ -1217,7 +1174,7 @@ public sealed class RecordingService(
 
     private async Task<RecordingProfile> ResolveProfileAsync(DeviceIdentity device, RecordingStartRequest request, CancellationToken cancellationToken)
     {
-        var profiles = await store.GetRecordingProfilesAsync(device.Id, cancellationToken);
+        var profiles = await _recordingStore.GetRecordingProfilesAsync(device.Id, cancellationToken);
         var profile = request.ProfileId is Guid id
             ? profiles.FirstOrDefault(item => item.Id == id)
             : profiles.OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase).FirstOrDefault();
@@ -1241,7 +1198,7 @@ public sealed class RecordingService(
 
             if (!ReferenceEquals(next, profile))
             {
-                await store.SaveRecordingProfilesAsync([next], cancellationToken);
+                await _recordingStore.SaveRecordingProfilesAsync([next], cancellationToken);
             }
 
             return next;
@@ -1261,7 +1218,7 @@ public sealed class RecordingService(
             Enabled = true,
             AutoStart = false
         };
-        await store.SaveRecordingProfilesAsync([profile], cancellationToken);
+        await _recordingStore.SaveRecordingProfilesAsync([profile], cancellationToken);
         return profile;
     }
 

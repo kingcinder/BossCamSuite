@@ -50,8 +50,32 @@ public sealed class OperatorRuntimeRepairTests
         Assert.Contains("BuildFieldApplyOutcomes", code, StringComparison.Ordinal);
         Assert.Contains("attemptedValues.TryGetValue(fieldKey, out var failedValue)", code, StringComparison.Ordinal);
         Assert.Contains("SetValue(fieldKey, failedValue);", code, StringComparison.Ordinal);
-        Assert.Contains("IsOperatorWritable(field, groupedResults.GetValueOrDefault(change.FieldKey))", typed, StringComparison.Ordinal);
-        Assert.Contains("ForcedFieldClassification.Writable", typed, StringComparison.Ordinal);
+        Assert.Contains("TypedControlWritePolicy.Decide(field, groupedResults.GetValueOrDefault(change.FieldKey), expertOverride)", typed, StringComparison.Ordinal);
+        var policy = ReadRepoFile("src", "BossCam.Core", "Services", "TypedControlWritePolicy.cs");
+        Assert.Contains("ForcedFieldClassification.Writable", policy, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Focused_Orchestration_Ports_Are_Required_Di_Dependencies()
+    {
+        var recording = ReadRepoFile("src", "BossCam.Core", "Services", "RecordingService.cs");
+        var typed = ReadRepoFile("src", "BossCam.Core", "Services", "TypedSettingsService.cs");
+
+        Assert.Contains("IRecordingStore recordingStore", recording, StringComparison.Ordinal);
+        Assert.Contains("RecordingProcessSupervisor processSupervisor", recording, StringComparison.Ordinal);
+        Assert.DoesNotContain("IRecordingStore? recordingStore = null", recording, StringComparison.Ordinal);
+        Assert.DoesNotContain("RecordingProcessSupervisor? processSupervisor = null", recording, StringComparison.Ordinal);
+        Assert.Contains("ITypedControlStore typedControlStore", typed, StringComparison.Ordinal);
+        Assert.DoesNotContain("ITypedControlStore? typedControlStore = null", typed, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RecordingService_Does_Not_Retain_Obsolete_Snapshot_Pipeline()
+    {
+        var recording = ReadRepoFile("src", "BossCam.Core", "Services", "RecordingService.cs");
+
+        Assert.DoesNotContain("StartSnapshotPipeline", recording, StringComparison.Ordinal);
+        Assert.DoesNotContain("private static string BashQuote", recording, StringComparison.Ordinal);
     }
 
     [Fact]

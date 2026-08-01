@@ -124,6 +124,12 @@ public interface IApplicationStore
     Task<IReadOnlyCollection<RecordingProfile>> GetRecordingProfilesAsync(Guid? deviceId, CancellationToken cancellationToken);
     Task SaveRecordingSegmentsAsync(IEnumerable<RecordingSegment> segments, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<RecordingSegment>> GetRecordingSegmentsAsync(Guid? deviceId, int limit, CancellationToken cancellationToken);
+    /// <summary>
+    /// Deletes recording_segments rows by id. Used after housekeeping purges the physical
+    /// segment files so the index table does not grow unbounded (or reference purged files).
+    /// Returns the number of rows removed.
+    /// </summary>
+    Task<int> DeleteRecordingSegmentsAsync(IEnumerable<Guid> ids, CancellationToken cancellationToken);
     Task SaveRecordingJobsAsync(IEnumerable<RecordingJob> jobs, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<RecordingJob>> GetRecordingJobsAsync(Guid? deviceId, CancellationToken cancellationToken);
     Task SaveSemanticWriteObservationsAsync(IEnumerable<SemanticWriteObservation> observations, CancellationToken cancellationToken);

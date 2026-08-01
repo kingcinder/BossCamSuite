@@ -120,7 +120,7 @@ public sealed class ContinuousRecordPolicyTests : IDisposable
         // Non-throwing stub: the snapshot fallback path probes URLs; a throwing factory would
         // break the fallback (BuildSnapshotUrl is a pure string builder, so this never throws).
         var http = new StubHttpClientFactory();
-        return new RecordingService(store, broker, new TestRecordingPipelineResolver(), NullBossCamEventBroadcaster.Instance, http, NullLogger<RecordingService>.Instance);
+        return new RecordingService(store, broker, new TestRecordingPipelineResolver(), NullBossCamEventBroadcaster.Instance, http, NullLogger<RecordingService>.Instance, new ApplicationStoreRecordingStore(store), new RecordingProcessSupervisor());
     }
 
     private sealed class StubHttpClientFactory : IHttpClientFactory

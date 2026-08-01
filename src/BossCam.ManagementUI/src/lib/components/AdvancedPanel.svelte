@@ -58,7 +58,7 @@
     changePwStatus = 'Changing…';
     try {
       const res = await api.userChangePassword(appState.selectedDeviceId, changePwUsername.trim(), changePwValue.trim());
-      changePwStatus = res.message || 'Password changed';
+      changePwStatus = res.message || res.Message || 'Password changed';
       appState.showToast('Password changed for ' + changePwUsername.trim());
       changePwUsername = '';
       changePwValue = '';
@@ -205,10 +205,10 @@ UA: {navigator.userAgent}</pre>
     {/if}
 
     <div class="pw-change" style="margin-top: 12px;">
-      <label class="lab">Change password</label>
+      <span class="lab">Change password</span>
       <div class="row">
-        <input bind:value={changePwUsername} placeholder="username" />
-        <input bind:value={changePwValue} placeholder="new password" type="password" />
+        <input type="text" bind:value={changePwUsername} placeholder="username" />
+        <input type="password" bind:value={changePwValue} placeholder="new password" />
         <button onclick={changePassword} type="button" class="accent" disabled={!changePwUsername.trim() || !changePwValue.trim()}>Set</button>
       </div>
       {#if changePwStatus}
@@ -230,8 +230,8 @@ UA: {navigator.userAgent}</pre>
   {#if persistExpanded}
     <p class="muted">Verify that a settings change persists across a camera reboot.</p>
 
-    <div class="row gap wrap" style="margin: 8px 0;">
-      <input
+    <div class="row gap wrap" style="margin: 8px 0;">        <input
+        type="text"
         bind:value={persistenceEndpoint}
         placeholder="Field key (e.g. brightness, motionSensitivity)"
       />

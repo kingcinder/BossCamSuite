@@ -87,6 +87,10 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<IControlAdapter, OwnedRemoteCommandAdapter>();
         services.AddSingleton<IControlAdapter, NativeFallbackAdapter>();
 
+        // ONVIF PTZ capability capture probe (P4 scoping): resolves the device service, captures
+        // GetCapabilities/GetConfigurations fixtures, and returns a PTZ verdict for the operator.
+        services.AddSingleton<OnvifPtzCapabilityProbe>();
+
         services.AddSingleton<IVideoTransportAdapter, MultiBrandHighResTransportAdapter>();
         services.AddSingleton<IVideoTransportAdapter, StreamDescriptorAdapter>();
         services.AddSingleton<IVideoTransportAdapter, BubbleFlvAdapter>();

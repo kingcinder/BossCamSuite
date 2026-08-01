@@ -40,7 +40,7 @@ public static class FirmwarePathPolicy
         var full = Path.GetFullPath(filePath);
         foreach (var root in normalizedRoots)
         {
-            if (IsWithinRoot(root, full))
+            if (PathContainment.IsWithin(root, full))
             {
                 reason = string.Empty;
                 return true;
@@ -49,23 +49,5 @@ public static class FirmwarePathPolicy
 
         reason = "Firmware file must live inside a configured firmware directory.";
         return false;
-    }
-
-    private static bool IsWithinRoot(string root, string candidate)
-    {
-        try
-        {
-            // Path.GetRelativePath throws ArgumentException on Windows when the two paths are on
-            // different drives (root C:\fw, candidate D:\x.bin). Treat that as not-contained rather
-            // than letting an unhandled exception 500 the register/upload endpoints.
-            var relative = Path.GetRelativePath(root, candidate);
-            return relative != ".."
-                && !relative.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
-                && !Path.IsPathRooted(relative);
-        }
-        catch (ArgumentException)
-        {
-            return false;
-        }
     }
 }

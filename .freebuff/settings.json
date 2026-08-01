@@ -1,0 +1,16 @@
+{
+  "preloadedSkills": [
+    "test-driven-development",
+    "systematic-debugging",
+    "improve-codebase-architecture",
+    "shadcn-ui",
+    "accessibility",
+    "tailwind-design-system",
+    "extract-design-system",
+    "web-design-guidelines",
+    "frontend-design",
+    "writing-plans",
+    "executing-plans",
+    "brainstorming"
+  ]
+}

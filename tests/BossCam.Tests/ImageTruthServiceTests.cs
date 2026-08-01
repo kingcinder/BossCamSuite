@@ -53,7 +53,7 @@ public sealed class ImageTruthServiceTests : IDisposable
         var settings = BuildSettingsService(store, [adapter]);
         var contracts = new EndpointContractCatalogService(store, NullLogger<EndpointContractCatalogService>.Instance);
         var trust = new SemanticTrustService(store, contracts, settings, NullLogger<SemanticTrustService>.Instance);
-        var typed = new TypedSettingsService(store, settings, new PersistenceVerificationService([adapter], store, NullLogger<PersistenceVerificationService>.Instance), trust, contracts, new CapabilityPromotionService(store, contracts), NullLogger<TypedSettingsService>.Instance);
+        var typed = new TypedSettingsService(settings, new PersistenceVerificationService([adapter], store, NullLogger<PersistenceVerificationService>.Instance), trust, contracts, new CapabilityPromotionService(store, contracts), NullLogger<TypedSettingsService>.Instance, new ApplicationStoreTypedControlStore(store));
         var imageTruth = new ImageTruthService(store, typed, contracts, NullLogger<ImageTruthService>.Instance);
 
         var result = await imageTruth.RunImageTruthSweepAsync(device.Id, includeBehaviorMapping: true, refreshFromDevice: true, _tempDirectory, CancellationToken.None);
@@ -92,7 +92,7 @@ public sealed class ImageTruthServiceTests : IDisposable
         var settings = BuildSettingsService(store, [adapter]);
         var contracts = new EndpointContractCatalogService(store, NullLogger<EndpointContractCatalogService>.Instance);
         var trust = new SemanticTrustService(store, contracts, settings, NullLogger<SemanticTrustService>.Instance);
-        var typed = new TypedSettingsService(store, settings, new PersistenceVerificationService([adapter], store, NullLogger<PersistenceVerificationService>.Instance), trust, contracts, new CapabilityPromotionService(store, contracts), NullLogger<TypedSettingsService>.Instance);
+        var typed = new TypedSettingsService(settings, new PersistenceVerificationService([adapter], store, NullLogger<PersistenceVerificationService>.Instance), trust, contracts, new CapabilityPromotionService(store, contracts), NullLogger<TypedSettingsService>.Instance, new ApplicationStoreTypedControlStore(store));
         var imageTruth = new ImageTruthService(store, typed, contracts, NullLogger<ImageTruthService>.Instance);
 
         var inventory = await imageTruth.DiscoverInventoryAsync(device.Id, refreshFromDevice: true, CancellationToken.None);
@@ -144,7 +144,7 @@ public sealed class ImageTruthServiceTests : IDisposable
         var settings = BuildSettingsService(store, [adapter]);
         var contracts = new EndpointContractCatalogService(store, NullLogger<EndpointContractCatalogService>.Instance);
         var trust = new SemanticTrustService(store, contracts, settings, NullLogger<SemanticTrustService>.Instance);
-        var typed = new TypedSettingsService(store, settings, new PersistenceVerificationService([adapter], store, NullLogger<PersistenceVerificationService>.Instance), trust, contracts, new CapabilityPromotionService(store, contracts), NullLogger<TypedSettingsService>.Instance);
+        var typed = new TypedSettingsService(settings, new PersistenceVerificationService([adapter], store, NullLogger<PersistenceVerificationService>.Instance), trust, contracts, new CapabilityPromotionService(store, contracts), NullLogger<TypedSettingsService>.Instance, new ApplicationStoreTypedControlStore(store));
         var imageTruth = new ImageTruthService(store, typed, contracts, NullLogger<ImageTruthService>.Instance);
 
         var inventory = await imageTruth.DiscoverInventoryAsync(device.Id, refreshFromDevice: true, CancellationToken.None);

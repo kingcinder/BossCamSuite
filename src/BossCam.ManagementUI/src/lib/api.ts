@@ -104,7 +104,7 @@ export const api = {
 
   /** POST /api/devices/{id}/settings/write — used for both read (GET via write) and write (PUT via write) */
   settingsWrite: (id: string, plan: WritePlan) =>
-    request<{ success: boolean; response?: unknown; Message?: string; message?: string }>(
+    request<{ success: boolean; response?: unknown; Response?: unknown; body?: unknown; Message?: string; message?: string }>(
       `/api/devices/${id}/settings/write`,
       { method: 'POST', body: JSON.stringify(plan) }
     ),
@@ -219,14 +219,14 @@ export const api = {
 
   /** POST /api/devices/{id}/maintenance/RefreshUsers - list users (returns MaintenanceResult with raw camera response) */
   userList: (deviceId: string) =>
-    request<Record<string, unknown>>(
+    request<{ body?: unknown; response?: unknown; message?: string; Message?: string }>(
       `/api/devices/${deviceId}/maintenance/RefreshUsers`,
       { method: 'POST', body: '{}' }
     ),
 
   /** POST /api/devices/{id}/maintenance/PasswordReset - change password */
   userChangePassword: (deviceId: string, username: string, newPassword: string) =>
-    request<Record<string, unknown>>(
+    request<{ body?: unknown; response?: unknown; message?: string; Message?: string }>(
       `/api/devices/${deviceId}/maintenance/PasswordReset`,
       {
         method: 'POST',
@@ -244,11 +244,11 @@ export const api = {
 
   /** Read motion detection grid from the camera */
   motionGridGet: (deviceId: string) =>
-    this.settingGet(deviceId, '/NetSDK/Video/motionDetection/channel/1'),
+    api.settingGet(deviceId, '/NetSDK/Video/motionDetection/channel/1'),
 
   /** Write motion detection grid to the camera */
   motionGridPut: (deviceId: string, payload: unknown) =>
-    this.settingPut(deviceId, '/NetSDK/Video/motionDetection/channel/1', payload),
+    api.settingPut(deviceId, '/NetSDK/Video/motionDetection/channel/1', payload),
 
   /** GET /api/devices/connectivity — all device connectivity snapshots */
   connectivityAll: () => request<Array<{ deviceId: string; status: string; transportResults?: Record<string, boolean>; lastCheckedAt?: string; lastDiagnosticSummary?: string }>>('/api/devices/connectivity'),

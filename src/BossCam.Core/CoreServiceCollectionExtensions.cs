@@ -15,6 +15,9 @@ public static class CoreServiceCollectionExtensions
         services.AddSingleton<CapabilityProbeService>();
         services.AddSingleton<ProtocolValidationService>();
         services.AddSingleton<SettingsService>();
+        services.AddSingleton<IRecordingStore, ApplicationStoreRecordingStore>();
+        services.AddSingleton<ITypedControlStore, ApplicationStoreTypedControlStore>();
+        services.AddSingleton<RecordingProcessSupervisor>();
         services.AddSingleton<TypedSettingsService>();
         services.AddSingleton<CapabilityPromotionService>();
         services.AddSingleton<PersistenceVerificationService>();

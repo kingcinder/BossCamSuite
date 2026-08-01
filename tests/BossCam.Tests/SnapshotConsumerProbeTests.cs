@@ -157,7 +157,7 @@ public sealed class SnapshotConsumerProbeTests
             new TestRecordingPipelineResolver(),
             NullBossCamEventBroadcaster.Instance,
             harness.Factory,
-            NullLogger<RecordingService>.Instance);
+            NullLogger<RecordingService>.Instance, new ApplicationStoreRecordingStore(harness.Store), new RecordingProcessSupervisor());
 
         var url = await service.ResolveSnapshotUrlAsync(harness.Device, SnapshotSources(), CancellationToken.None);
 
@@ -168,16 +168,17 @@ public sealed class SnapshotConsumerProbeTests
     [Fact]
     public async Task RecordingService_ResolveSnapshotUrlAsync_Falls_Back_To_BuildSnapshotUrl_When_No_Candidate_Works()
     {
-        using var harness = await CreateHarnessAsync(RecordedOnvifPort);
+        using var harness = await CreateHarnessAsync(RecordedOnvifPort, _ => throw new HttpRequestException("all snapshot candidates unavailable"));
         var service = new RecordingService(
             harness.Store,
             harness.Broker,
             new TestRecordingPipelineResolver(),
             NullBossCamEventBroadcaster.Instance,
             harness.Factory,
-            NullLogger<RecordingService>.Instance);
+            NullLogger<RecordingService>.Instance, new ApplicationStoreRecordingStore(harness.Store), new RecordingProcessSupervisor());
 
-        // A device with no snapshot descriptors at all → BuildSnapshotUrl (recorded port kept).
+        // A device with no snapshot descriptors and no reachable synthesized candidate →
+        // BuildSnapshotUrl (recorded port kept).
         var url = await service.ResolveSnapshotUrlAsync(harness.Device, [], CancellationToken.None);
 
         Assert.Contains($":{RecordedOnvifPort}/NetSDK/Video/encode/channel/101/snapShot", url, StringComparison.Ordinal);
@@ -279,7 +280,7 @@ public sealed class SnapshotConsumerProbeTests
             new TestRecordingPipelineResolver(),
             NullBossCamEventBroadcaster.Instance,
             harness.Factory,
-            NullLogger<RecordingService>.Instance);
+            NullLogger<RecordingService>.Instance, new ApplicationStoreRecordingStore(harness.Store), new RecordingProcessSupervisor());
         return new HighlightBoardService(
             harness.Store,
             harness.Broker,

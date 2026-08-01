@@ -1,5 +1,6 @@
 using BossCam.Contracts;
 using BossCam.Core;
+using BossCam.Core.Utilities;
 using Microsoft.Extensions.Options;
 
 namespace BossCam.Service;
@@ -83,8 +84,10 @@ public static class ApiRecordingsEndpoints
             }
 
             var fullPath = Path.GetFullPath(path.Trim());
-            var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-            if (!fullPath.StartsWith(Path.GetFullPath(storageRoot), comparison))
+            // Segment-aware containment (not raw StartsWith): a storageRoot of /mnt/recordings
+            // must NOT accept /mnt/recordings-evil/x.mp4 as "inside". Same helper as the
+            // firmware upload and clip-export allow-lists.
+            if (!IsPathUnderStorageRoot(fullPath, storageRoot))
             {
                 return Results.StatusCode(403);
             }
@@ -149,5 +152,22 @@ public static class ApiRecordingsEndpoints
             Results.Ok(await highlights.RecordSelectedAsync(ct)));
 
         return app;
+    }
+
+    /// <summary>
+    /// Segment-aware containment check for the clip download endpoint. Internal for unit tests
+    /// (InternalsVisibleTo BossCam.Tests) so the sibling-prefix rejection is pinned without a
+    /// live server. Malformed paths resolve to "not contained" rather than 500ing.
+    /// </summary>
+    internal static bool IsPathUnderStorageRoot(string fullPath, string storageRoot)
+    {
+        try
+        {
+            return PathContainment.IsWithin(Path.GetFullPath(storageRoot), fullPath);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
+        }
     }
 }

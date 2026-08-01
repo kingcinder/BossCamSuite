@@ -109,6 +109,37 @@ With this config, an operator can point either UI's firmware register at
 `/var/bosscam/firmware/NVR50_8.1.8.bin` or `/opt/vendor-fw/DH_IPC-HFW.bin`;
 anything outside those roots is rejected (`Firmware upload rejected: ...`).
 
+### `BossCam:ExportAllowedDirectories`
+
+Write-side directory allow-list for **clip exports** (`POST /api/recordings/export`
+→ `ExportClipAsync`). Without this key, the export endpoint used to accept any
+caller-supplied `OutputPath` and could create directories / write the clip
+anywhere the service process has permission (and interpolated that path
+unescaped into the ffmpeg command line). Now the destination must resolve inside
+one of the configured roots, and both ffmpeg invocations pass the path as a
+single argv element (no shell quoting), so a path containing `"` cannot inject
+ffmpeg flags.
+
+- **Empty (default) disables clip exports entirely** until at least one root is set.
+- Containment is segment-aware (`/mnt/exports-evil` cannot masquerade as inside
+  `/mnt/exports`), and the download endpoint (`GET /api/recordings/download`)
+  applies the same check against `BossCam:StorageRoot`.
+
+```json
+{
+  "BossCam": {
+    "ExportAllowedDirectories": [
+      "/mnt/exports",
+      "/var/bosscam/clips"
+    ]
+  }
+}
+```
+
+With this config, the SPA's clip-export form and the Avalonia Recordings section
+can write e.g. `/mnt/exports/driveway-2026-07-31.mp4`; any path outside those
+roots is rejected with `Clip export rejected: ...` before ffmpeg is spawned.
+
 ### `BossCam:AegonLanDevices`
 
 Config-driven camera list for the one-shot **Aegon bulk import** batch. The
