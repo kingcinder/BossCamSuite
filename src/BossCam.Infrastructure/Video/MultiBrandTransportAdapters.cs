@@ -60,6 +60,51 @@ public sealed class MultiBrandHighResTransportAdapter(
             sources.Add(SubRtsp(device, auth, "/cam/realmonitor?channel=1&subtype=1", "Dahua/Lorex sub", rank: 52, "sub", null));
         }
 
+        // --- Generic / Wansview / Netview / Temu fallback paths --------------------------
+        // Probe-playable guesses, NOT assumptions: they rank below the brand-proven paths and the
+        // ONVIF GetStreamUri results (DiscoverOnvifStreamsAsync runs for every brand, so a Wansview
+        // or Netview prefers its authoritative media URI when it answers), and the live/record path
+        // probes reachability before use. Emitted only for non-Juan brands — never for a model that
+        // looks like a 5523-W, whose Juan paths are live-proven and should stay canonical.
+        if (brand is not CameraBrand.JuanNetSdk
+            && !(device.HardwareModel ?? string.Empty).Contains("5523", StringComparison.OrdinalIgnoreCase))
+        {
+            var rtspPort = device.RtspPort is > 0 ? device.RtspPort.Value : 554;
+            (string Path, bool Sub, int Rank)[] generic =
+            [
+                ("/stream1", false, 20),
+                ("/live", false, 21),
+                ("/h264", false, 22),
+                ("/videoMain", false, 23),
+                ("/cam/realmonitor?channel=1&subtype=0", false, 24),
+                ("/ch0_0.264", false, 25),
+                ("/main", false, 26),
+                ("/live/ch0", false, 27),
+                ("/stream2", true, 60),
+                ("/sub", true, 61)
+            ];
+            foreach (var (path, sub, rank) in generic)
+            {
+                var stream = sub ? "sub" : "main";
+                sources.Add(new VideoSourceDescriptor
+                {
+                    Kind = TransportKind.Rtsp,
+                    Url = $"rtsp://{auth}{device.IpAddress}:{rtspPort}{path}",
+                    Rank = rank,
+                    DisplayName = $"Generic {stream} {path}",
+                    Metadata = new Dictionary<string, string>
+                    {
+                        ["stream"] = stream,
+                        ["path"] = path,
+                        ["highRes"] = sub ? "false" : "true",
+                        ["resolution"] = string.Empty,
+                        ["auth"] = "digest",
+                        ["generic"] = "true"
+                    }
+                });
+            }
+        }
+
         // --- ONVIF discovery of stream URIs (high-res first) ---
         // DiscoverOnvifStreamsAsync already swallows per-port failure internally via SoapAsync
         // (which uses ProbeExceptionSwallow underneath), so no outer wrap is needed here. Wrapping
