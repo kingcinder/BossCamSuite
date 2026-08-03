@@ -225,7 +225,10 @@ public sealed class StreamDescriptorAdapter(
             Walk(node, urls);
         }
 
-        foreach (var token in raw.Split(['"', '\r', '\n', ' ', ','], StringSplitOptions.RemoveEmptyEntries))
+        // Explicit char[] (not a C# 12 collection expression): the bare collection literal was
+        // ambiguous between string.Split(char[]?, ...) and string.Split(string?, ...) → CS0121,
+        // which broke the pushed main build. Splitting on any of these separators is unchanged.
+        foreach (var token in raw.Split(new char[] { '"', '\r', '\n', ' ', ',' }, StringSplitOptions.RemoveEmptyEntries))
         {
             if (token.StartsWith("rtsp://", StringComparison.OrdinalIgnoreCase) || token.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || token.StartsWith("https://", StringComparison.OrdinalIgnoreCase) || token.StartsWith("rtmp://", StringComparison.OrdinalIgnoreCase))
             {
