@@ -53,6 +53,13 @@ public sealed class BossCamRuntimeOptions
     public int DiscoveryTimeoutSeconds { get; set; } = 3;
     public int HttpTimeoutSeconds { get; set; } = 8;
     /// <summary>
+    /// How long a successful NetSDK family probe (deviceInfo) stays trusted in the device's
+    /// store metadata before <see cref="Video.NativeNetSdkStreamAdapter"/> re-probes. A fresh
+    /// verdict skips the network probe on every stream-request source resolution; expiry or
+    /// failed playback forces a re-probe. Zero/negative falls back to the default below.
+    /// </summary>
+    public int NetSdkProbeCacheTtlMinutes { get; set; } = 30;
+    /// <summary>
     /// Canonical ONVIF ports probed during brand detection / device-info scans, in the order
     /// they should be tried (<c>WVC</c>: 8899, <c>Dahua/ONVIF media</c>: 8888, OEM HTTP: 80).
     /// Adapters append <c>device.Port</c> as a tail element if non-default. Override via

@@ -86,6 +86,51 @@ public sealed class PlayableSourcePolicyTests
     }
 
     [Fact]
+    public void IsSub_Does_Not_False_Match_Subtype_In_DisplayName()
+    {
+        // Live evidence (10.0.0.169): the generic main candidate is displayed as
+        // "Generic main /cam/realmonitor?channel=1&subtype=0". A naive
+        // DisplayName.Contains("sub") treats the "sub" inside "subtype" as a sub-stream marker,
+        // misclassifying the main path as a sub candidate (rank 24) that then outranks the real
+        // ch0_1.264 sub (rank 58) — ffmpeg gets fed a nonexistent Dahua main URL and returns 0 bytes.
+        var main = new VideoSourceDescriptor
+        {
+            Kind = TransportKind.Rtsp,
+            Url = "rtsp://admin:@10.0.0.169:554/cam/realmonitor?channel=1&subtype=0",
+            DisplayName = "Generic main /cam/realmonitor?channel=1&subtype=0",
+            Rank = 24,
+            Metadata = new Dictionary<string, string>
+            {
+                ["stream"] = "main",
+                ["path"] = "/cam/realmonitor?channel=1&subtype=0",
+                ["highRes"] = "true",
+                ["generic"] = "true"
+            }
+        };
+        var sub = new VideoSourceDescriptor
+        {
+            Kind = TransportKind.Rtsp,
+            Url = "rtsp://admin:@10.0.0.169:554/ch0_1.264",
+            DisplayName = "Generic sub /ch0_1.264",
+            Rank = 58,
+            Metadata = new Dictionary<string, string>
+            {
+                ["stream"] = "sub",
+                ["path"] = "/ch0_1.264",
+                ["highRes"] = "false",
+                ["codec"] = "hevc"
+            }
+        };
+
+        Assert.False(PlayableSourcePolicy.IsSub(main));
+        Assert.True(PlayableSourcePolicy.IsSub(sub));
+
+        var decision = PlayableSourcePolicy.Resolve([main, sub], preferredStream: "sub");
+        Assert.Equal("rtsp://admin:@10.0.0.169:554/ch0_1.264", decision.Sub?.Url);
+        Assert.Equal("rtsp://admin:@10.0.0.169:554/ch0_1.264", decision.Preferred?.Url);
+    }
+
+    [Fact]
     public void BuildProbeOrder_Puts_Main_Sub_Onvif_Http_And_Snapshot_In_Stable_Order()
     {
         var sources = new[]

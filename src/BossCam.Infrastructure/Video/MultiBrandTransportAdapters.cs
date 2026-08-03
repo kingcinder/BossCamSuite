@@ -68,9 +68,13 @@ public sealed class MultiBrandHighResTransportAdapter(
         // ONVIF GetStreamUri results (DiscoverOnvifStreamsAsync runs for every brand, so a Wansview
         // or Netview prefers its authoritative media URI when it answers), and the live/record path
         // probes reachability before use. Emitted only for non-Juan brands — never for a model that
-        // looks like a 5523-W, whose Juan paths are live-proven and should stay canonical.
+        // looks like a 5523-W, whose Juan paths are live-proven and should stay canonical, and never
+        // for a device whose NetSDK family was already proven by NativeNetSdkStreamAdapter's
+        // deviceInfo probe (stamped on the shared DeviceIdentity.Metadata). A bare-ONVIF 5523-W
+        // record gets the proven ch0 paths, not these guesses.
         if (brand is not CameraBrand.JuanNetSdk
-            && !(device.HardwareModel ?? string.Empty).Contains("5523", StringComparison.OrdinalIgnoreCase))
+            && !(device.HardwareModel ?? string.Empty).Contains("5523", StringComparison.OrdinalIgnoreCase)
+            && !device.Metadata.ContainsKey(NativeNetSdkStreamAdapter.NativeNetSdkMarker))
         {
             var rtspPort = device.RtspPort is > 0 ? device.RtspPort.Value : 554;
             (string Path, bool Sub, int Rank)[] generic =
@@ -83,27 +87,40 @@ public sealed class MultiBrandHighResTransportAdapter(
                 ("/ch0_0.264", false, 25),
                 ("/main", false, 26),
                 ("/live/ch0", false, 27),
+                ("/ch0_1.264", true, 58),
                 ("/stream2", true, 60),
                 ("/sub", true, 61)
             ];
             foreach (var (path, sub, rank) in generic)
             {
                 var stream = sub ? "sub" : "main";
+                var metadata = new Dictionary<string, string>
+                {
+                    ["stream"] = stream,
+                    ["path"] = path,
+                    ["highRes"] = sub ? "false" : "true",
+                    ["resolution"] = string.Empty,
+                    ["auth"] = "digest",
+                    ["generic"] = "true"
+                };
+                // The generic ch0_0.264 / ch0_1.264 pair are the happytimesoft/Juan-family paths
+                // that a bare-ONVIF 5523-W still answers with HEVC on BOTH streams (sub is
+                // 704x480/15fps). Without the codec fact, the live manifest would report "unknown"
+                // and negotiate a needless transcode. Family convention, not a per-camera probe:
+                // ffmpeg copy mode still emits whatever codec is actually on the wire, so a
+                // mislabel cannot break playback.
+                if (path is "/ch0_0.264" or "/ch0_1.264")
+                {
+                    metadata["codec"] = "hevc";
+                }
+
                 sources.Add(new VideoSourceDescriptor
                 {
                     Kind = TransportKind.Rtsp,
                     Url = $"rtsp://{auth}{device.IpAddress}:{rtspPort}{path}",
                     Rank = rank,
                     DisplayName = $"Generic {stream} {path}",
-                    Metadata = new Dictionary<string, string>
-                    {
-                        ["stream"] = stream,
-                        ["path"] = path,
-                        ["highRes"] = sub ? "false" : "true",
-                        ["resolution"] = string.Empty,
-                        ["auth"] = "digest",
-                        ["generic"] = "true"
-                    }
+                    Metadata = metadata
                 });
             }
         }

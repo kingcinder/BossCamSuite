@@ -358,8 +358,14 @@ public sealed class LanDirectNetSdkRestAdapter(
     IApplicationStore store,
     ILogger<LanDirectNetSdkRestAdapter> logger) : HttpControlAdapterBase(options, httpClientFactory, logger), IControlAdapter
 {
-    // Live-proven on 5523-W firmware 3.6.103.5721106 (singular /Network/interface/N, not /interfaces).
-    private static readonly Dictionary<string, string[]> ReadEndpoints = new(StringComparer.OrdinalIgnoreCase)
+    // Full firmware settings surface mined from assets/protocols/endpoint_catalog.json (62
+    // endpoints across 9 tags: System, Audio, Video, IO, PTZ, Stream, Network, SDCard, Image) plus
+    // the live-proven 5523-W firmware 3.6.103.5721106 concrete forms (encode channels 101/102,
+    // singular /Network/interface/N — the catalog's plural /interfaces forms are also kept so both
+    // firmware generations read cleanly; a 404 on the non-applicable form is tolerated as an
+    // authoritative HTTP response by BuildGroup). Every firmware toggle the operator can set is
+    // therefore surfaced, not a hand-picked subset.
+    internal static readonly Dictionary<string, string[]> ReadEndpoints = new(StringComparer.OrdinalIgnoreCase)
     {
         ["Device"] = ["/NetSDK/System/deviceInfo", "/NetSDK/System/time/localTime", "/NetSDK/System/time/ntp"],
         ["Network"] =
@@ -367,6 +373,14 @@ public sealed class LanDirectNetSdkRestAdapter(
             "/NetSDK/Network/interface",
             "/NetSDK/Network/interface/1",
             "/NetSDK/Network/interface/4",
+            "/NetSDK/Network/interfaces",
+            "/NetSDK/Network/interfaces/1",
+            "/NetSDK/Network/interfaces/1/lan",
+            "/NetSDK/Network/interfaces/1/pppoe",
+            "/NetSDK/Network/interfaces/1/ddns",
+            "/NetSDK/Network/interfaces/1/wireless",
+            "/NetSDK/Network/Ports",
+            "/NetSDK/Network/Port/1",
             "/NetSDK/Network/Dns",
             "/NetSDK/Network/Esee"
         ],
@@ -375,6 +389,15 @@ public sealed class LanDirectNetSdkRestAdapter(
         [
             "/NetSDK/Video/input/channels",
             "/NetSDK/Video/input/channel/1",
+            "/NetSDK/Video/input/channel/1/sharpnessLevel",
+            "/NetSDK/Video/input/channel/1/brightnessLevel",
+            "/NetSDK/Video/input/channel/1/flip",
+            "/NetSDK/Video/input/channel/1/mirror",
+            "/NetSDK/Video/input/channel/1/saturationLevel",
+            "/NetSDK/Video/input/channel/1/hueLevel",
+            "/NetSDK/Video/input/channel/1/contrastLevel",
+            "/NetSDK/Video/input/channel/1/privacyMasks",
+            "/NetSDK/Video/input/channel/1/privacyMask/1",
             "/NetSDK/Video/encode/channels",
             "/NetSDK/Video/encode/channel/101",
             "/NetSDK/Video/encode/channel/101/properties",
@@ -382,12 +405,29 @@ public sealed class LanDirectNetSdkRestAdapter(
             "/NetSDK/Video/encode/channel/102/properties",
             "/NetSDK/Video/encode/channel/101/channelNameOverlay",
             "/NetSDK/Video/encode/channel/101/datetimeOverlay",
-            "/NetSDK/Video/encode/channel/101/snapShot"
+            "/NetSDK/Video/encode/channel/101/deviceIDOverlays",
+            "/NetSDK/Video/encode/channel/101/textOverlays",
+            "/NetSDK/Video/encode/channel/101/textOverlay/1",
+            "/NetSDK/Video/encode/channel/101/snapShot",
+            "/NetSDK/Video/motionDetection/channels",
+            "/NetSDK/Video/motionDetection/channel/1",
+            "/NetSDK/Video/motionDetection/channel/1/status"
         ],
-        ["Detection"] = ["/NetSDK/Video/motionDetection/channels", "/NetSDK/Video/motionDetection/channel/1", "/NetSDK/IO/alarmInput/channels", "/NetSDK/IO/alarmInput/channel/1", "/NetSDK/IO/alarmOutput/channels", "/NetSDK/IO/alarmOutput/channel/1"],
-        ["PTZ"] = ["/NetSDK/PTZ/channels"],
+        ["Detection"] =
+        [
+            "/NetSDK/IO/alarmInput/channels",
+            "/NetSDK/IO/alarmInput/channel/1",
+            "/NetSDK/IO/alarmInput/channel/1/portStatus",
+            "/NetSDK/IO/alarmOutput/channels",
+            "/NetSDK/IO/alarmOutput/channel/1",
+            "/NetSDK/IO/alarmOutput/channel/1/portStatus",
+            "/NetSDK/IO/alarmOutput/channel/1/trigger"
+        ],
+        ["PTZ"] = ["/NetSDK/PTZ/channels", "/NetSDK/PTZ/channel/1", "/NetSDK/PTZ/channel/1/control"],
         ["Stream"] =
         [
+            "/NetSDK/Stream/channels",
+            "/NetSDK/Stream/channel/0",
             "/NetSDK/Video/encode/channels",
             "/NetSDK/Video/encode/channel/101",
             "/NetSDK/Video/encode/channel/102"
@@ -399,6 +439,7 @@ public sealed class LanDirectNetSdkRestAdapter(
             "/NetSDK/Image/manualSharpness",
             "/NetSDK/Image/denoise3d",
             "/NetSDK/Image/wdr",
+            "/NetSDK/Image/AF",
             "/NetSDK/Factory?cmd=WhiteLightCtrl",
             "/NetSDK/Factory?cmd=InfraRedCtrl",
             "/NetSDK/Video/input/channel/1/privacyMask/1"

@@ -79,8 +79,7 @@ public sealed class MultiBrandGenericRtspTests
 
     [Fact]
     public async Task RtspPort_Hint_Is_Honored_For_Generic_Candidates()
-    {
-        var device = new DeviceIdentity
+    {        var device = new DeviceIdentity
         {
             IpAddress = "10.0.0.8",
             HardwareModel = "Netview",
@@ -102,6 +101,71 @@ public sealed class MultiBrandGenericRtspTests
         Assert.NotNull(genericMain);
         Assert.StartsWith("rtsp://", genericMain.Url, StringComparison.Ordinal);
         Assert.Contains(":8554/stream1", genericMain.Url, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GenericOnvif_Device_Gets_Proven_Juan_Sub_Path()
+    {
+        // A 5523-W registered as a bare ONVIF unit (no HardwareModel / EseeId / LoginName — the
+        // real-world 10.0.0.169 record) must still emit the proven Juan sub path /ch0_1.264 so
+        // sub-quality live streaming never lands on a nonexistent generic guess (/stream2, /sub).
+        var device = new DeviceIdentity
+        {
+            IpAddress = "10.0.0.169",
+            Name = "ONVIF 10.0.0.169",
+            DeviceType = "ONVIF",
+            Port = 8888
+        };
+
+        var adapter = new MultiBrandHighResTransportAdapter(
+            Options.Create(new BossCamRuntimeOptions()),
+            new StubHttpClientFactory(),
+            NullLogger<MultiBrandHighResTransportAdapter>.Instance);
+
+        var sources = await adapter.GetSourcesAsync(device, CancellationToken.None);
+
+        var sub = sources
+            .Where(source => source.Metadata.TryGetValue("stream", out var stream) && stream == "sub")
+            .OrderBy(source => source.Rank)
+            .FirstOrDefault();
+
+        // The camera's happytimesoft RTSP server answers /ch0_1.264 (HEVC 704x480) with Digest
+        // creds; a generic guess like /stream2 401s. The chosen sub must be the proven path and
+        // must outrank the other generic guesses (rank 60/61).
+        Assert.NotNull(sub);
+        Assert.Contains("/ch0_1.264", sub.Url, StringComparison.Ordinal);
+        Assert.True(sub.Rank < 60, $"sub rank {sub.Rank} should beat generic guesses at 60/61");
+        Assert.Equal("hevc", sub.Metadata["codec"]);
+    }
+
+    [Fact]
+    public async Task Generic_Ch0_Paths_Carry_Hevc_Codec_Metadata()
+    {
+        var device = new DeviceIdentity
+        {
+            IpAddress = "10.0.0.9",
+            HardwareModel = "WVC631GA",
+            Name = "Wansview cam",
+            DeviceType = "IPC",
+            LoginName = "admin",
+            Password = "pw"
+        };
+
+        var adapter = new MultiBrandHighResTransportAdapter(
+            Options.Create(new BossCamRuntimeOptions()),
+            new StubHttpClientFactory(),
+            NullLogger<MultiBrandHighResTransportAdapter>.Instance);
+
+        var sources = await adapter.GetSourcesAsync(device, CancellationToken.None);
+
+        // Juan/happytimesoft family: ch0_0.264 (main) and ch0_1.264 (sub) are HEVC on
+        // 5523-W-class firmware; the manifest must not report "unknown" for them.
+        foreach (var path in new[] { "/ch0_0.264", "/ch0_1.264" })
+        {
+            var candidate = sources.FirstOrDefault(source => source.Url.EndsWith(path, StringComparison.Ordinal));
+            Assert.NotNull(candidate);
+            Assert.Equal("hevc", candidate.Metadata["codec"]);
+        }
     }
 
     private sealed class StubHttpClientFactory : IHttpClientFactory

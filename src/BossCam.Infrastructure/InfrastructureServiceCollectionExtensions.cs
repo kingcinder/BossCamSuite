@@ -91,6 +91,11 @@ public static class InfrastructureServiceCollectionExtensions
         // GetCapabilities/GetConfigurations fixtures, and returns a PTZ verdict for the operator.
         services.AddSingleton<OnvifPtzCapabilityProbe>();
 
+        // Probe-driven native NetSDK stream adapter (runs ahead of MultiBrand/StreamDescriptor):
+        // GETs /NetSDK/System/deviceInfo and, when the camera answers, emits the live-proven
+        // 5523-W HEVC ch0 paths and stamps the nativeNetSdk marker so the generic RTSP-guess tier
+        // is suppressed for the device (bare-ONVIF 5523-W records get proven paths, not guesses).
+        services.AddSingleton<IVideoTransportAdapter, NativeNetSdkStreamAdapter>();
         services.AddSingleton<IVideoTransportAdapter, MultiBrandHighResTransportAdapter>();
         services.AddSingleton<IVideoTransportAdapter, StreamDescriptorAdapter>();
         services.AddSingleton<IVideoTransportAdapter, BubbleFlvAdapter>();

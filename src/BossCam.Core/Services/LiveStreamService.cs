@@ -38,7 +38,16 @@ public sealed class LiveStreamService(
         // explicit maxrate/bufsize, and a low-latency MPEG-TS pipe.
         var args = BuildRtspH264TsArguments(rtspUrl, IsMain(quality));
         logger.LogInformation("Live MPEG-TS {Ip} q={Q}", device.IpAddress, quality);
-        await RunFfmpegCopyAsync(ffmpeg, args, output, cancellationToken);
+        try
+        {
+            await RunFfmpegCopyAsync(ffmpeg, args, output, cancellationToken);
+        }
+        catch (InvalidOperationException)
+        {
+            // One-shot TS playback produced no media — the cached probe verdict is stale.
+            await InvalidateNetSdkVerdictAsync(deviceId, cancellationToken);
+            throw;
+        }
     }
 
     public async Task StreamMjpegAsync(
@@ -79,6 +88,10 @@ public sealed class LiveStreamService(
         try
         {
             logger.LogWarning(lastFailure, "Shared RTSP unavailable for {Ip}; using authenticated snapshot fallback", device.IpAddress);
+            // Playback failed through the shared RTSP session — drop the persisted NetSDK probe
+            // verdict so the next source resolution re-probes instead of re-serving cached paths
+            // that just failed (camera rebooted / port changed / plane flipped to digest-only).
+            await InvalidateNetSdkVerdictAsync(deviceId, cancellationToken);
             await StreamMjpegFromSnapshotPumpAsync(device, output, quality, cancellationToken);
         }
         catch (OperationCanceledException)
@@ -104,7 +117,16 @@ public sealed class LiveStreamService(
             ?? throw new InvalidOperationException("ffmpeg not found. Install ffmpeg for live streams.");
         var args = BuildRtspFmp4Arguments(rtspUrl);
         logger.LogInformation("Live fMP4 {Ip} q={Q}", device.IpAddress, quality);
-        await RunFfmpegCopyAsync(ffmpeg, args, output, cancellationToken);
+        try
+        {
+            await RunFfmpegCopyAsync(ffmpeg, args, output, cancellationToken);
+        }
+        catch (InvalidOperationException)
+        {
+            // One-shot fMP4 playback produced no media — the cached probe verdict is stale.
+            await InvalidateNetSdkVerdictAsync(deviceId, cancellationToken);
+            throw;
+        }
     }
 
     /// <summary>
@@ -126,7 +148,16 @@ public sealed class LiveStreamService(
             _ => new SharedFmp4Session(key, deviceId, device, normalizedQuality, this, logger));
         // Browser MSE and Avalonia both consume this one bounded H.264 fMP4 session. The
         // fallback MPEG-TS endpoint remains available for native clients that need it.
-        await session.WriteToAsync(output, cancellationToken);
+        try
+        {
+            await session.WriteToAsync(output, cancellationToken);
+        }
+        catch (InvalidOperationException)
+        {
+            // Shared fMP4 session produced no media — the cached probe verdict is stale.
+            await InvalidateNetSdkVerdictAsync(deviceId, cancellationToken);
+            throw;
+        }
     }
 
     public async Task<LiveMediaManifest> BuildManifestAsync(
@@ -227,6 +258,29 @@ public sealed class LiveStreamService(
     {
         ((ICollection<KeyValuePair<string, SharedMjpegSession>>)_sessions)
             .Remove(new KeyValuePair<string, SharedMjpegSession>(key, session));
+    }
+
+    /// <summary>
+    /// Drops the persisted NetSDK probe verdict after a playback failure (shared RTSP session
+    /// exhausted its retries, shared fMP4 session produced no media). The next source resolution
+    /// re-probes the camera instead of re-serving cached paths that just failed. Best-effort:
+    /// a store failure must not break the streaming fallback, and cancellation is never swallowed.
+    /// </summary>
+    private async Task InvalidateNetSdkVerdictAsync(Guid deviceId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await NetSdkProbeVerdictCache.InvalidateAsync(store, deviceId, cancellationToken);
+            logger.LogDebug("Invalidated NetSDK probe verdict after playback failure for {DeviceId}", deviceId);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Failed to invalidate NetSDK probe verdict after playback failure for {DeviceId}", deviceId);
+        }
     }
 
     internal async Task<(string Ffmpeg, IReadOnlyList<string> Args)> BuildRtspH264Fmp4CommandAsync(

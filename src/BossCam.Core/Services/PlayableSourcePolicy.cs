@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using BossCam.Contracts;
 
 namespace BossCam.Core;
@@ -101,8 +102,18 @@ public static class PlayableSourcePolicy
             || url.Contains("/12", StringComparison.OrdinalIgnoreCase)
             || url.Contains("subtype=1", StringComparison.OrdinalIgnoreCase)
             || url.Contains("PROFILE_001", StringComparison.OrdinalIgnoreCase)
-            || (source.DisplayName?.Contains("sub", StringComparison.OrdinalIgnoreCase) ?? false);
+            // Word-boundary match, never a raw substring: a generic MAIN candidate like
+            // "Generic main /cam/realmonitor?channel=1&subtype=0" contains "sub" inside
+            // "subtype" and was being misclassified as a sub stream (live evidence from the
+            // 5523-W at 10.0.0.169 — ffmpeg got fed the Dahua main URL and produced 0 bytes).
+            || (source.DisplayName is not null
+                && SubWordRegex.IsMatch(source.DisplayName));
     }
+
+    private static readonly Regex SubWordRegex = new(
+        @"\bsub\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled,
+        TimeSpan.FromMilliseconds(100));
 
     public static bool IsSnapshot(VideoSourceDescriptor source)
         => source.Metadata.TryGetValue("kind", out var kind)
