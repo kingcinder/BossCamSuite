@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using BossCam.Contracts;
 using BossCam.Core;
+using BossCam.Core.Utilities;
 using BossCam.Infrastructure.Control;
 using BossCam.NativeBridge;
 using Microsoft.Extensions.Options;
@@ -42,12 +43,16 @@ public sealed class StreamDescriptorAdapter(IOptions<BossCamRuntimeOptions> opti
                 sources.Add(new VideoSourceDescriptor
                 {
                     Kind = TransportKind.Rtsp,
-                    Url = stream.Uri,
+                    // The truth profile persists a redacted (userinfo-free) URI; rebuild the
+                    // playable credentialed URI at projection time so server-side recording stays
+                    // authenticated without ever storing the password as clear text.
+                    Url = RtspUriCredentials.Rebuild(stream.Uri, device.LoginName, device.Password),
                     Rank = stream.ProfileToken.Equals("PROFILE_000", StringComparison.OrdinalIgnoreCase) ? 1 : 2,
                     DisplayName = stream.ProfileToken.Equals("PROFILE_000", StringComparison.OrdinalIgnoreCase) ? "Main stream" : "Sub stream",
                     Metadata = new Dictionary<string, string>
                     {
                         ["source"] = "per-camera endpoint truth",
+                        ["displayUrl"] = RtspUriCredentials.Sanitize(stream.Uri),
                         ["profileToken"] = stream.ProfileToken,
                         ["probedCodec"] = stream.Codec ?? string.Empty,
                         ["probedResolution"] = stream.Width is int width && stream.Height is int height ? $"{width}x{height}" : string.Empty,
@@ -182,7 +187,10 @@ public sealed class StreamDescriptorAdapter(IOptions<BossCamRuntimeOptions> opti
         {
             Kind = TransportKind.Rtsp,
             Url = GetVerified5523WRelayUrl(device.IpAddress!, streamPrefix, "main"),
-            Rank = 0,
+            // Ranked below direct candidates (1-4) and the verified sample fallback: the go2rtc
+            // relay is only brought up by the desktop live path, so recording must not treat an
+            // unopened 127.0.0.1:8554 URL as ready.
+            Rank = 30,
             DisplayName = "Main high-res go2rtc bubble relay",
             ExpectedWidth = truth.MainWidth,
             ExpectedHeight = truth.MainHeight,
@@ -212,7 +220,7 @@ public sealed class StreamDescriptorAdapter(IOptions<BossCamRuntimeOptions> opti
         {
             Kind = TransportKind.Rtsp,
             Url = GetVerified5523WRelayUrl(device.IpAddress!, streamPrefix, "sub"),
-            Rank = 1,
+            Rank = 31,
             DisplayName = "Sub go2rtc bubble relay",
             ExpectedWidth = truth.SubWidth,
             ExpectedHeight = truth.SubHeight,

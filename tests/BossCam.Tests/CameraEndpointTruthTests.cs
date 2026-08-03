@@ -72,7 +72,9 @@ public sealed class CameraEndpointTruthTests : IDisposable
     {
         var store = CreateStore();
         await store.InitializeAsync(CancellationToken.None);
-        var device = new DeviceIdentity { Id = Guid.NewGuid(), IpAddress = "10.0.0.29", Port = 80 };
+        // Production-realistic fixture: the 5523-W devices carry admin/empty credentials, which the
+        // projection re-applies to the sanitized profile URI (ReBuild = Sanitize + device creds).
+        var device = new DeviceIdentity { Id = Guid.NewGuid(), IpAddress = "10.0.0.29", Port = 80, LoginName = "admin", Password = "" };
         await store.UpsertDevicesAsync([device], CancellationToken.None);
         await store.SaveCameraEndpointTruthProfileAsync(CameraEndpointTruthService.CreateVerified5523wSample(device.Id), CancellationToken.None);
 
@@ -225,6 +227,49 @@ public sealed class CameraEndpointTruthTests : IDisposable
         Assert.Equal(duplicate.Id, repaired.Id);
         Assert.Equal("admin", repaired.LoginName);
         Assert.Equal(string.Empty, repaired.Password);
+    }
+
+    [Fact]
+    public async Task Endpoint_Truth_Projection_Rebuilds_Playable_Credentials_From_Device()
+    {
+        // P1: ffprobe persisted a redacted (userinfo-stripped) URI, but the projected source must
+        // carry the device's credentials so server-side recording stays authenticated.
+        var store = CreateStore();
+        await store.InitializeAsync(CancellationToken.None);
+        var device = new DeviceIdentity { Id = Guid.NewGuid(), IpAddress = "10.0.0.29", LoginName = "admin", Password = "s3cret", HardwareModel = "5523-W" };
+        await store.UpsertDevicesAsync([device], CancellationToken.None);
+        await store.SaveCameraEndpointTruthProfileAsync(new CameraEndpointTruthProfile
+        {
+            DeviceId = device.Id,
+            IpAddress = "10.0.0.29",
+            HardwareModel = "5523-W",
+            RtspPlaybackStreams = [new RtspPlaybackProbeMetadata { ProfileToken = "PROFILE_000", Uri = "rtsp://10.0.0.29:554/ch0_0.264", State = CameraEndpointVerificationState.Verified, Codec = "h264" }]
+        }, CancellationToken.None);
+
+        var adapter = new StreamDescriptorAdapter(Options.Create(new BossCamRuntimeOptions { HttpTimeoutSeconds = 1 }), store);
+        var sources = await adapter.GetSourcesAsync(device, CancellationToken.None);
+
+        var projected = Assert.Single(sources, source => source.Metadata.GetValueOrDefault("source") == "per-camera endpoint truth");
+        Assert.Equal("rtsp://admin:s3cret@10.0.0.29:554/ch0_0.264", projected.Url);
+        Assert.Equal("rtsp://10.0.0.29:554/ch0_0.264", projected.Metadata.GetValueOrDefault("displayUrl"));
+    }
+
+    [Fact]
+    public async Task Relay_Sources_Are_Not_Ranked_As_Ready_Before_Go2Rtc_Is_Running()
+    {
+        // P2: go2rtc relay URLs must not outrank direct candidates; only the desktop live path
+        // starts the relay, so recording must not pick an unopened 127.0.0.1:8554 URL first.
+        var store = CreateStore();
+        await store.InitializeAsync(CancellationToken.None);
+        var adapter = new StreamDescriptorAdapter(Options.Create(new BossCamRuntimeOptions { HttpTimeoutSeconds = 1 }), store);
+        var device = new DeviceIdentity { Id = Guid.NewGuid(), IpAddress = "10.0.0.227", LoginName = "admin", Password = "", HardwareModel = "5523-W" };
+
+        var sources = await adapter.GetSourcesAsync(device, CancellationToken.None);
+
+        var relayMain = Assert.Single(sources, source => source.StreamRole == "main-relay" && source.ChannelId == "101");
+        var directMain = Assert.Single(sources, source => source.StreamRole == "main" && source.ChannelId == "101");
+        Assert.True(relayMain.Rank > directMain.Rank, $"relay main rank {relayMain.Rank} must not outrank direct candidate rank {directMain.Rank}");
+        Assert.False(relayMain.Rank < 30, "relay must not be ranked ready (0/1) before go2rtc startup");
     }
 
     public void Dispose()

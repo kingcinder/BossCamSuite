@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using BossCam.Contracts;
+using BossCam.Core.Utilities;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -40,10 +41,13 @@ public sealed class EndpointTruthLiveBuilder(IFfprobePlaybackProbe ffprobe, ILog
         var streams = new List<RtspPlaybackProbeMetadata>();
         foreach (var stream in observed.StreamUrisByProfile)
         {
-            var credentialed = BuildCredentialedRtspUri(stream.Value, input.Device.LoginName, input.Device.Password);
+            // The credentialed URI is transient: it is only passed to the ffprobe subprocess and is
+            // never persisted or logged. FfprobePlaybackProbe persists a sanitized (userinfo-free)
+            // URI, and the projection layer rebuilds the playable URI from the device record.
+            var credentialed = RtspUriCredentials.Build(stream.Value, input.Device.LoginName, input.Device.Password);
             var probed = await ffprobe.ProbeAsync(stream.Key, credentialed, input.Device.LoginName, input.Device.Password, cancellationToken);
             streams.Add(probed);
-            logger.LogInformation("ProjectionUpdated profile={ProfileToken} uri={Uri} probedCodec={Codec}", probed.ProfileToken, SanitizeRtspUri(probed.Uri), probed.Codec ?? string.Empty);
+            logger.LogInformation("ProjectionUpdated profile={ProfileToken} uri={Uri} probedCodec={Codec}", probed.ProfileToken, RtspUriCredentials.Sanitize(probed.Uri), probed.Codec ?? string.Empty);
         }
 
         return new CameraEndpointTruthProfile
@@ -62,31 +66,6 @@ public sealed class EndpointTruthLiveBuilder(IFfprobePlaybackProbe ffprobe, ILog
         };
     }
 
-    private static string BuildCredentialedRtspUri(string uri, string? username, string? password)
-    {
-        if (string.IsNullOrWhiteSpace(username) || !Uri.TryCreate(uri, UriKind.Absolute, out var parsed) || !parsed.Scheme.Equals("rtsp", StringComparison.OrdinalIgnoreCase))
-        {
-            return uri;
-        }
-
-        var builder = new UriBuilder(parsed) { UserName = username, Password = password ?? string.Empty };
-        return builder.Uri.ToString();
-    }
-
-    private static string SanitizeRtspUri(string uri)
-    {
-        if (!Uri.TryCreate(uri, UriKind.Absolute, out var parsed))
-        {
-            return uri;
-        }
-
-        var builder = new UriBuilder(parsed)
-        {
-            UserName = string.Empty,
-            Password = string.Empty
-        };
-        return builder.Uri.ToString();
-    }
 }
 
 public sealed class HttpOnvifLiveProbeClient(IOptions<BossCamRuntimeOptions> options, ILogger<HttpOnvifLiveProbeClient> logger) : IEndpointTruthLiveProbeClient
@@ -124,11 +103,13 @@ public sealed class HttpOnvifLiveProbeClient(IOptions<BossCamRuntimeOptions> opt
         var media = endpoints.FirstOrDefault(e => e.Capability.Equals("Media", StringComparison.OrdinalIgnoreCase) && e.State == CameraEndpointVerificationState.Verified);
         if (media is not null)
         {
-            var profilesXml = await PostSoapAsync(http, media.Endpoint, "GetProfiles", cancellationToken);
+            var profilesXml = await PostSoapAsync(http, media.Endpoint, Envelope("GetProfiles"), cancellationToken);
             foreach (var profile in ParseProfiles(profilesXml))
             {
                 declared.Add(profile);
-                var uriXml = await PostSoapAsync(http, media.Endpoint, "GetStreamUri", cancellationToken);
+                // A conforming ONVIF Media service selects the stream URI by profile token; without
+                // it GetStreamUri returns a SOAP fault or no URI and refresh never probes playback.
+                var uriXml = await PostSoapAsync(http, media.Endpoint, GetStreamUriEnvelope(profile.ProfileToken), cancellationToken);
                 var uri = XDocument.Parse(uriXml).Descendants().FirstOrDefault(e => e.Name.LocalName == "Uri")?.Value;
                 if (!string.IsNullOrWhiteSpace(uri))
                 {
@@ -146,11 +127,15 @@ public sealed class HttpOnvifLiveProbeClient(IOptions<BossCamRuntimeOptions> opt
         return new LiveOnvifProbeResult { Endpoints = endpoints, DeclaredStreams = declared, StreamUrisByProfile = uris, Ptz = ptz };
     }
 
-    private static async Task<string> PostSoapAsync(HttpClient http, string endpoint, string action, CancellationToken cancellationToken)
-        => await (await http.PostAsync(endpoint, new StringContent(Envelope(action), Encoding.UTF8, "application/soap+xml"), cancellationToken)).Content.ReadAsStringAsync(cancellationToken);
+    private static async Task<string> PostSoapAsync(HttpClient http, string endpoint, string envelopeBody, CancellationToken cancellationToken)
+        => await (await http.PostAsync(endpoint, new StringContent(envelopeBody, Encoding.UTF8, "application/soap+xml"), cancellationToken)).Content.ReadAsStringAsync(cancellationToken);
 
     private static string Envelope(string action)
         => $"""<?xml version="1.0"?><s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"><s:Body><{action}/></s:Body></s:Envelope>""";
+
+    /// <summary>GetStreamUri SOAP body carrying the profile token the Media service needs to select the stream.</summary>
+    private static string GetStreamUriEnvelope(string profileToken)
+        => $"""<?xml version="1.0"?><s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:trt="http://www.onvif.org/ver10/media/wsdl" xmlns:tt="http://www.onvif.org/ver10/schema"><s:Body><trt:GetStreamUri><trt:StreamSetup><tt:Stream>RTP-Unicast</tt:Stream><tt:Transport><tt:Protocol>RTSP</tt:Protocol></tt:Transport></trt:StreamSetup><trt:ProfileToken>{profileToken}</trt:ProfileToken></trt:GetStreamUri></s:Body></s:Envelope>""";
 
     private static IEnumerable<OnvifDeclaredStreamMetadata> ParseProfiles(string xml)
     {
@@ -204,7 +189,9 @@ public sealed class FfprobePlaybackProbe(IOptions<BossCamRuntimeOptions> options
             return new RtspPlaybackProbeMetadata
             {
                 ProfileToken = profileToken,
-                Uri = EndpointTruthLiveBuilder.SanitizeRtspUri(uri),
+                // Persist the redacted display value only; the playable credentialed URI is
+                // rebuilt at projection time from the device record (never stored as clear text).
+                Uri = RtspUriCredentials.Sanitize(uri),
                 State = CameraEndpointVerificationState.Verified,
                 CredentialState = CameraCredentialState.Verified,
                 VerifiedUsername = username,
@@ -222,5 +209,5 @@ public sealed class FfprobePlaybackProbe(IOptions<BossCamRuntimeOptions> options
     }
 
     private static RtspPlaybackProbeMetadata Candidate(string profileToken, string uri, string evidence)
-        => new() { ProfileToken = profileToken, Uri = EndpointTruthLiveBuilder.SanitizeRtspUri(uri), State = CameraEndpointVerificationState.UnverifiedCandidate, CredentialState = CameraCredentialState.PlaybackLockedPendingCredentials, Evidence = evidence };
+        => new() { ProfileToken = profileToken, Uri = RtspUriCredentials.Sanitize(uri), State = CameraEndpointVerificationState.UnverifiedCandidate, CredentialState = CameraCredentialState.PlaybackLockedPendingCredentials, Evidence = evidence };
 }

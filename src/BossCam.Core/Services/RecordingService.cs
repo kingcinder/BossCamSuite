@@ -27,10 +27,8 @@ public sealed class RecordingService(
         var sourceUrl = request.SourceUrl;
         if (string.IsNullOrWhiteSpace(sourceUrl))
         {
-            var sources = (await transportBroker.GetSourcesAsync(device.Id, cancellationToken)).OrderBy(static source => source.Rank).ToList();
-            sourceUrl = !string.IsNullOrWhiteSpace(profile.SourceId)
-                ? sources.FirstOrDefault(source => source.Id.Equals(profile.SourceId, StringComparison.OrdinalIgnoreCase))?.Url
-                : sources.FirstOrDefault(static source => !source.LowResOnly)?.Url ?? sources.FirstOrDefault()?.Url;
+            var sources = await transportBroker.GetSourcesAsync(device.Id, cancellationToken);
+            sourceUrl = SelectSourceUrl(sources, profile.SourceId);
         }
 
         if (string.IsNullOrWhiteSpace(sourceUrl))
@@ -396,6 +394,41 @@ public sealed class RecordingService(
             return false;
         }
     }
+
+    /// <summary>
+    /// Chooses the URL for a recording start. A stored <paramref name="sourceId"/> pins its source
+    /// when it still matches; a stale id (VideoSourceDescriptor.Id defaults to a fresh GUID every
+    /// refresh) falls back to ranked selection instead of failing. Ranked selection prefers
+    /// non-lowres, non-relay sources: go2rtc relay URLs (127.0.0.1:8554) are only brought up by the
+    /// desktop live path, so recording must not hand an unopened relay URL to ffmpeg while a direct
+    /// source exists. Public so the policy is unit-testable without spawning ffmpeg.
+    /// </summary>
+    public static string? SelectSourceUrl(IReadOnlyCollection<VideoSourceDescriptor> sources, string? sourceId)
+    {
+        if (sources.Count == 0)
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(sourceId))
+        {
+            var pinned = sources.FirstOrDefault(source => source.Id.Equals(sourceId, StringComparison.OrdinalIgnoreCase));
+            if (pinned is not null)
+            {
+                return pinned.Url;
+            }
+        }
+
+        var ranked = sources.OrderBy(static source => source.Rank).ToList();
+        var preferred = ranked.FirstOrDefault(static source => !source.LowResOnly && !RequiresGo2RtcRelay(source));
+        return preferred?.Url
+            ?? ranked.FirstOrDefault(static source => !source.LowResOnly)?.Url
+            ?? ranked.FirstOrDefault()?.Url;
+    }
+
+    private static bool RequiresGo2RtcRelay(VideoSourceDescriptor source)
+        => source.Metadata.TryGetValue("relayRequired", out var value)
+            && value.Equals("go2rtc", StringComparison.OrdinalIgnoreCase);
 
     private static string? ResolveFfmpegPath()
     {
