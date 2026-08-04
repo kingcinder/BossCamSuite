@@ -49,7 +49,8 @@ public sealed class EnrollService(
         var password = ResolvePassword(request);
 
         // Step 1 — credential availability (never retry forever; one clear answer).
-        if (string.IsNullOrEmpty(password))
+        // Allow explicitly-blank passwords (factory-default cameras) — only null means unresolved.
+        if (password is null)
         {
             return new EnrollDeviceResult
             {
@@ -400,10 +401,13 @@ public sealed class EnrollService(
     /// Resolves a password for the request: inline → BOSSCAM_CRED_&lt;PROFILE&gt;_PASSWORD →
     /// brand env (BOSSCAM_LOREX_PASSWORD / BOSSCAM_WVC_PASSWORD by model) → BOSSCAM_PASSWORD.
     /// Never throws and never loops — the caller reports a clear failure when nothing resolves.
+    /// An explicitly-blank password (factory-default cameras) is returned as <c>""</c>;
+    /// a missing field (<c>null</c>) falls through to env resolution.
     /// </summary>
     private static string? ResolvePassword(EnrollDeviceRequest request)
     {
-        if (!string.IsNullOrWhiteSpace(request.Password))
+        // Distinguish "explicitly blank" (factory-default camera password) from "not provided".
+        if (request.Password is not null)
         {
             return request.Password;
         }
