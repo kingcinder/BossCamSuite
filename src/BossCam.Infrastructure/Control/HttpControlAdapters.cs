@@ -444,7 +444,10 @@ public sealed class LanDirectNetSdkRestAdapter(
             "/NetSDK/Factory?cmd=InfraRedCtrl",
             "/NetSDK/Video/input/channel/1/privacyMask/1"
         ],
-        ["Storage"] = ["/NetSDK/SDCard/status", "/NetSDK/SDCard/media/search", "/NetSDK/SDCard/media/playbackFLV", "/NetSDK/SDCard/format"]
+        ["Storage"] = ["/NetSDK/SDCard/status", "/NetSDK/SDCard/media/search", "/NetSDK/SDCard/media/playbackFLV", "/NetSDK/SDCard/media/playbackByName", "/NetSDK/SDCard/media/playbackControl", "/NetSDK/SDCard/media/getFileByTime", "/NetSDK/SDCard/media/getFileByName", "/NetSDK/SDCard/media/captureFrame", "/NetSDK/SDCard/format"],
+        ["Schedule"] = ["/NetSDK/Schedule/channels", "/NetSDK/Schedule/channel/1"],
+        ["Wireless"] = ["/NetSDK/Wireless/modules"],
+        ["Alarm"] = ["/NetSDK/Alarm/channels", "/NetSDK/Alarm/channel/1", "/NetSDK/Alarm/messageCallback"]
     };
 
     public string Name => nameof(LanDirectNetSdkRestAdapter);

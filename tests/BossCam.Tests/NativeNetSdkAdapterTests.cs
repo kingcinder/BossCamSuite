@@ -510,14 +510,31 @@ public sealed class NativeNetSdkAdapterTests
         Assert.Contains(all, e => e.Contains("/NetSDK/PTZ/channel/1", StringComparison.Ordinal));
         Assert.Contains(all, e => e.Contains("/NetSDK/PTZ/channel/1/control", StringComparison.Ordinal));
 
-        // SDCard — status / search / playbackFLV / format
+        // SDCard — status / search / playbackFLV / playbackByName / playbackControl / getFileByTime / getFileByName / captureFrame / format
         Assert.Contains(all, e => e.Contains("/NetSDK/SDCard/status", StringComparison.Ordinal));
         Assert.Contains(all, e => e.Contains("/NetSDK/SDCard/media/search", StringComparison.Ordinal));
         Assert.Contains(all, e => e.Contains("/NetSDK/SDCard/media/playbackFLV", StringComparison.Ordinal));
+        Assert.Contains(all, e => e.Contains("/NetSDK/SDCard/media/playbackByName", StringComparison.Ordinal));
+        Assert.Contains(all, e => e.Contains("/NetSDK/SDCard/media/playbackControl", StringComparison.Ordinal));
+        Assert.Contains(all, e => e.Contains("/NetSDK/SDCard/media/getFileByTime", StringComparison.Ordinal));
+        Assert.Contains(all, e => e.Contains("/NetSDK/SDCard/media/getFileByName", StringComparison.Ordinal));
+        Assert.Contains(all, e => e.Contains("/NetSDK/SDCard/media/captureFrame", StringComparison.Ordinal));
         Assert.Contains(all, e => e.Contains("/NetSDK/SDCard/format", StringComparison.Ordinal));
 
         // Image — AF included (previously missing)
         Assert.Contains(all, e => e.Contains("/NetSDK/Image/AF", StringComparison.Ordinal));
+
+        // Schedule — mined from HISISDK.h config commands 9/27 (HISI_DVR_GET/SET_SCHEDULECFG)
+        Assert.Contains(all, e => e.Contains("/NetSDK/Schedule/channels", StringComparison.Ordinal));
+        Assert.Contains(all, e => e.Contains("/NetSDK/Schedule/channel/1", StringComparison.Ordinal));
+
+        // Wireless — mined from HISISDK.h HISI_WIRELESSINFO (HISI_ALARM_WIRELESS = 0x13)
+        Assert.Contains(all, e => e.Contains("/NetSDK/Wireless/modules", StringComparison.Ordinal));
+
+        // Alarm — mined from HISISDK.h alarm channel setup + message callback
+        Assert.Contains(all, e => e.Contains("/NetSDK/Alarm/channels", StringComparison.Ordinal));
+        Assert.Contains(all, e => e.Contains("/NetSDK/Alarm/channel/1", StringComparison.Ordinal));
+        Assert.Contains(all, e => e.Contains("/NetSDK/Alarm/messageCallback", StringComparison.Ordinal));
     }
 
     private const string DeviceInfoFixtureBody = "{\"serial\":\"SN123456\",\"model\":\"5523-w\",\"firmware\":\"v1.0.0\",\"mac\":\"AA:BB:CC:DD:EE:FF\",\"eseeId\":\"ESEE1234\"}";
