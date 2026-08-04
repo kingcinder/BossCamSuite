@@ -22,7 +22,6 @@ public sealed class LiveStreamService(
 {
     private readonly ConcurrentDictionary<string, SharedMjpegSession> _sessions = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, SharedFmp4Session> _fmp4Sessions = new(StringComparer.Ordinal);
-    private static readonly HttpClient SnapshotClient = CreateSnapshotClient();
 
     public async Task StreamMpegTsAsync(
         Guid deviceId,
@@ -335,6 +334,19 @@ public sealed class LiveStreamService(
                 "/NetSDK/Video/encode/channel/101/snapShot"
             };
 
+        // Per-pump handler with credential cache so Digest auto-negotiates when the
+        // camera sends a proper WWW-Authenticate challenge. Explicit Basic-only auth
+        // was the root cause of 401 failures on cameras whose nginx expects Digest.
+        using var snapshotHandler = new HttpClientHandler
+        {
+            Credentials = new System.Net.NetworkCredential(user, password),
+            PreAuthenticate = true
+        };
+        using var snapshotClient = new HttpClient(snapshotHandler)
+        {
+            Timeout = TimeSpan.FromSeconds(5)
+        };
+
         logger.LogInformation("Live snapShot-pump {Ip}", device.IpAddress);
         const string boundary = "ffmpeg";
         var failures = 0;
@@ -347,10 +359,9 @@ public sealed class LiveStreamService(
                 {
                     try
                     {
-                        using var req = new HttpRequestMessage(HttpMethod.Get, $"http://{device.IpAddress}:{port}{path}");
-                        var token = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{user}:{password}"));
-                        req.Headers.Authorization = new AuthenticationHeaderValue("Basic", token);
-                        using var res = await SnapshotClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                        var url = $"http://{device.IpAddress}:{port}{path}";
+                        using var req = new HttpRequestMessage(HttpMethod.Get, url);
+                        using var res = await snapshotClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
                         if (!res.IsSuccessStatusCode)
                         {
                             continue;
@@ -644,15 +655,7 @@ public sealed class LiveStreamService(
         return null;
     }
 
-    private static HttpClient CreateSnapshotClient()
-    {
-        var handler = new SocketsHttpHandler
-        {
-            MaxConnectionsPerServer = 32,
-            PooledConnectionLifetime = TimeSpan.FromMinutes(5)
-        };
-        return new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
-    }
+
 
     public async ValueTask DisposeAsync()
     {

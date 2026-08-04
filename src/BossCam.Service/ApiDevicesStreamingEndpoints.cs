@@ -37,7 +37,6 @@ public static class ApiDevicesStreamingEndpoints
             // deviceInfo returns 200 on :80, transport-fails on the recorded ONVIF port).
             // Try the recorded port first, then fall back to 80 for each candidate path.
             var ports = NetSdkPortCandidates.For(device.Port);
-            var token = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{user}:{password}"));
             var candidatePaths = new[]
             {
                 $"/NetSDK/Video/encode/channel/101/snapShot",
@@ -48,7 +47,13 @@ public static class ApiDevicesStreamingEndpoints
             };
 
             // Digest-auth fallback requires per-request handler; pooled factory doesn't apply here.
-            using var handler = new HttpClientHandler { Credentials = new System.Net.NetworkCredential(user, password) };
+            // Let the handler's credential cache auto-negotiate (Basic first, Digest on challenge).
+            // Explicit Authorization header is NOT set here — it would override Digest negotiation.
+            using var handler = new HttpClientHandler
+            {
+                Credentials = new System.Net.NetworkCredential(user, password),
+                PreAuthenticate = true
+            };
             using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(8) };
             foreach (var port in ports)
             {
@@ -58,7 +63,8 @@ public static class ApiDevicesStreamingEndpoints
                     {
                         var url = $"http://{device.IpAddress}:{port}{path}";
                         using var request = new HttpRequestMessage(HttpMethod.Get, url);
-                        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", token);
+                        // Pre-authenticate: handler's credential cache sends Basic first; if the
+                        // camera challenges with WWW-Authenticate: Digest, the handler retries.
                         using var response = await client.SendAsync(request, ct);
                         if (!response.IsSuccessStatusCode)
                         {
