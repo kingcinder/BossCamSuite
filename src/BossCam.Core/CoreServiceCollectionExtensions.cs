@@ -38,11 +38,12 @@ public static class CoreServiceCollectionExtensions
         services.AddSingleton<TransportFailoverService>();
         services.AddSingleton<ConnectionDiagnosticService>();
 
-        // Recording pipelines (refactor of P2 #12). RecordingService resolves the two
-        // implementations by mode via IRecordingPipelineResolver, so swapping either
-        // pipeline in tests doesn't require touching RecordingService itself.
+        // Recording pipelines (refactor of P2 #12). RecordingService resolves the three
+        // implementations by mode via IRecordingPipelineResolver, so swapping any pipeline
+        // in tests doesn't require touching RecordingService itself.
         services.AddSingleton<SnapshotRecordingPipeline>();
         services.AddSingleton<DirectFfmpegRecordingPipeline>();
+        services.AddSingleton<BubbleFlvRecordingPipeline>();
         services.AddSingleton<IRecordingPipelineResolver, RecordingPipelineResolver>();
 
         return services;
@@ -58,12 +59,15 @@ public interface IRecordingPipelineResolver
 {
     SnapshotRecordingPipeline Snapshot { get; }
     DirectFfmpegRecordingPipeline DirectFfmpeg { get; }
+    BubbleFlvRecordingPipeline BubbleFlv { get; }
 }
 
 internal sealed class RecordingPipelineResolver(
     SnapshotRecordingPipeline snapshot,
-    DirectFfmpegRecordingPipeline direct) : IRecordingPipelineResolver
+    DirectFfmpegRecordingPipeline direct,
+    BubbleFlvRecordingPipeline bubbleFlv) : IRecordingPipelineResolver
 {
     public SnapshotRecordingPipeline Snapshot { get; } = snapshot;
     public DirectFfmpegRecordingPipeline DirectFfmpeg { get; } = direct;
+    public BubbleFlvRecordingPipeline BubbleFlv { get; } = bubbleFlv;
 }

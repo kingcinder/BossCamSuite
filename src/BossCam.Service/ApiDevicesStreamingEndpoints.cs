@@ -46,9 +46,13 @@ public static class ApiDevicesStreamingEndpoints
                 $"/snapshot.jpg"
             };
 
-            // Digest-auth fallback requires per-request handler; pooled factory doesn't apply here.
-            // Let the handler's credential cache auto-negotiate (Basic first, Digest on challenge).
-            // Explicit Authorization header is NOT set here — it would override Digest negotiation.
+            // Some firmware generations answer Basic with a 200 directly but reject the
+            // unauthenticated first request WITHOUT issuing a WWW-Authenticate challenge
+            // (verified live on 5523-W units). HttpClientHandler's credential cache only
+            // sends auth when a challenge arrives, so it can never authenticate against
+            // those units. Send explicit Basic first; only when the camera rejects it AND
+            // emits a Digest challenge do we retry header-less so the handler negotiates.
+            var basicToken = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{user}:{password}"));
             using var handler = new HttpClientHandler
             {
                 Credentials = new System.Net.NetworkCredential(user, password),
@@ -62,17 +66,8 @@ public static class ApiDevicesStreamingEndpoints
                     try
                     {
                         var url = $"http://{device.IpAddress}:{port}{path}";
-                        using var request = new HttpRequestMessage(HttpMethod.Get, url);
-                        // Pre-authenticate: handler's credential cache sends Basic first; if the
-                        // camera challenges with WWW-Authenticate: Digest, the handler retries.
-                        using var response = await client.SendAsync(request, ct);
-                        if (!response.IsSuccessStatusCode)
-                        {
-                            continue;
-                        }
-
-                        var bytes = await response.Content.ReadAsByteArrayAsync(ct);
-                        if (bytes.Length > 500 && bytes[0] == 0xFF && bytes[1] == 0xD8)
+                        var bytes = await FetchSnapshotJpegAsync(client, url, basicToken, ct);
+                        if (bytes is not null)
                         {
                             return Results.File(bytes, "image/jpeg");
                         }
@@ -214,5 +209,48 @@ public static class ApiDevicesStreamingEndpoints
         });
 
         return app;
+    }
+
+    /// <summary>
+    /// Fetches a validated JPEG snapshot with explicit Basic auth first (works on firmware whose
+    /// 401 carries no WWW-Authenticate challenge and therefore can never be negotiated by the
+    /// handler's credential cache), falling back to header-less handler negotiation when the
+    /// camera explicitly challenges with Digest. Returns <c>null</c> when no candidate yields a
+    /// JPEG so the caller can try the next port/path candidate.
+    /// </summary>
+    private static async Task<byte[]?> FetchSnapshotJpegAsync(
+        HttpClient client,
+        string url,
+        string basicToken,
+        CancellationToken ct)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", basicToken);
+        using var response = await client.SendAsync(request, ct);
+        if (response.IsSuccessStatusCode)
+        {
+            return await ReadValidJpegAsync(response, ct);
+        }
+
+        // 401 + a real Digest challenge: retry without the explicit Basic header so the
+        // handler's credential cache answers the Digest round-trip instead.
+        if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized
+            && response.Headers.WwwAuthenticate.Any(static h => h.Scheme.Equals("Digest", StringComparison.OrdinalIgnoreCase)))
+        {
+            using var digestRequest = new HttpRequestMessage(HttpMethod.Get, url);
+            using var digestResponse = await client.SendAsync(digestRequest, ct);
+            if (digestResponse.IsSuccessStatusCode)
+            {
+                return await ReadValidJpegAsync(digestResponse, ct);
+            }
+        }
+
+        return null;
+    }
+
+    private static async Task<byte[]?> ReadValidJpegAsync(HttpResponseMessage response, CancellationToken ct)
+    {
+        var bytes = await response.Content.ReadAsByteArrayAsync(ct);
+        return bytes.Length > 500 && bytes[0] == 0xFF && bytes[1] == 0xD8 ? bytes : null;
     }
 }

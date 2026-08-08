@@ -59,20 +59,37 @@ public sealed class RecordingService(
         var sources = explicitSnapshot
             ? Array.Empty<VideoSourceDescriptor>()
             : await transportBroker.GetSourcesAsync(device.Id, cancellationToken);
+        var selectedMain = SelectHighResMainSource(sources);
+        var rtspProbeFailed = false;
         string? sourceUrl = request.SourceUrl;
         if (string.IsNullOrWhiteSpace(sourceUrl))
         {
             // Prefer proven high-res main RTSP (Juan ch0_0.264 / ONVIF PROFILE_000 / Dahua subtype=0).
-            sourceUrl = SelectHighResMainSource(sources)?.Url;
-        }
+            sourceUrl = selectedMain?.Url;
 
-        var selectedMain = SelectHighResMainSource(sources);
+            // When the caller didn't force a specific source and the best pick is RTSP, probe
+            // it first. Dead RTSP should fall through to the snapshot pipeline instead of
+            // starting ffmpeg against an unreachable port and exiting instantly.
+            if (!string.IsNullOrWhiteSpace(sourceUrl)
+                && sourceUrl.StartsWith("rtsp://", StringComparison.OrdinalIgnoreCase)
+                && Uri.TryCreate(sourceUrl, UriKind.Absolute, out var rtspUri))
+            {
+                var rtspHost = rtspUri.Host;
+                var rtspPort = rtspUri.Port > 0 ? rtspUri.Port : 554;
+                if (!await RtspProbe.ProbeAsync(rtspHost, rtspPort, cancellationToken, TimeSpan.FromSeconds(2)))
+                {
+                    logger.LogWarning("Main RTSP source unreachable on {Host}:{Port}; falling back to snapshot pipeline", rtspHost, rtspPort);
+                    sourceUrl = null;
+                    rtspProbeFailed = true;
+                }
+            }
+        }
         var forceSnapshot = string.Equals(request.SourceUrl, "snapshot", StringComparison.OrdinalIgnoreCase)
             || (sourceUrl?.Contains("snapShot", StringComparison.OrdinalIgnoreCase) ?? false)
             || (sourceUrl?.Contains("snapshot.jpg", StringComparison.OrdinalIgnoreCase) ?? false);
 
         var useSnapshotPipeline = forceSnapshot
-            || (string.IsNullOrWhiteSpace(request.SourceUrl) && selectedMain is null);
+            || (string.IsNullOrWhiteSpace(request.SourceUrl) && (selectedMain is null || string.IsNullOrWhiteSpace(sourceUrl)));
 
         string? sourceRole = null;
         string? degradedReason = null;
@@ -88,7 +105,11 @@ public sealed class RecordingService(
                 explicitSnapshot ? BuildSnapshotCandidates(device) : sources,
                 cancellationToken);
             sourceRole = "snapshot";
-            degradedReason = selectedMain is null ? "No RTSP main source available — using snapshot pipeline" : "Snapshot forced by request";
+            degradedReason = selectedMain is null
+                ? "No RTSP main source available — using snapshot pipeline"
+                : rtspProbeFailed
+                    ? "Main RTSP unreachable — using snapshot pipeline"
+                    : "Snapshot forced by request";
         }
         else if (string.IsNullOrWhiteSpace(sourceUrl))
         {
@@ -111,14 +132,21 @@ public sealed class RecordingService(
         // MPEG-TS segments stay playable without a trailing moov atom (unlike mid-write MP4).
         var pattern = Path.Combine(profile.OutputDirectory, $"{device.Id:N}_%Y%m%d_%H%M%S.ts");
 
+        var isBubble = !useSnapshotPipeline && sourceUrl.Contains("/bubble/live", StringComparison.OrdinalIgnoreCase);
+        var pipelineMode = useSnapshotPipeline ? "snapshot" : isBubble ? "bubble-flv" : "direct";
+
         string? scriptPath = null;
         Process process;
         var ctx = new RecordingPipelineContext(device, sourceUrl!, pattern, Math.Max(5, profile.SegmentSeconds), ffmpegPath,
-            Log: (msg, ex) => { if (ex is null) logger.LogDebug("{Pipeline} {Msg}", useSnapshotPipeline ? "snapshot" : "direct", msg); else logger.LogDebug(ex, "{Pipeline} {Msg}", useSnapshotPipeline ? "snapshot" : "direct", msg); });
+            Log: (msg, ex) => { if (ex is null) logger.LogDebug("{Pipeline} {Msg}", pipelineMode, msg); else logger.LogDebug(ex, "{Pipeline} {Msg}", pipelineMode, msg); });
         RecordingHandle handle;
         if (useSnapshotPipeline)
         {
             handle = pipelines.Snapshot.Start(ctx);
+        }
+        else if (isBubble)
+        {
+            handle = pipelines.BubbleFlv.Start(ctx);
         }
         else
         {
@@ -138,7 +166,7 @@ public sealed class RecordingService(
             SegmentSeconds = profile.SegmentSeconds,
             IsRunning = true,
             ProcessId = process.Id,
-            Mode = useSnapshotPipeline ? "snapshot" : "direct",
+            Mode = pipelineMode,
             SourceRole = sourceRole,
             DegradedReason = degradedReason,
             StartedAt = DateTimeOffset.UtcNow
@@ -176,7 +204,7 @@ public sealed class RecordingService(
             device.DisplayName,
             started.SourceUrl,
             pattern,
-            useSnapshotPipeline ? "snapshot-pipeline" : "direct-ffmpeg");
+            started.Mode);
 
         return started;
     }
@@ -265,7 +293,8 @@ public sealed class RecordingService(
         {
             try
             {
-                // Leave SourceUrl null so StartAsync uses the proven snapshot pipeline on 5523-W.
+                // Leave SourceUrl null so StartAsync resolves the best playable source
+                // (snapshot or bubble fallback) on 5523-W.
                 // preferSubStream is reserved for future RTSP media path when RTP is available.
                 _ = preferSubStream;
                 var job = await StartAsync(new RecordingStartRequest
@@ -310,8 +339,11 @@ public sealed class RecordingService(
             }
 
             var handle = new RecordingHandle(running.Process, running.ScriptPath);
-            var startedSnapshot = running.ScriptPath is { Length: > 0 };
-            var pipeline = startedSnapshot ? (IRecordingPipeline)pipelines.Snapshot : pipelines.DirectFfmpeg;
+            var startedScript = running.ScriptPath is { Length: > 0 };
+            var isBubble = running.Job.SourceUrl?.Contains("/bubble/live", StringComparison.OrdinalIgnoreCase) == true;
+            var pipeline = isBubble ? (IRecordingPipeline)pipelines.BubbleFlv
+                : startedScript ? (IRecordingPipeline)pipelines.Snapshot
+                : pipelines.DirectFfmpeg;
             try
             {
                 await pipeline.StopAsync(handle, cancellationToken);
@@ -416,7 +448,10 @@ public sealed class RecordingService(
                     continue;
 
                 var handle = new RecordingHandle(current.Process, current.ScriptPath);
-                var pipeline = current.ScriptPath is { Length: > 0 } ? (IRecordingPipeline)pipelines.Snapshot : pipelines.DirectFfmpeg;
+                var isBubbleStalled = current.Job.SourceUrl?.Contains("/bubble/live", StringComparison.OrdinalIgnoreCase) == true;
+                var pipeline = isBubbleStalled ? (IRecordingPipeline)pipelines.BubbleFlv
+                    : current.ScriptPath is { Length: > 0 } ? (IRecordingPipeline)pipelines.Snapshot
+                    : pipelines.DirectFfmpeg;
                 try { await pipeline.StopAsync(handle, cancellationToken); }
                 catch (Exception ex) { logger.LogWarning(ex, "Failed to stop stalled job {JobId}", jobId); }
 
@@ -501,7 +536,9 @@ public sealed class RecordingService(
                     // Re-attach the live process so stop / stall handling can manage it.
                     var scriptPath = string.Equals(job.Mode, "snapshot", StringComparison.OrdinalIgnoreCase)
                         ? Path.Combine(Path.GetTempPath(), $"bosscam-rec-{job.DeviceId:N}.sh")
-                        : null;
+                        : string.Equals(job.Mode, "bubble-flv", StringComparison.OrdinalIgnoreCase)
+                            ? Path.Combine(Path.GetTempPath(), $"bosscam-rec-bubble-{job.DeviceId:N}.sh")
+                            : null;
                     // PR-R1: The helper script may have been deleted on a prior stop or a
                     // /tmp sweep after restart, but stopping still works — both pipelines
                     // kill the recorded PID's whole process tree, so the ffmpeg/curl
@@ -509,7 +546,7 @@ public sealed class RecordingService(
                     // the expected script is missing so operators can spot /tmp cleanup.
                     if (scriptPath is not null && !File.Exists(scriptPath))
                     {
-                        logger.LogWarning("Re-attaching snapshot job {JobId} but helper script is missing ({Script}); stop will rely on process-tree kill", job.Id, scriptPath);
+                        logger.LogWarning("Re-attaching {Mode} job {JobId} but helper script is missing ({Script}); stop will rely on process-tree kill", job.Mode, job.Id, scriptPath);
                     }
 
                     var adoptedProcess = liveProcess ?? throw new InvalidOperationException("Lifecycle policy requested attachment without a live process.");

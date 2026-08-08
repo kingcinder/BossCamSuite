@@ -301,9 +301,11 @@ public sealed class BubbleFlvAdapter : IVideoTransportAdapter
             return Task.FromResult<IReadOnlyCollection<VideoSourceDescriptor>>([]);
         }
 
-        var user = string.IsNullOrWhiteSpace(device.LoginName) ? "admin" : device.LoginName;
-        var password = device.Password ?? string.Empty;
-        var authPrefix = StreamDescriptorAdapter.BuildAuthPrefix(user, password);
+        // Bubble/live does NOT require HTTP authentication — the endpoint serves
+        // XML descriptor + raw H.265 stream without any auth challenge (verified live
+        // on 5523-W units, both 10.0.0.29 and 10.0.0.169). Embedding wrong credentials
+        // in the URL would cause ffmpeg / HttpClient to fail on a 401 that the camera
+        // only emits for wrong creds on auth-gated endpoints (NetSDK).
         var ports = NetSdkPortCandidates.For(device.Port);
 
         // Proven live: content-type video/bubble on both 5523-W units. When discovery recorded an
@@ -316,7 +318,7 @@ public sealed class BubbleFlvAdapter : IVideoTransportAdapter
             sources.Add(new VideoSourceDescriptor
             {
                 Kind = TransportKind.BubbleFlv,
-                Url = $"http://{authPrefix}{device.IpAddress}:{candidatePort}/bubble/live?ch=1&stream=0",
+                Url = $"http://{device.IpAddress}:{candidatePort}/bubble/live?ch=1&stream=0",
                 Rank = rankBase,
                 DisplayName = isFallback ? "Bubble live main (:80 fallback)" : "Bubble live main",
                 Metadata = new Dictionary<string, string>
@@ -324,13 +326,14 @@ public sealed class BubbleFlvAdapter : IVideoTransportAdapter
                     ["path"] = "/bubble/live?ch=1&stream=0",
                     ["stream"] = "main",
                     ["contentType"] = "video/bubble",
-                    ["port"] = candidatePort.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    ["port"] = candidatePort.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    ["noAuth"] = "true"
                 }
             });
             sources.Add(new VideoSourceDescriptor
             {
                 Kind = TransportKind.BubbleFlv,
-                Url = $"http://{authPrefix}{device.IpAddress}:{candidatePort}/bubble/live?ch=1&stream=1",
+                Url = $"http://{device.IpAddress}:{candidatePort}/bubble/live?ch=1&stream=1",
                 Rank = rankBase + 1,
                 DisplayName = isFallback ? "Bubble live sub (:80 fallback)" : "Bubble live sub",
                 Metadata = new Dictionary<string, string>
@@ -338,7 +341,8 @@ public sealed class BubbleFlvAdapter : IVideoTransportAdapter
                     ["path"] = "/bubble/live?ch=1&stream=1",
                     ["stream"] = "sub",
                     ["contentType"] = "video/bubble",
-                    ["port"] = candidatePort.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    ["port"] = candidatePort.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    ["noAuth"] = "true"
                 }
             });
         }

@@ -90,9 +90,25 @@ read_encode_channel() {
   curl -sS -m 5 -u "$AUTH" "${BASE}/NetSDK/Video/encode/channel/${ch}" 2>/dev/null || echo "{}"
 }
 
-# Read stream channel list
+# Read stream channel list.
+# The /NetSDK/Stream/channles endpoint is absent on some firmware
+# generations (returns an HTML 404 page).  Validate that the response is
+# a real JSON array so callers can distinguish "empty transport" from
+# "endpoint unavailable" instead of feeding HTML to the JSON parser.
+# Prints "UNAVAILABLE" when the endpoint is missing or non-JSON.
 read_stream_channels() {
-  curl -sS -m 5 -u "$AUTH" "${BASE}/NetSDK/Stream/channles" 2>/dev/null || echo "[]"
+  local body
+  body=$(curl -sS -m 5 -u "$AUTH" "${BASE}/NetSDK/Stream/channles" 2>/dev/null || true)
+  if [[ -z "$body" ]]; then
+    echo "UNAVAILABLE"
+    return 0
+  fi
+  # Only a response that opens with a JSON array is real channel data.
+  if ! echo "$body" | grep -qE '^[[:space:]]*\['; then
+    echo "UNAVAILABLE"
+    return 0
+  fi
+  echo "$body"
 }
 
 # ── strategies ───────────────────────────────────────────────────────────
@@ -194,37 +210,55 @@ strategy_bubble_live() {
   fi
 }
 
-# Strategy 3: Reboot the camera.
+# Strategy 4: Reboot the camera.
 # A full reboot often restores all services including RTSP.
 strategy_reboot() {
   if [[ $ALLOW_REBOOT -ne 1 ]]; then
-    warn "Strategy 3: Reboot SKIPPED (CAMERA_REBOOT=0)."
+    warn "Strategy 4: Reboot SKIPPED (CAMERA_REBOOT=0)."
     warn "  Re-run with CAMERA_REBOOT=1 to allow reboot."
     return 1
   fi
 
-  log "Strategy 3: Rebooting camera (will wait ${REBOOT_WAIT}s)..."
+  log "Strategy 4: Rebooting camera (will wait ${REBOOT_WAIT}s)..."
+  log "  Trying documented reboot endpoints in order..."
 
-  # Try the Factory reboot command
-  local reb reb_code
-  reb=$(curl -sS -w '\n%{http_code}' -m 10 -u "$AUTH" \
-    "${BASE}/NetSDK/Factory?cmd=Reboot" 2>/dev/null || printf '{}')
-  reb_code=$(echo "$reb" | tail -1)
+  # Reboot paths ordered by live-proven reliability. The canonical path is
+  # /NetSDK/System/operation/reboot (live-proven on 5523-W: GET → 405,
+  # PUT with {"reboot":true} works), with legacy /netsdk/Reboot and older
+  # firmware variants as fallbacks.
+  local -a reboot_paths=(
+    "/NetSDK/System/operation/reboot:PUT"
+    "/netsdk/Reboot:PUT"
+    "/NetSDK/System/reboot:PUT"
+    "/NetSDK/Factory?cmd=Reboot:GET"
+  )
 
-  if [[ "$reb_code" == "200" ]]; then
-    pass "  Reboot command accepted."
-  else
-    warn "  Factory reboot returned HTTP ${reb_code} — trying alternative..."
-    # Alternative: some firmware uses a different reboot path
-    reb=$(curl -sS -w '\n%{http_code}' -m 10 -X PUT -u "$AUTH" \
-      -H 'Content-Type: application/json' \
-      "${BASE}/NetSDK/System/reboot" 2>/dev/null || printf '{}')
-    reb_code=$(echo "$reb" | tail -1)
-    if [[ "$reb_code" != "200" ]]; then
-      fail "  Reboot failed — both paths returned non-200."
-      return 1
+  local path method reb reb_code
+  reb_code=""
+  for entry in "${reboot_paths[@]}"; do
+    path="${entry%%:*}"
+    method="${entry##*:}"
+    if [[ "$method" == "PUT" ]]; then
+      reb=$(curl -sS -w '\n%{http_code}' -m 10 -X PUT -u "$AUTH" \
+        -H 'Content-Type: application/json' \
+        -d '{"reboot":true}' \
+        "${BASE}${path}" 2>/dev/null || printf '{}')
+    else
+      reb=$(curl -sS -w '\n%{http_code}' -m 10 -u "$AUTH" \
+        "${BASE}${path}" 2>/dev/null || printf '{}')
     fi
-    pass "  Alternative reboot accepted."
+    reb_code=$(echo "$reb" | tail -1)
+    if [[ "$reb_code" == "200" || "$reb_code" == "202" ]]; then
+      pass "  Reboot accepted via ${path} (HTTP ${reb_code})."
+      break
+    fi
+    warn "  ${path} → HTTP ${reb_code} — trying next path..."
+    reb_code=""
+  done
+
+  if [[ -z "$reb_code" ]]; then
+    fail "  Reboot failed — no reboot path returned 2xx."
+    return 1
   fi
 
   log "  Waiting ${REBOOT_WAIT}s for camera to come back..."
@@ -269,7 +303,9 @@ print(f\"    enabled={c.get('enabled')}  codec={c.get('codecType','?')}  resolut
 
 log "  Stream channels:"
   streams=$(read_stream_channels)
-if [[ -z "$streams" || "$streams" == "[]" ]]; then
+if [[ "$streams" == "UNAVAILABLE" ]]; then
+  warn "    Endpoint unavailable on this firmware (404) — transport state unknown"
+elif [[ -z "$streams" || "$streams" == "[]" ]]; then
   warn "    EMPTY — no stream transport configured"
 else
   echo "$streams" | python3 -c "
@@ -345,11 +381,14 @@ fi
 echo ""
 STRATEGIES_RUN=$((STRATEGIES_RUN + 1))
 
-log "Re-checking RTSP after strategy 3..."
-sleep 5
-if rtsp_playable; then
-  pass "RTSP is now PLAYABLE after reboot! Recovery complete."
-  exit 0
+if strategy_reboot; then
+  log "Re-checking RTSP after reboot..."
+  sleep 5
+  if rtsp_playable; then
+    pass "RTSP is now PLAYABLE after reboot! Recovery complete."
+    exit 0
+  fi
+  fail "RTSP still not answering after reboot."
 fi
 
 # ── Final check ────────────────────────────────────────────────────────

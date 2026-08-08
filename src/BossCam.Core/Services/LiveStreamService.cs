@@ -334,9 +334,11 @@ public sealed class LiveStreamService(
                 "/NetSDK/Video/encode/channel/101/snapShot"
             };
 
-        // Per-pump handler with credential cache so Digest auto-negotiates when the
-        // camera sends a proper WWW-Authenticate challenge. Explicit Basic-only auth
-        // was the root cause of 401 failures on cameras whose nginx expects Digest.
+        // Explicit Basic first (works on firmware whose 401 carries no WWW-Authenticate
+        // challenge — the handler's credential cache can never negotiate those, so the pump
+        // would 401 forever); only when the camera rejects Basic AND issues a real Digest
+        // challenge do we retry header-less so the handler answers the Digest round-trip.
+        var basicToken = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{user}:{password}"));
         using var snapshotHandler = new HttpClientHandler
         {
             Credentials = new System.Net.NetworkCredential(user, password),
@@ -361,9 +363,27 @@ public sealed class LiveStreamService(
                     {
                         var url = $"http://{device.IpAddress}:{port}{path}";
                         using var req = new HttpRequestMessage(HttpMethod.Get, url);
+                        req.Headers.Authorization = new AuthenticationHeaderValue("Basic", basicToken);
                         using var res = await snapshotClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
                         if (!res.IsSuccessStatusCode)
                         {
+                            // 401 + a real Digest challenge: retry without the explicit Basic
+                            // header so the handler's credential cache answers Digest instead.
+                            if (res.StatusCode == System.Net.HttpStatusCode.Unauthorized
+                                && res.Headers.WwwAuthenticate.Any(static h => h.Scheme.Equals("Digest", StringComparison.OrdinalIgnoreCase)))
+                            {
+                                using var digestReq = new HttpRequestMessage(HttpMethod.Get, url);
+                                using var digestRes = await snapshotClient.SendAsync(digestReq, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                                if (digestRes.IsSuccessStatusCode)
+                                {
+                                    var digestBytes = await digestRes.Content.ReadAsByteArrayAsync(cancellationToken);
+                                    if (digestBytes.Length > 500 && digestBytes[0] == 0xFF && digestBytes[1] == 0xD8)
+                                    {
+                                        jpeg = digestBytes;
+                                        break;
+                                    }
+                                }
+                            }
                             continue;
                         }
 

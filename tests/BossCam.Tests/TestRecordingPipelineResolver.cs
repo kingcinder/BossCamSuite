@@ -13,4 +13,5 @@ internal sealed class TestRecordingPipelineResolver : IRecordingPipelineResolver
 {
     public SnapshotRecordingPipeline Snapshot { get; } = new();
     public DirectFfmpegRecordingPipeline DirectFfmpeg { get; } = new();
+    public BubbleFlvRecordingPipeline BubbleFlv { get; } = new();
 }

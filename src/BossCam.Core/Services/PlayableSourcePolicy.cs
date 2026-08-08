@@ -21,7 +21,11 @@ public static class PlayableSourcePolicy
             .Where(static source => !IsSub(source))
             .OrderBy(static source => source.Rank)
             .FirstOrDefault(IsMainHint)
-            ?? candidates.Where(IsRtsp).Where(static source => !IsSub(source)).OrderBy(static source => source.Rank).FirstOrDefault();
+            ?? candidates.Where(IsRtsp).Where(static source => !IsSub(source)).OrderBy(static source => source.Rank).FirstOrDefault()
+            // Bubble FLV is an auth-free live stream (proven on 5523-W); when RTSP is
+            // unavailable — e.g. locked cameras with wrong credentials — bubble provides
+            // a passwordless H.265 stream that can replace the missing RTSP main.
+            ?? candidates.Where(static s => s.Kind == TransportKind.BubbleFlv && !IsSub(s)).OrderBy(static s => s.Rank).FirstOrDefault();
         var sub = candidates
             .Where(IsRtsp)
             .Where(IsSub)
