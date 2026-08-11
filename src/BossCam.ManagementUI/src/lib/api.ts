@@ -1,4 +1,4 @@
-import type { HealthResponse, DeviceIdentity, VideoSourceDescriptor, LiveMediaManifest, MediaStoragePaths, RecordingJob, RecordingSegment, HighlightState, WritePlan, FieldDef, FirmwareArtifact, UserAccount, PersistenceVerificationResult, ControlPointInventoryReport, WriteResult, TypedSettingGroupSnapshot, ClipExportRequest, ClipExportResult, EnrollDeviceRequest, EnrollDeviceResult } from './types';
+import type { HealthResponse, DeviceIdentity, VideoSourceDescriptor, LiveMediaManifest, MediaStoragePaths, RecordingJob, RecordingSegment, HighlightState, WritePlan, FieldDef, FirmwareArtifact, UserAccount, PersistenceVerificationResult, ControlPointInventoryReport, WriteResult, TypedSettingGroupSnapshot, ClipExportRequest, ClipExportResult, EnrollDeviceRequest, EnrollDeviceResult, OnvifCredentialScanResult, CgiFuzzResult } from './types';
 
 const LS_LAN_TOKEN = 'bosscam.lanToken';
 
@@ -277,6 +277,20 @@ export const api = {
     request<WriteResult[]>(`/api/devices/${deviceId}/settings/typed/apply-batch`, {
       method: 'POST',
       body: JSON.stringify({ changes, expertOverride }),
+    }),
+
+  /** POST /api/devices/onvif/credential-scan — probe ONVIF device service with known defaults */
+  onvifCredentialScan: (deviceId: string, ipAddress?: string) =>
+    request<OnvifCredentialScanResult>('/api/devices/onvif/credential-scan', {
+      method: 'POST',
+      body: JSON.stringify({ deviceId, ipAddress }),
+    }),
+
+  /** POST /api/devices/cgi-fuzz — fuzz known CGI endpoints for auth bypasses */
+  cgiFuzz: (deviceId: string, ipAddress?: string, quickScan?: boolean) =>
+    request<CgiFuzzResult>('/api/devices/cgi-fuzz', {
+      method: 'POST',
+      body: JSON.stringify({ deviceId, ipAddress, quickScan }),
     }),
 
   /** POST /api/devices/{id}/persistence/verify */

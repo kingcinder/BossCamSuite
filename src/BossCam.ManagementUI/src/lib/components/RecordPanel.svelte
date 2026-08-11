@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AppState } from '../store';
+  import { AppState } from '../store.svelte';
   import { api } from '../api';
   import type { RecordingJob } from '../types';
 
@@ -306,19 +306,19 @@
           <div class="job-meta">
             <span class="chip">{job.segmentSeconds}s segments</span>
             {#if job.mode === 'snapshot'}
-              <span class="chip degraded">📷 snapshot</span>
+              <span class="chip degraded" data-tip="Recording snapshot frames instead of a video stream" aria-label="snapshot recording mode">📷 snapshot</span>
             {:else}
-              <span class="chip">🎥 direct</span>
+              <span class="chip" data-tip="Recording directly from the camera video stream" aria-label="direct recording mode">🎥 direct</span>
             {/if}
             {#if job.sourceRole && job.sourceRole !== 'main'}
-              <span class="chip degraded" title={job.degradedReason || ''}>⚠ {job.sourceRole}</span>
+              <span class="chip degraded" data-tip={job.degradedReason || `${job.sourceRole} degraded source`} aria-label={`source role ${job.sourceRole}`}>⚠ {job.sourceRole}</span>
             {/if}
             {#if job.sourceUrl}
-              <span class="chip sub" title={job.sourceUrl}>src</span>
+              <span class="chip sub" data-tip={job.sourceUrl} aria-label={`source URL ${job.sourceUrl}`}>src</span>
             {/if}
           </div>
           {#if job.degradedReason}
-            <span class="degraded-badge" title={job.degradedReason}>Degraded</span>
+            <span class="degraded-badge" data-tip={job.degradedReason} aria-label={`Degraded: ${job.degradedReason}`}>Degraded</span>
           {/if}
           <button
             onclick={() => stopJob(job.id)}
@@ -348,7 +348,7 @@
               <strong>{deviceName(job.deviceId)}</strong>
               <span class="sub">stopped {timeAgo(job.stoppedAt || job.startedAt)}</span>
               {#if job.lastError}
-                <span class="last-error" title={job.lastError}>{job.lastError}</span>
+                <span class="last-error" data-tip={job.lastError}>{job.lastError}</span>
               {/if}
             </div>
             <div class="job-meta">

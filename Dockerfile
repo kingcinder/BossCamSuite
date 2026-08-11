@@ -12,7 +12,7 @@ WORKDIR /src
 COPY BossCamSuite.Linux.sln Directory.Build.props ./
 COPY src/ ./src/
 COPY tests/ ./tests/
-COPY --from=ui-build /ui/src/BossCam.Service/wwwroot ./src/BossCam.Service/wwwroot
+COPY --from=ui-build /BossCam.Service/wwwroot ./src/BossCam.Service/wwwroot
 RUN dotnet restore BossCamSuite.Linux.sln
 RUN dotnet build BossCamSuite.Linux.sln -c Release --no-restore
 RUN dotnet publish src/BossCam.Service/BossCam.Service.csproj -c Release --no-restore -o /app

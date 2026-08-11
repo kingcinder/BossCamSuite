@@ -67,6 +67,7 @@ dotnet run --project src/BossCam.Service/BossCam.Service.csproj
 | `BOSSCAM_OPEN_BROWSER` | `0` to skip `xdg-open` |
 | `BOSSCAM_LAN_TOKEN` | LAN bearer token. Required when binding to a non-loopback address (`0.0.0.0`). Generate with `openssl rand -hex 32`. |
 | `BOSSCAM_E2E_LIVE` | Set to `0` to skip LAN probes in E2E tests (offline CI mode). |
+| `BOSSCAM_OFFLINE` | Set to `1` for explicit LAN-only mode; cloud/P2P and remote relay paths are disabled while LAN recording and streaming remain active. |
 
 ---
 
@@ -392,8 +393,11 @@ The installer follows a conventional Linux installation flow:
 2. Publishes the native GUI and installs it to `/opt/bosscam-gui`.
 3. Installs a **launcher** (`/opt/bosscam-gui/launch-bosscam.sh`) that starts the service if needed, then opens the GUI.
 4. Installs a **`.desktop` entry + SVG icon** so the app appears in the application menu.
+5. Creates an executable desktop shortcut labeled exactly **`BOSSCAMSUITE SHRTCUT`** at `~/Desktop/BOSSCAMSUITE SHRTCUT.desktop` for the invoking Ubuntu user.
 
 Optional env vars: `BOSSCAM_PREFIX`, `BOSSCAM_GUI_PREFIX`, `BOSSCAM_SERVICE_USER`, `BOSSCAM_SKIP_SERVICE=1` (GUI only).
+
+After installation, double-click **BOSSCAMSUITE SHRTCUT** on the Ubuntu desktop. It verifies the local BossCam service and opens the native operator console; if the system service is stopped, systemd is asked to start it and the launcher waits for `/api/health` before opening the GUI. If the desktop user is not authorized to start the system unit, the launcher reports the failure instead of silently opening a disconnected console. The service and recorder continue running independently of the desktop window and recover automatically from transient camera/LAN failures.
 
 ```bash
 # Launch

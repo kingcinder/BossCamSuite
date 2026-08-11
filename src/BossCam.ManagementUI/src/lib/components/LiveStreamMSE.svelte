@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { DeviceIdentity, LiveMediaManifest, LiveMediaMode } from '../types';
-  import { AppState } from '../store';
+  import { AppState } from '../store.svelte';
   import { api } from '../api';
 
   let { device, appState }: { device: DeviceIdentity; appState: AppState } = $props();
@@ -29,6 +29,11 @@
   let mseCleanup: (() => void) | undefined;
   let mseGeneration = 0;
   let snapshotRefreshTimer: ReturnType<typeof setTimeout> | undefined;
+  let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+  let reconnectAttempt = 0;
+  // Invalidates delayed recovery/negotiation work so a stale attempt cannot replace
+  // a newer live session or overlap a manual retry/stop.
+  let streamGeneration = 0;
   let startedQuality = $state<string | undefined>(undefined);
   let fallbackAbortController: AbortController | undefined;
   let fallbackObjectUrl: string | undefined;
@@ -95,6 +100,26 @@
     }
   }
 
+  function clearReconnectTimer() {
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = undefined;
+    }
+  }
+
+  function scheduleStreamRecovery(delayMs?: number) {
+    // Snapshot refreshes run more often than live recovery. Do not reset a pending
+    // recovery deadline on every successful still frame, or the live stream would never
+    // be retried while snapshots continue to arrive.
+    if (reconnectTimer) return;
+    const delay = delayMs ?? Math.min(15_000, 1_000 * (2 ** Math.min(reconnectAttempt, 4)));
+    reconnectAttempt = Math.min(reconnectAttempt + 1, 4);
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = undefined;
+      void startStream();
+    }, delay);
+  }
+
   function clearFallback() {
     fallbackRun += 1;
     fallbackAbortController?.abort();
@@ -113,6 +138,8 @@
     if (previous) URL.revokeObjectURL(previous);
     isActive = true;
     streamStatus = fallbackMode === 'snapshot' ? 'Snapshot fallback active' : 'MJPEG fallback active';
+    appState.setStreamStatus(device.id, fallbackMode === 'snapshot' ? 'snapshot' : 'live');
+    if (fallbackMode === 'snapshot') scheduleStreamRecovery(15_000);
   }
 
   function findBytes(haystack: Uint8Array, needle: number[], start = 0): number {
@@ -152,7 +179,9 @@
       if (controller.signal.aborted || run !== fallbackRun) return;
       isActive = false;
       streamStatus = `Snapshot fallback unavailable: ${String(error)}`;
+      appState.setStreamStatus(device.id, 'retrying');
       snapshotRefreshTimer = setTimeout(() => { void loadSnapshotFrame(); }, 1500);
+      scheduleStreamRecovery(5_000);
     }
   }
 
@@ -200,7 +229,8 @@
       if (controller.signal.aborted || run !== fallbackRun) return;
       isActive = false;
       streamStatus = `MJPEG fallback unavailable: ${String(error)}`;
-      setTimeout(() => { if (run === fallbackRun) void startStream(); }, 1500);
+      appState.setStreamStatus(device.id, 'retrying');
+      scheduleStreamRecovery(1_500);
     }
   }
 
@@ -260,9 +290,9 @@
     selectedMode = mode;
     streamStatus = `Connecting ${modeLabel(mode)}…`;
 
+    const generation = ++mseGeneration;
     await new Promise<void>((resolve, reject) => {
       const current = mediaSource!;
-      const generation = ++mseGeneration;
       mseReject = reject;
       sourceOpenWatchdog = setTimeout(() => {
         if (generation === mseGeneration) reject(new Error(`${modeLabel(mode)} MediaSource did not open`));
@@ -274,8 +304,11 @@
         firstFrameReady = true;
         clearInitialWatchdogs();
         resetActivityWatchdog(mode, generation);
-        isActive = true;
+          isActive = true;
+        reconnectAttempt = 0;
+        clearReconnectTimer();
         streamStatus = `${modeLabel(mode)} active`;
+        appState.setStreamStatus(device.id, 'live');
         void videoEl?.play().catch(() => undefined);
       };
       const onOpen = async () => {
@@ -344,10 +377,14 @@
         videoEl?.removeEventListener('timeupdate', onTimeUpdate);
       };
       current.addEventListener('sourceopen', onOpen, { once: true });
-    }).catch(() => {
-      clearMse();
-      isActive = false;
-      throw new Error(`${modeLabel(mode)} unavailable`);
+    }).catch((error) => {
+      // An older negotiation can finish after a newer generation has started. Never let
+      // that stale callback tear down the newer MediaSource/session.
+      if (generation === mseGeneration) {
+        clearMse();
+        isActive = false;
+      }
+      throw error instanceof Error ? error : new Error(`${modeLabel(mode)} unavailable`);
     });
     return true;
   }
@@ -355,6 +392,7 @@
   function fallbackToMjpeg() {
     clearMse();
     clearSnapshotRefresh();
+    clearReconnectTimer();
     fallbackMode = 'mjpeg';
     selectedMode = 'Mjpeg';
     isActive = false;
@@ -365,6 +403,7 @@
 
   function fallbackToSnapshot() {
     clearMse();
+    clearReconnectTimer();
     fallbackMode = 'snapshot';
     selectedMode = 'Snapshot';
     isActive = false;
@@ -375,13 +414,19 @@
   }
 
   async function startStream() {
+    const generation = ++streamGeneration;
+    // A scheduled recovery may fire while snapshot/MJPEG work is still in flight. Abort and
+    // invalidate the old attempt before negotiating the replacement.
+    clearSnapshotRefresh();
+    clearMse();
     streamStatus = 'Negotiating live media…';
     isActive = false;
     fallbackMode = 'mse';
-    clearSnapshotRefresh();
     try {
-      manifest = await api.liveManifest(device.id, appState.streamQuality);
-      if (!manifest) throw new Error('manifest unavailable');
+      const nextManifest = await api.liveManifest(device.id, appState.streamQuality);
+      if (generation !== streamGeneration) return;
+      if (!nextManifest) throw new Error('manifest unavailable');
+      manifest = nextManifest;
 
       // The backend owns the ordered decision. MPEG-TS is intentionally skipped in a
       // browser because it is the Avalonia/native compatibility representation; the next
@@ -394,15 +439,25 @@
         }
         if (mode === 'Snapshot' || mode === 'H264MpegTs') continue;
         try {
-          if (await runMse(mode, manifest)) return;
+          if (generation !== streamGeneration) return;
+          if (await runMse(mode, manifest)) {
+            if (generation !== streamGeneration) {
+              clearMse();
+              return;
+            }
+            return;
+          }
         } catch {
+          if (generation !== streamGeneration) return;
           // Try the next backend-advertised representation.
         }
       }
 
+      if (generation !== streamGeneration) return;
       if (manifest.snapshotAvailable) fallbackToSnapshot();
       else fallbackToMjpeg();
     } catch (error) {
+      if (generation !== streamGeneration) return;
       streamStatus = `Live negotiation failed: ${String(error)}`;
       if (manifest?.snapshotAvailable) fallbackToSnapshot();
       else fallbackToMjpeg();
@@ -410,14 +465,18 @@
   }
 
   function stopStream() {
+    streamGeneration += 1;
     isActive = false;
     clearSnapshotRefresh();
+    clearReconnectTimer();
     clearMse();
     fallbackMode = 'mse';
     streamStatus = 'Stopped';
+    appState.setStreamStatus(device.id, 'connecting');
   }
 
   function retry() {
+    reconnectAttempt = 0;
     stopStream();
     void startStream();
   }
@@ -464,7 +523,8 @@
   .mse-wrapper { position: relative; background: #000; border-radius: 8px; overflow: hidden; min-height: 160px; display: flex; flex-direction: column; }
   .mse-video { width: 100%; height: 100%; min-height: 140px; object-fit: contain; background: #000; display: block; }
   .fallback-image { flex: 1; }
-  .status-bar { display: flex; align-items: center; gap: 6px; padding: 4px 8px; background: #1a100ecc; z-index: 1; }
+  .status-bar { display: flex; align-items: center; gap: 6px; padding: 4px 8px; background: #1a100ecc; z-index: 1; flex-wrap: wrap; }
+  .status-bar .muted { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
   .muted { color: var(--muted); font-size: .82rem; }
   .small { font-size: .78rem; }
   .mode { margin-left: auto; color: #ffb06a; font-size: .72rem; font-weight: 700; }

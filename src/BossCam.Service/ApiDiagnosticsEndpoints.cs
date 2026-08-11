@@ -12,7 +12,7 @@ public static class ApiDiagnosticsEndpoints
 {
     public static WebApplication MapDiagnosticsEndpoints(this WebApplication app)
     {
-        app.MapGet("/api/health", () => Results.Ok(new
+        app.MapGet("/api/health", (Microsoft.Extensions.Options.IOptions<BossCamRuntimeOptions> options, IInternetConnectivityState internetState) => Results.Ok(new
         {
             status = "ok",
             timestamp = DateTimeOffset.UtcNow,
@@ -21,7 +21,12 @@ public static class ApiDiagnosticsEndpoints
             processArch = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString(),
             contentRoot = app.Environment.ContentRootPath,
             ffmpeg = Environment.GetEnvironmentVariable("BOSSCAM_FFMPEG_PATH")
-                ?? (File.Exists("/usr/bin/ffmpeg") ? "/usr/bin/ffmpeg" : null)
+                ?? (File.Exists("/usr/bin/ffmpeg") ? "/usr/bin/ffmpeg" : null),
+            // LAN-only / air-gapped operation flag (BossCam:OfflineMode or BOSSCAM_OFFLINE=1).
+            // The SPA renders an "Offline / LAN-only mode" badge when true.
+            offlineMode = options.Value.OfflineMode,
+            internetConnectivity = internetState.Status.ToString(),
+            internetConnectivityChangedAt = internetState.LastChangedAt
         }));
 
         app.MapGet("/api/diagnostics/audit", async (Guid? deviceId, int? limit, IApplicationStore store, CancellationToken ct) =>

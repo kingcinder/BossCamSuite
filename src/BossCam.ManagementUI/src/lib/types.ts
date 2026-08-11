@@ -211,6 +211,9 @@ export interface HealthResponse {
   processArch: string;
   contentRoot: string;
   ffmpeg: string | null;
+  offlineMode: boolean;
+  internetConnectivity: 'Unknown' | 'Online' | 'Offline' | 'Disabled';
+  internetConnectivityChangedAt: string;
 }
 
 // Typed settings snapshot (minimal — mirrors backend TypedSettingGroupSnapshot)
@@ -300,6 +303,55 @@ export interface WriteResult {
   semanticStatus: string;
   contractKey: string | null;
   contractViolations: string[];
+}
+
+// ONVIF credential scan types (mirrors C# OnvifCredentialScanRequest / OnvifCredentialScanResult)
+export interface OnvifCredentialScanRequest {
+  deviceId?: string;
+  ipAddress?: string;
+}
+
+export interface OnvifCredentialPair {
+  username: string;
+  password: string;
+}
+
+export interface OnvifCredentialScanResult {
+  success: boolean;
+  deviceServiceUrl: string | null;
+  manufacturer: string | null;
+  model: string | null;
+  firmwareVersion: string | null;
+  workingCredential: OnvifCredentialPair | null;
+  attemptedCredentials: OnvifCredentialPair[];
+  message: string | null;
+}
+
+// CGI fuzz types (mirrors C# CgiFuzzRequest / CgiFuzzResult / CgiFuzzFinding)
+export interface CgiFuzzRequest {
+  deviceId?: string;
+  ipAddress?: string;
+  quickScan?: boolean;
+}
+
+export interface CgiFuzzFinding {
+  endpoint: string;
+  method: string;
+  variant: string;
+  strategy: string | null;
+  statusCode: number;
+  contentType: string | null;
+  bodyLength: number;
+  bodyPreview: string | null;
+  description: string | null;
+}
+
+export interface CgiFuzzResult {
+  success: boolean;
+  totalProbes: number;
+  findings: CgiFuzzFinding[];
+  gatedEndpoints: string[];
+  message: string | null;
 }
 
 // Clip export request/result (mirrors C# ClipExportRequest / ClipExportResult)

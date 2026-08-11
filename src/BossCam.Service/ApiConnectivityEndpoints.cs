@@ -1,5 +1,6 @@
 using BossCam.Contracts;
 using BossCam.Core;
+using BossCam.Infrastructure.Video;
 
 namespace BossCam.Service;
 
@@ -113,6 +114,38 @@ public static class ApiConnectivityEndpoints
                     : "Device unreachable on all tested transports.",
                 results
             });
+        });
+
+        // POST /api/devices/onvif/credential-scan — probe ONVIF with known default credentials
+        app.MapPost("/api/devices/onvif/credential-scan", async (
+            OnvifCredentialScanRequest request,
+            OnvifCredentialScanner scanner,
+            CancellationToken ct) =>
+        {
+            var result = await scanner.ScanAsync(request, ct);
+            return Results.Ok(result);
+        });
+
+        // POST /api/devices/auth-snapshot — run the ONVIF/RTSP/NetSDK auth-state probe matrix
+        // for the requested cameras (empty body = all stored devices with an IP) and return
+        // the structured fleet report.
+        app.MapPost("/api/devices/auth-snapshot", async (
+            AuthSnapshotRequest? request,
+            AuthSnapshotService snapshotService,
+            CancellationToken ct) =>
+        {
+            var result = await snapshotService.SnapshotAsync(request ?? new AuthSnapshotRequest(), ct);
+            return Results.Ok(result);
+        });
+
+        // POST /api/devices/cgi-fuzz — fuzz known CGI endpoints for auth bypasses
+        app.MapPost("/api/devices/cgi-fuzz", async (
+            CgiFuzzRequest request,
+            CgiFuzzer fuzzer,
+            CancellationToken ct) =>
+        {
+            var result = await fuzzer.FuzzAsync(request, ct);
+            return Results.Ok(result);
         });
 
         return app;

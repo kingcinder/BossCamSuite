@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AppState } from '../store';
+  import { AppState } from '../store.svelte';
   import { api } from '../api';
   import { signalR as signalRClient } from '../signalr';
   import DeviceList from './DeviceList.svelte';
@@ -163,6 +163,9 @@
     <span class="signal-dot" class:live={connected} class:dead={!connected}></span>
     {connected ? 'Live' : 'HTTP-only'}
     · {appState.healthInfo}
+    {#if !appState.offlineMode && appState.internetConnectivity !== 'Unknown'}
+      · WAN {appState.internetConnectivity.toLowerCase()}
+    {/if}
   </div>
 </aside>
 

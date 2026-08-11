@@ -1,16 +1,30 @@
 <script lang="ts">
-  import { AppState } from '../store';
+  import { AppState } from '../store.svelte';
   import LiveTile from './LiveTile.svelte';
   import LiveStreamMSE from './LiveStreamMSE.svelte';
 
   let { appState }: { appState: AppState } = $props();
 
-  const layouts = [1, 2, 4, 5, 6, 7, 8];
+  // 0 = All: every camera on one auto-fit board (the intuitive default).
+  const layouts = [0, 1, 2, 4, 6, 8];
 
   const layoutClasses: Record<number, string> = {
-    1: 'layout-1', 2: 'layout-2', 4: 'layout-4', 5: 'layout-5',
-    6: 'layout-6', 7: 'layout-7', 8: 'layout-8',
+    0: 'layout-all', 1: 'layout-1', 2: 'layout-2', 4: 'layout-4',
+    6: 'layout-6', 8: 'layout-8',
   };
+
+  let allDevices = $derived(appState.orderedDevices);
+  let shownDevices = $derived(
+    appState.layout === 0 ? allDevices : allDevices.slice(0, appState.layout)
+  );
+
+  // Live board summary — computed from ACTUAL per-tile stream state (reported by LiveTile
+  // when a frame arrives or the stream retries) + recording jobs + connectivity fallback.
+  let liveCount = $derived(allDevices.filter(d => appState.streamStatusByDevice[d.id] === 'live').length);
+  let snapshotCount = $derived(allDevices.filter(d => appState.streamStatusByDevice[d.id] === 'snapshot').length);
+  let retryingCount = $derived(allDevices.filter(d => appState.streamStatusByDevice[d.id] === 'retrying').length);
+  let offlineCount = $derived(allDevices.filter(d => appState.connectivitySnapshots[d.id]?.status === 'Offline').length);
+  let recordingCount = $derived(appState.recordingJobs.filter(j => j.isRunning).length);
 
   let fullscreenSupported = $state(typeof document !== 'undefined' && !!document.documentElement.requestFullscreen);
 
@@ -75,7 +89,8 @@
           type="button"
           class:active={appState.layout === n}
           onclick={() => appState.setLayout(n)}
-        >{n}</button>
+          data-tip={n === 0 ? 'Show every camera, all streaming at once' : `Show ${n} cameras`}
+        >{n === 0 ? 'All' : n}</button>
       {/each}
     </div>
 
@@ -116,13 +131,28 @@
   </p>
 </div>
 
-<div class="view-grid {layoutClasses[appState.layout] || 'layout-4'}">
-  {#each appState.orderedDevices.slice(0, appState.layout) as d, i (d.id)}
+<div class="board-summary">
+  <span class="sum-chip live" data-tip="Cameras with a live video frame currently on screen">● {liveCount} streaming</span>
+  {#if snapshotCount > 0}
+    <span class="sum-chip snap" data-tip="Video stream unavailable — showing a periodic snapshot still instead">📷 {snapshotCount} still</span>
+  {/if}
+  <span class="sum-chip rec" data-tip="Cameras currently recording">⏺ {recordingCount} recording</span>
+  {#if retryingCount > 0}
+    <span class="sum-chip warn" data-tip="Cameras whose stream is unavailable (e.g. locked credentials) — click a tile for details">↻ {retryingCount} retrying</span>
+  {/if}
+  {#if offlineCount > 0}
+    <span class="sum-chip dead" data-tip="Cameras unreachable">✕ {offlineCount} offline</span>
+  {/if}
+  <span class="sum-note muted small">All cameras auto-stream · click any tile to control it</span>
+</div>
+
+<div class="view-grid {layoutClasses[appState.layout] || 'layout-all'}">
+  {#each shownDevices as d, i (d.id)}
     <div class="tile-wrapper">
       {#if mseDeviceIds.has(d.id)}          <LiveStreamMSE device={d} appState={appState} />
-        <button onclick={() => toggleMse(d.id)} class="mse-switch" title="Switch to MJPEG">📹 MJPEG</button>
+        <button onclick={() => toggleMse(d.id)} class="mse-switch" data-tip-pos="below" data-tip="Switch to MJPEG">📹 MJPEG</button>
       {:else}          <LiveTile device={d} index={i} appState={appState} />
-        <button onclick={() => toggleMse(d.id)} class="mse-switch" title="Switch to MSE stream">🎬 MSE</button>
+        <button onclick={() => toggleMse(d.id)} class="mse-switch" data-tip-pos="below" data-tip="Switch to MSE stream">🎬 MSE</button>
       {/if}
     </div>
   {:else}
@@ -196,20 +226,13 @@
     min-height: 50vh;
     align-content: start;
   }
+  .view-grid.layout-all {
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  }
   .view-grid.layout-1 { grid-template-columns: 1fr; }
   .view-grid.layout-2 { grid-template-columns: 1fr 1fr; }
   .view-grid.layout-4 { grid-template-columns: 1fr 1fr; }
-  .view-grid.layout-5 {
-    grid-template-columns: 2fr 1fr 1fr;
-    grid-template-rows: 1fr 1fr 1fr;
-  }
-  .view-grid.layout-5 :global(.view-tile:first-child) { grid-row: span 3; }
   .view-grid.layout-6 { grid-template-columns: 1fr 1fr 1fr; }
-  .view-grid.layout-7 {
-    grid-template-columns: 2fr 1fr 1fr;
-    grid-template-rows: 1.2fr 1fr 1fr;
-  }
-  .view-grid.layout-7 :global(.view-tile:first-child) { grid-row: span 2; }
   .view-grid.layout-8 { grid-template-columns: 1fr 1fr 1fr 1fr; }
 
   .tile-wrapper {
@@ -220,9 +243,38 @@
     overflow: hidden;
     min-height: 160px;
   }
+  /* ── Live board summary bar ─────────────────────────── */
+  .board-summary {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: 8px 12px;
+    margin-bottom: 10px;
+    background: #0e0a0b;
+    border: 1px solid #ff5a1f33;
+    border-radius: 10px;
+  }
+  .sum-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: .78rem;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 999px;
+    cursor: help;
+  }
+  .sum-chip.live { background: #1a3a1a; color: #8fdd8f; border: 1px solid #3ecf8e55; }
+  .sum-chip.snap { background: #3a2a1a; color: #ddcf8f; border: 1px solid #cf9e3e55; }
+  .sum-chip.rec { background: #3a1a1a; color: #ff8f8f; border: 1px solid #ff3e3e55; }
+  .sum-chip.warn { background: #3a2a1a; color: #ddcf8f; border: 1px solid #cf9e3e55; }
+  .sum-chip.dead { background: #1a1a1a; color: #999; border: 1px solid #66666655; }
+  .sum-note { margin-left: auto; }
+
   .mse-switch {
     position: absolute;
-    top: 6px;
+    top: 50px; /* below the two-line tile title bar (~45px) so it never covers the name/sub/status */
     right: 6px;
     z-index: 10;
     background: rgba(0, 0, 0, 0.65);
@@ -257,9 +309,5 @@
     .view-grid.layout-4,
     .view-grid.layout-6,
     .view-grid.layout-8 { grid-template-columns: 1fr 1fr; }
-    .view-grid.layout-5,
-    .view-grid.layout-7 { grid-template-columns: 1fr 1fr; }
-    .view-grid.layout-5 :global(.view-tile:first-child),
-    .view-grid.layout-7 :global(.view-tile:first-child) { grid-row: span 1; }
   }
 </style>

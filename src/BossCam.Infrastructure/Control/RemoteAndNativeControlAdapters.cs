@@ -14,14 +14,18 @@ public sealed class OwnedRemoteCommandAdapter(
     IOptions<BossCamRuntimeOptions> options,
     IHttpClientFactory httpClientFactory,
     IApplicationStore store,
-    ILogger<OwnedRemoteCommandAdapter> logger) : IControlAdapter
+    ILogger<OwnedRemoteCommandAdapter> logger,
+    IInternetConnectivityState? connectivityState = null) : IControlAdapter
 {
     public string Name => nameof(OwnedRemoteCommandAdapter);
     public int Priority => 30;
     public TransportKind TransportKind => TransportKind.RemoteCommand;
 
     public Task<bool> CanHandleAsync(DeviceIdentity device, CancellationToken cancellationToken)
-        => Task.FromResult(!string.IsNullOrWhiteSpace(device.EseeId));
+        => Task.FromResult(
+            !options.Value.OfflineMode
+            && connectivityState?.AllowsInternetTransports != false
+            && !string.IsNullOrWhiteSpace(device.EseeId));
 
     public async Task<CapabilityMap> ProbeAsync(DeviceIdentity device, CancellationToken cancellationToken)
     {

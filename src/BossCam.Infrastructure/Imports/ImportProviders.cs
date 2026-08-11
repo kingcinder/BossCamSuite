@@ -132,7 +132,9 @@ public sealed class EseeCloudImportProvider(IOptions<BossCamRuntimeOptions> opti
                 profiles.Add(new TransportProfile { Kind = TransportKind.LanRest, Address = $"http://{ip}:{port}", Rank = 10 });
                 profiles.Add(new TransportProfile { Kind = TransportKind.LanPrivateHttp, Address = $"http://{ip}:{port}", Rank = 20 });
             }
-            if (!string.IsNullOrWhiteSpace(eseeId))
+            // Air-gapped operation: P2P/remote relay profiles need internet egress to the vendor
+            // broker, so LAN-only mode drops them and keeps just the IP-based profiles.
+            if (!options.Value.OfflineMode && !string.IsNullOrWhiteSpace(eseeId))
             {
                 profiles.Add(new TransportProfile { Kind = TransportKind.EseeJuanP2P, Address = $"esee://{eseeId}", Rank = 60, IsRemote = true });
                 profiles.Add(new TransportProfile { Kind = TransportKind.RemoteCommand, Address = $"remote://{eseeId}", Rank = 65, IsRemote = true });

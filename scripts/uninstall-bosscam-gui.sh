@@ -22,8 +22,11 @@ fi
 sudo rm -rf "$GUI_PREFIX" "$SERVICE_PREFIX"
 echo "[BossCam] Removed $GUI_PREFIX and $SERVICE_PREFIX"
 
-# 3. Remove desktop entry + icon.
+# 3. Remove desktop entry, operator shortcut, and icon.
+OPERATOR_HOME="$(getent passwd "${BOSSCAM_SERVICE_USER:-${SUDO_USER:-$USER}}" | cut -d: -f6 2>/dev/null || true)"
+OPERATOR_HOME="${OPERATOR_HOME:-$HOME}"
 sudo rm -f /usr/share/applications/bosscam-gui.desktop
+sudo rm -f "$OPERATOR_HOME/Desktop/BOSSCAMSUITE SHRTCUT.desktop"
 sudo rm -f /usr/share/icons/hicolor/scalable/apps/bosscam.svg
 sudo update-desktop-database /usr/share/applications 2>/dev/null || true
 echo "[BossCam] Desktop entry removed."

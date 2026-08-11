@@ -1,6 +1,6 @@
 import * as signalRCore from '@microsoft/signalr';
 import type { DeviceIdentity, RecordingJob, HighlightBoardState } from './types';
-import { AppState } from './store';
+import { AppState } from './store.svelte';
 
 /** localStorage key matching api.ts */
 const LS_LAN_TOKEN = 'bosscam.lanToken';

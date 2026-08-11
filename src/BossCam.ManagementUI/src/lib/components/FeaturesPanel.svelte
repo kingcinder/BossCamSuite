@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AppState } from '../store';
+  import { AppState } from '../store.svelte';
   import { api } from '../api';
   import type { ControlPointInventoryReport, ControlPointInventoryItem, WriteResult } from '../types';
 
@@ -312,10 +312,10 @@
                 <div class="feature-meta">
                   <span class="meta-chip">{item.writeShape}</span>
                   {#if item.groupedWriteRequired}
-                    <span class="meta-chip warn">Grouped write</span>
+                    <span class="meta-chip warn" data-tip="Requires grouped write with related fields">Grouped write</span>
                   {/if}
                   {#if item.interFieldDependent}
-                    <span class="meta-chip warn">Dependent</span>
+                    <span class="meta-chip warn" data-tip="Value depends on other fields in this family">Dependent</span>
                   {/if}
                   {#if item.min != null && item.max != null}
                     <span class="meta-chip">{item.min}–{item.max}</span>
@@ -325,11 +325,12 @@
                 <!-- Interactive control -->
                 <div class="feature-control">
                   {#if needsProbe(item)}
-                    <span class="probe-hint" title="Run Quick Probe above to unlock this control">🔍 Probe to unlock</span>
+                    <span class="probe-hint" data-tip="Run Quick Probe above to unlock this control">🔍 Probe to unlock</span>
                   {:else if isToggle(item)}
-                    <label class="toggle-switch" title={isApplying(item) ? 'Applying…' : `Toggle ${item.displayName || item.fieldKey}`}>
+                    <label class="toggle-switch" data-tip={isApplying(item) ? 'Applying…' : `Toggle ${item.displayName || item.fieldKey}`}>
                       <input
                         type="checkbox"
+                        aria-label={`Toggle ${item.displayName || item.fieldKey}`}
                         checked={toggleValues[ctrlKey(item)] ?? false}
                         disabled={isApplying(item) || !item.readWriteState.startsWith('Writable')}
                         onchange={(e) => applyToggle(item, (e.target as HTMLInputElement).checked)}
@@ -340,6 +341,7 @@
                     <div class="slider-control">
                       <input
                         type="range"
+                        aria-label={`${item.displayName || item.fieldKey} (${item.min}–${item.max})`}
                         min={item.min ?? 0}
                         max={item.max ?? 100}
                         value={sliderValues[ctrlKey(item)] ?? item.min ?? 50}
@@ -352,6 +354,7 @@
                   {:else if isEnum(item)}
                     <div class="enum-control">
                       <select
+                        aria-label={item.displayName || item.fieldKey}
                         value={enumValues[ctrlKey(item)] ?? item.allowedValues[0]}
                         disabled={isApplying(item) || !item.readWriteState.startsWith('Writable')}
                         onchange={(e) => applyEnum(item, (e.target as HTMLSelectElement).value)}
@@ -407,9 +410,10 @@
                     </label>
 
                     {#if isToggle(item)}
-                      <label class="toggle-switch" title="Apply with expert override">
+                      <label class="toggle-switch" data-tip="Apply with expert override">
                         <input
                           type="checkbox"
+                          aria-label={`Apply ${item.displayName || item.fieldKey} with expert override`}
                           checked={toggleValues[ctrlKey(item)] ?? false}
                           disabled={isApplying(item) || !expertOverrides[ctrlKey(item)]}
                           onchange={(e) => applyToggle(item, (e.target as HTMLInputElement).checked)}
@@ -420,6 +424,7 @@
                       <div class="slider-control">
                         <input
                           type="range"
+                          aria-label={`${item.displayName || item.fieldKey} (${item.min}–${item.max}) expert`}
                           min={item.min ?? 0}
                           max={item.max ?? 100}
                           value={sliderValues[ctrlKey(item)] ?? item.min ?? 50}
@@ -431,6 +436,7 @@
                       </div>
                     {:else if isEnum(item)}
                       <select
+                        aria-label={`${item.displayName || item.fieldKey} expert`}
                         value={enumValues[ctrlKey(item)] ?? item.allowedValues[0]}
                         disabled={isApplying(item) || !expertOverrides[ctrlKey(item)]}
                         onchange={(e) => applyEnum(item, (e.target as HTMLSelectElement).value)}

@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { DeviceIdentity, EnrollDeviceResult } from '../types';
   import { api } from '../api';
-  import { AppState } from '../store';
+  import { AppState } from '../store.svelte';
 
   let { devices, appState }: { devices: DeviceIdentity[]; appState: AppState } = $props();
 
@@ -115,6 +115,29 @@
       : '';
     return `Status: ${cs.status}${transports ? ' · ' + transports : ''}`;
   }
+
+  /// True when the device has no stored login credentials (locked/gated camera).
+  function hasNoCredentials(d: DeviceIdentity): boolean {
+    return !d.loginName || d.loginName.trim() === '';
+  }
+
+  /// True when the device's ONVIF port is reachable but the web admin is locked
+  /// (no login credentials stored) — meaning ONVIF default-credential scan is worthwhile.
+  function isOnvifUnlockable(d: DeviceIdentity): boolean {
+    // Must have a known ONVIF port or a transport profile that mentions ONVIF
+    const cs = appState.connectivitySnapshots[d.id];
+    if (!cs) return false;
+    // Check if ONVIF transport is reachable in the snapshot
+    const onvifOk = cs.transportResults
+      ? Object.entries(cs.transportResults).some(([k, v]) =>
+          v && (k.includes('onvif') || k.includes('8899') || k.includes('8888')))
+      : false;
+    // Show badge when the device has an ONVIF media port or an onvif transport profile,
+    // AND no login credentials are stored (camera is locked/semi-enrolled)
+    const hasOnvifProfile = (d.onvifMediaPort != null && d.onvifMediaPort > 0)
+      || d.transportProfiles.some(p => p.kind.toLowerCase().includes('onvif'));
+    return hasOnvifProfile || onvifOk;
+  }
 </script>
 
 <div class="enroll-bar">
@@ -147,7 +170,8 @@
         tabindex="0"
         onclick={() => select(d.id)}
         onkeydown={(e) => e.key === 'Enter' && select(d.id)}
-        title={connectivityTitle(d.id)}
+        data-tip-pos="below"
+        data-tip={connectivityTitle(d.id)}
       >
         <div class="name-row">
           <span class="signal-dot {connectivityClass(d.id)}"></span>
@@ -160,6 +184,36 @@
           {#if d.linkHint === 'Wifi'}<span class="wifi-badge">Wi-Fi</span>{/if}
           {#if appState.connectivitySnapshots[d.id]}
             <span class="conn-badge {connectivityClass(d.id)}">{appState.connectivitySnapshots[d.id].status}</span>
+          {/if}
+          {#if isOnvifUnlockable(d)}
+            <span class="onvif-badge" data-tip="ONVIF reachable — click to scan for default credentials">ONVIF</span>
+            {#if !appState.onvifScanResults[d.id] && !appState.onvifScanBusy[d.id]}
+              <button class="onvif-scan-btn" onclick={(e) => { e.stopPropagation(); appState.runOnvifScan(d.id, d.ipAddress ?? undefined); }} data-tip="Scan ONVIF for known default credentials">
+                {appState.onvifScanBusy[d.id] ? '…' : '🔍'}
+              </button>
+            {:else if appState.onvifScanBusy[d.id]}
+              <span class="onvif-scanning">Scanning…</span>
+            {:else if appState.onvifScanResults[d.id]?.success}
+              <span class="onvif-unlocked" data-tip={appState.onvifScanResults[d.id].message ?? ''}>✓ Unlocked</span>
+            {:else}
+              <span class="onvif-failed" data-tip={appState.onvifScanResults[d.id].message ?? ''}>✗</span>
+            {/if}
+          {/if}
+          <!-- CGI fuzz trigger: only for cameras without stored credentials (locked/gated) -->
+          {#if d.ipAddress && hasNoCredentials(d)}
+            {#if !appState.cgiFuzzResults[d.id] && !appState.cgiFuzzBusy[d.id]}
+              <button class="cgi-fuzz-btn" onclick={(e) => { e.stopPropagation(); appState.runCgiFuzz(d.id, d.ipAddress ?? undefined); }} data-tip="Fuzz CGI endpoints for auth bypasses">
+                🧪
+              </button>
+            {:else if appState.cgiFuzzBusy[d.id]}
+              <span class="cgi-fuzzing">Fuzzing…</span>
+            {:else if (appState.cgiFuzzResults[d.id]?.findings?.length ?? 0) > 0}
+              <span class="cgi-bypass" data-tip={appState.cgiFuzzResults[d.id]?.findings[0]?.description ?? ''}>
+                ⚡{appState.cgiFuzzResults[d.id]!.findings.length} bypass
+              </span>
+            {:else}
+              <span class="cgi-clean" data-tip={appState.cgiFuzzResults[d.id]?.message ?? ''}>🔒</span>
+            {/if}
           {/if}
         </div>
       </div>
@@ -255,7 +309,7 @@
   }
   .btn {
     background: var(--accent);
-    color: #1a0a04;
+    color: #3d0c02;
     border: none;
     border-radius: 6px;
     padding: 6px 12px;
@@ -285,4 +339,116 @@
   .rec-badge { background: #0f2e1a; color: #5fbf8f; }
   .wifi-badge { background: #2a2410; color: #cfc06f; }
   .ctrl-port { background: #161011; color: #b0a8a8; }
+
+  .onvif-badge {
+    display: inline-block;
+    font-size: .7rem;
+    padding: 1px 5px;
+    border-radius: 4px;
+    margin-left: 4px;
+    font-weight: 600;
+    background: #1a1a2e;
+    color: #8fa8dd;
+    border: 1px solid #4466aa66;
+    cursor: help;
+  }
+  .onvif-scan-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .72rem;
+    padding: 1px 5px;
+    margin-left: 2px;
+    border-radius: 4px;
+    border: 1px solid #4466aa66;
+    background: #1a1a2e;
+    color: #8fa8dd;
+    cursor: pointer;
+    line-height: 1;
+    transition: filter .15s;
+  }
+  .onvif-scan-btn:hover { filter: brightness(1.3); }
+  .onvif-scanning {
+    display: inline-block;
+    font-size: .68rem;
+    padding: 1px 5px;
+    margin-left: 4px;
+    border-radius: 4px;
+    background: #1a1a2e;
+    color: #8fa8dd;
+    animation: pulse 1s infinite;
+  }
+  .onvif-unlocked {
+    display: inline-block;
+    font-size: .68rem;
+    padding: 1px 5px;
+    margin-left: 4px;
+    border-radius: 4px;
+    font-weight: 700;
+    background: #0f2e1a;
+    color: #5fbf8f;
+    cursor: help;
+  }
+  .onvif-failed {
+    display: inline-block;
+    font-size: .7rem;
+    padding: 1px 5px;
+    margin-left: 4px;
+    border-radius: 4px;
+    background: #2e1a1a;
+    color: #cf6f6f;
+    cursor: help;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .5; }
+  }
+
+  .cgi-fuzz-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .7rem;
+    padding: 1px 5px;
+    margin-left: 2px;
+    border-radius: 4px;
+    border: 1px solid #aa664466;
+    background: #2e1a0f;
+    color: #ddaa6f;
+    cursor: pointer;
+    line-height: 1;
+    transition: filter .15s;
+  }
+  .cgi-fuzz-btn:hover { filter: brightness(1.3); }
+  .cgi-fuzzing {
+    display: inline-block;
+    font-size: .68rem;
+    padding: 1px 5px;
+    margin-left: 4px;
+    border-radius: 4px;
+    background: #2e1a0f;
+    color: #ddaa6f;
+    animation: pulse 1s infinite;
+  }
+  .cgi-bypass {
+    display: inline-block;
+    font-size: .66rem;
+    padding: 1px 5px;
+    margin-left: 4px;
+    border-radius: 4px;
+    font-weight: 700;
+    background: #3a1a0a;
+    color: #ffb06a;
+    cursor: help;
+    border: 1px solid #ff8f3e66;
+  }
+  .cgi-clean {
+    display: inline-block;
+    font-size: .7rem;
+    padding: 1px 5px;
+    margin-left: 4px;
+    border-radius: 4px;
+    color: #666;
+    cursor: help;
+  }
 </style>

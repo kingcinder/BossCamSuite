@@ -92,6 +92,35 @@ public sealed class BossCamRuntimeOptions
     public bool DiscoveryOfflineMode { get; set; }
 
     /// <summary>
+    /// LAN-only / air-gapped operation. When true, the service refuses to touch anything that
+    /// needs internet egress: cloud/P2P transport adapters (ESEE/Juan, KP2P, LinkVision) emit no
+    /// sources, the remote-command relay is disabled, and the EseeCloud importer only keeps
+    /// LAN profiles for devices that carry an IP. LAN discovery, streaming, snapshots, recording,
+    /// settings control, and the operator UI all keep working against the local network.
+    /// Set via <c>BossCam:OfflineMode=true</c> or <c>BOSSCAM_OFFLINE=1</c>.
+    /// Default false — an internet-connected deployment keeps P2P/cloud paths available.
+    /// </summary>
+    public bool OfflineMode { get; set; }
+
+    /// <summary>
+    /// Lightweight external reachability URL used only to classify the optional internet/cloud
+    /// plane. It never replaces LAN camera probes and is not contacted when OfflineMode is true.
+    /// </summary>
+    public string InternetConnectivityProbeUrl { get; set; } = "https://www.msftconnecttest.com/connecttest.txt";
+
+    /// <summary>Seconds between automatic internet reachability probes.</summary>
+    public int InternetConnectivityProbeIntervalSeconds { get; set; } = 15;
+
+    /// <summary>Per-probe timeout for the optional internet reachability check.</summary>
+    public int InternetConnectivityProbeTimeoutSeconds { get; set; } = 3;
+
+    /// <summary>
+    /// Consecutive failed internet probes required before optional cloud/P2P transports are gated.
+    /// A successful probe restores them immediately.
+    /// </summary>
+    public int InternetConnectivityFailureThreshold { get; set; } = 2;
+
+    /// <summary>
     /// Optional override for the local-machine ciphertext key path. On Linux/macOS this is the
     /// path of a 0600-permissioned AES-GCM keyfile (32 random bytes) backing <c>IPasswordCipher</c>.
     /// Windows ignores this; DPAPI/ProtectedData with CurrentUser scope is used instead.
@@ -128,4 +157,21 @@ public sealed class BossCamRuntimeOptions
 
     /// <summary>Per-minute cap for /api/devices/{id}/snapshot. Each snapshot is one or more HTTP GETs against the camera.</summary>
     public int RateLimitSnapshotPerMinute { get; set; } = 30;
+
+    /// <summary>
+    /// Fast recovery cadence for recording supervision. This is intentionally independent of
+    /// housekeeping: a transient LAN/camera flap must not wait for the normal 15-minute cycle.
+    /// Healthy recorder processes are left alone; only exited or stalled jobs are reconciled.
+    /// </summary>
+    public int RecordingRecoveryIntervalSeconds { get; set; } = 5;
+
+    /// <summary>
+    /// Minimum delay between continuous-record restart attempts after a failed camera recovery.
+    /// This protects ffmpeg and the camera from a tight restart loop while retaining automatic
+    /// recovery when the LAN path returns.
+    /// </summary>
+    public int RecordingRecoveryRetrySeconds { get; set; } = 15;
+
+    /// <summary>Upper bound for exponential retry delay after repeated recorder recovery failures.</summary>
+    public int RecordingRecoveryMaxRetrySeconds { get; set; } = 300;
 }

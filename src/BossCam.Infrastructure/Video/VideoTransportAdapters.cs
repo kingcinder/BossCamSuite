@@ -351,7 +351,7 @@ public sealed class BubbleFlvAdapter : IVideoTransportAdapter
     }
 }
 
-public sealed class EseeJuanP2PAdapter(IOptions<BossCamRuntimeOptions> options) : IVideoTransportAdapter
+public sealed class EseeJuanP2PAdapter(IOptions<BossCamRuntimeOptions> options, IInternetConnectivityState? connectivityState = null) : IVideoTransportAdapter
 {
     public string Name => nameof(EseeJuanP2PAdapter);
     public TransportKind TransportKind => TransportKind.EseeJuanP2P;
@@ -359,7 +359,10 @@ public sealed class EseeJuanP2PAdapter(IOptions<BossCamRuntimeOptions> options) 
 
     public Task<IReadOnlyCollection<VideoSourceDescriptor>> GetSourcesAsync(DeviceIdentity device, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(device.EseeId))
+        // Air-gapped operation: cloud/P2P transports need internet egress to the vendor broker.
+        if (options.Value.OfflineMode
+            || connectivityState?.AllowsInternetTransports == false
+            || string.IsNullOrWhiteSpace(device.EseeId))
         {
             return Task.FromResult<IReadOnlyCollection<VideoSourceDescriptor>>([]);
         }
@@ -380,7 +383,7 @@ public sealed class EseeJuanP2PAdapter(IOptions<BossCamRuntimeOptions> options) 
     }
 }
 
-public sealed class Kp2pAdapter(IOptions<BossCamRuntimeOptions> options) : IVideoTransportAdapter
+public sealed class Kp2pAdapter(IOptions<BossCamRuntimeOptions> options, IInternetConnectivityState? connectivityState = null) : IVideoTransportAdapter
 {
     public string Name => nameof(Kp2pAdapter);
     public TransportKind TransportKind => TransportKind.Kp2p;
@@ -388,6 +391,12 @@ public sealed class Kp2pAdapter(IOptions<BossCamRuntimeOptions> options) : IVide
 
     public Task<IReadOnlyCollection<VideoSourceDescriptor>> GetSourcesAsync(DeviceIdentity device, CancellationToken cancellationToken)
     {
+        // Air-gapped operation: KP2P tunnels to the vendor broker over the internet.
+        if (options.Value.OfflineMode || connectivityState?.AllowsInternetTransports == false)
+        {
+            return Task.FromResult<IReadOnlyCollection<VideoSourceDescriptor>>([]);
+        }
+
         var library = NativeLibraryCatalog.Discover(options.Value.IpcamSuiteDirectory, options.Value.EseeCloudDirectory).FirstOrDefault(static entry => entry.Name.Equals("P2PSDKClient.dll", StringComparison.OrdinalIgnoreCase));
         if (library is null || !library.Exists || string.IsNullOrWhiteSpace(device.EseeId))
         {
@@ -410,7 +419,7 @@ public sealed class Kp2pAdapter(IOptions<BossCamRuntimeOptions> options) : IVide
     }
 }
 
-public sealed class LinkVisionAdapter(IOptions<BossCamRuntimeOptions> options) : IVideoTransportAdapter
+public sealed class LinkVisionAdapter(IOptions<BossCamRuntimeOptions> options, IInternetConnectivityState? connectivityState = null) : IVideoTransportAdapter
 {
     public string Name => nameof(LinkVisionAdapter);
     public TransportKind TransportKind => TransportKind.LinkVision;
@@ -418,6 +427,12 @@ public sealed class LinkVisionAdapter(IOptions<BossCamRuntimeOptions> options) :
 
     public Task<IReadOnlyCollection<VideoSourceDescriptor>> GetSourcesAsync(DeviceIdentity device, CancellationToken cancellationToken)
     {
+        // Air-gapped operation: LinkVision resolves URLs through the vendor cloud.
+        if (options.Value.OfflineMode || connectivityState?.AllowsInternetTransports == false)
+        {
+            return Task.FromResult<IReadOnlyCollection<VideoSourceDescriptor>>([]);
+        }
+
         var library = NativeLibraryCatalog.Discover(options.Value.IpcamSuiteDirectory, options.Value.EseeCloudDirectory).FirstOrDefault(static entry => entry.Name.Equals("LinkVisionGetUrl.dll", StringComparison.OrdinalIgnoreCase));
         if (library is null || !library.Exists)
         {

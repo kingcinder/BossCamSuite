@@ -44,6 +44,9 @@ builder.Services.AddBossCamCore();
 builder.Services.AddHostedService<BossCamBootstrapWorker>();
 builder.Services.AddHostedService<RecordingLifecycleWorker>();
 builder.Services.AddHostedService<ConnectivityWatchdogWorker>();
+// WAN/cloud availability is advisory only: this worker gates optional cloud transports
+// automatically while LAN recording and streaming remain independent.
+builder.Services.AddHostedService<InternetConnectivityWorker>();
 
 var app = builder.Build();
 

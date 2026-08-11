@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AppState } from '../store';
+  import { AppState } from '../store.svelte';
 
   let { appState }: { appState: AppState } = $props();
 
@@ -15,11 +15,24 @@
       {#if appState.selectedDevice}
         {appState.selectedDevice.ipAddress || ''} · {appState.selectedDevice.hardwareModel || ''} · fw {appState.selectedDevice.firmwareVersion || 'unknown'}
       {:else}
-        Live multi-camera board · drag tiles to reorder
+        Every camera streams automatically — click any tile to configure, snapshot, or record it
       {/if}
     </p>
   </div>
   <div class="row gap wrap">
+    {#if appState.offlineMode}
+      <span class="offline-badge" data-tip="BossCam:OfflineMode=true (or BOSSCAM_OFFLINE=1) — cloud/P2P tunnels and the remote relay are disabled; LAN cameras, streaming, and recording keep working.">
+        ⚡ LAN-only mode
+      </span>
+    {:else if appState.internetConnectivity === 'Offline'}
+      <span class="wan-badge down" data-tip="Internet/cloud access is temporarily unavailable. LAN recording and streaming continue; cloud/P2P paths will return automatically when connectivity is restored.">
+        ◌ WAN offline · auto recovery
+      </span>
+    {:else if appState.internetConnectivity === 'Online'}
+      <span class="wan-badge up" data-tip="Internet/cloud access is available. LAN paths remain preferred; cloud/P2P is available only as an optional fallback.">
+        ● WAN online
+      </span>
+    {/if}
     <button class="accent" disabled={!appState.selectedDevice} onclick={() => document.dispatchEvent(new CustomEvent('bosscam:save'))}>
       Save Settings
     </button>
@@ -61,4 +74,19 @@
     background: linear-gradient(180deg, #ff7a2f, #b83a12);
     border-color: #ffb06a; color: #fff8f2; font-weight: 600;
   }
+  .offline-badge, .wan-badge {
+    font-size: .72rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: #14240f;
+    border: 1px solid #3ecf8e66;
+    color: #7fe0ac;
+    cursor: help;
+    white-space: nowrap;
+  }
+  .wan-badge { white-space: nowrap; cursor: help; }
+  .wan-badge.down { color: #ffd08a; background: #3a2a12; border-color: #cf9e3e66; }
+  .wan-badge.up { color: #8fdd8f; background: #1a3a1a; border-color: #3ecf8e66; }
 </style>

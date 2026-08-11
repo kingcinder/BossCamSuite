@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { FieldDef } from '../types';
-  import { AppState } from '../store';
+  import { AppState } from '../store.svelte';
 
   let { fields = [], prefix, appState }: {
     fields: FieldDef[];

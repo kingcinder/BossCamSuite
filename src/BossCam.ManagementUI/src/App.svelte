@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { AppState } from './lib/store';
+  import { AppState } from './lib/store.svelte';
   import { api } from './lib/api';
   import { signalR } from './lib/signalr';
   import Sidebar from './lib/components/Sidebar.svelte';
@@ -25,6 +25,19 @@
   let sourcesHtml = $state('');
   let identityHtml = $state('');
   let fullscreenSupported = $state(typeof document !== 'undefined' && !!document.documentElement.requestFullscreen);
+  let healthPollTimer: ReturnType<typeof setInterval> | undefined;
+
+  async function refreshHealth() {
+    try {
+      const h = await api.health();
+      appState.offlineMode = !!h.offlineMode;
+      appState.internetConnectivity = h.internetConnectivity || (h.offlineMode ? 'Disabled' : 'Unknown');
+      appState.internetConnectivityChangedAt = h.internetConnectivityChangedAt || '';
+      appState.healthInfo = `API ok · ${h.platform || ''} · ${h.timestamp || ''}`;
+    } catch {
+      appState.healthInfo = 'API unreachable';
+    }
+  }
 
   // ── Desktop notifications (Web Notification API) ──────────────
   // Equivalent to WPF OS-level toast notifications.
@@ -177,12 +190,7 @@
   onMount(() => {
     // Start async initialization without making onMount itself async
     (async () => {
-      try {
-        const h = await api.health();
-        appState.healthInfo = `API ok · ${h.platform || ''} · ${h.timestamp || ''}`;
-      } catch {
-        appState.healthInfo = 'API unreachable';
-      }
+      await refreshHealth();
 
       try {
         appState.devices = await api.devices();
@@ -232,6 +240,10 @@
     });
     document.addEventListener('bosscam:snapshot', () => saveSnapshotAction());
 
+    // Keep automatic WAN transitions visible without user interaction. This is status-only:
+    // the service owns transport gating, while LAN recording and streaming continue regardless.
+    healthPollTimer = setInterval(() => { void refreshHealth(); }, 15_000);
+
     // Listen for keyboard shortcuts globally
     document.addEventListener('keydown', handleKeyboard);
 
@@ -242,6 +254,8 @@
 
     return () => {
       signalR.disconnect();
+      if (healthPollTimer) clearInterval(healthPollTimer);
+      healthPollTimer = undefined;
       document.removeEventListener('keydown', handleKeyboard);
     };
   });

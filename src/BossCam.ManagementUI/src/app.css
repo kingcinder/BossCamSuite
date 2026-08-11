@@ -3,8 +3,8 @@
   --panel: #120e10ee;
   --border: #ff5a1f88;
   --accent: #ff6a1f;
-  --text: #f2f4f7;
-  --muted: #c9b7ad;
+  --text: #ffd2c6;
+  --muted: #e09d8f;
   --ok: #3ecf8e;
   --bad: #ff6b6b;
   --radius: 12px;
@@ -15,6 +15,70 @@
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); }
 button, input, select, textarea { font: inherit; color: inherit; }
 a { color: var(--accent); }
+
+/* ── Hover tooltips ─────────────────────────────────────── */
+/* Native title tooltips are unreliable in embedded/iframe views, so
+   elements opt in with data-tip="..." and get a styled tooltip here. */
+[data-tip] { position: relative; }
+[data-tip]:not([data-tip=""]):hover::after,
+[data-tip]:not([data-tip=""]):focus::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #2a0c04;
+  border: 1px solid #ff5a1f88;
+  color: #ffd2c6;
+  padding: 5px 9px;
+  border-radius: 6px;
+  font-size: .72rem;
+  font-weight: 500;
+  line-height: 1.35;
+  white-space: nowrap;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  z-index: 10000;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .6);
+  animation: tip-in .12s ease-out;
+}
+[data-tip]:not([data-tip=""]):hover::before,
+[data-tip]:not([data-tip=""]):focus::before {
+  content: "";
+  position: absolute;
+  bottom: calc(100% + 3px);
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: #ff5a1f88;
+  z-index: 10000;
+  pointer-events: none;
+}
+/* Tooltips anchored to top-of-tile elements (e.g. .mse-switch) would be
+   clipped by the tile's overflow:hidden — render those below instead. */
+[data-tip-pos="below"]:not([data-tip=""]):hover::after,
+[data-tip-pos="below"]:not([data-tip=""]):focus::after {
+  top: calc(100% + 8px);
+  bottom: auto;
+  animation-name: tip-in-below;
+}
+[data-tip-pos="below"]:not([data-tip=""]):hover::before,
+[data-tip-pos="below"]:not([data-tip=""]):focus::before {
+  top: calc(100% + 3px);
+  bottom: auto;
+  border-top-color: transparent;
+  border-bottom-color: #ff5a1f88;
+}
+@keyframes tip-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(3px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+@keyframes tip-in-below {
+  from { opacity: 0; transform: translateX(-50%) translateY(-3px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
 
 /* Scrollbar styling */
 ::-webkit-scrollbar { width: 8px; height: 8px; }

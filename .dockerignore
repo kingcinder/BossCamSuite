@@ -1,0 +1,23 @@
+# VCS
+.git
+.gitignore
+
+# Sensitive / local-only camera evidence (matches .gitignore)
+captures/
+local-camera-recovery/
+CAM_SDK_REVERSE_ENGINEERING_FILES/
+firmware_extracted/
+scripts/eseecloud-real-grants.json
+
+# Generated build output — host artifacts must never leak into images
+**/bin/
+**/obj/
+**/node_modules/
+artifacts/
+docs/reports/
+
+# Editors / OS noise
+.vscode/
+.idea/
+*.swp
+Thumbs.db

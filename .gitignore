@@ -38,3 +38,21 @@ Thumbs.db
 # is for MPEG-TS recordings and was accidentally swallowing the SPA TypeScript source — negate it.
 src/BossCam.ManagementUI/node_modules/
 !src/BossCam.ManagementUI/**/*.ts
+
+# Local-only camera recovery evidence; do not commit or publish.
+local-camera-recovery/
+# Raw camera/cloud traffic captures are sensitive and must remain local.
+captures/
+# Generated from local captures; embeds real camera serials/pconv — regenerate
+# per run with eseecloud-extract-grants.py instead of committing.
+scripts/eseecloud-real-grants.json
+
+# Derived firmware extraction output — regenerable from the committed .rom files
+# (see docs/reports/2026-08-11-firmware-full-extraction-report.md); never push
+# ~460 MB of squashfs dumps to the public repo.
+CAM_SDK_REVERSE_ENGINEERING_FILES/extracted/
+firmware_extracted/
+
+# Python bytecode
+__pycache__/
+*.pyc

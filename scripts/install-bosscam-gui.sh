@@ -23,6 +23,9 @@ GUI_PREFIX="${BOSSCAM_GUI_PREFIX:-/opt/bosscam-gui}"
 # (SQLite DB, recordings, snapshots) lands in the operator's home directory
 # rather than /root. Override with BOSSCAM_SERVICE_USER=<user>.
 SERVICE_USER="${BOSSCAM_SERVICE_USER:-${SUDO_USER:-$USER}}"
+# The desktop shortcut belongs to the operator who invoked sudo, not root.
+OPERATOR_HOME="$(getent passwd "$SERVICE_USER" | cut -d: -f6 2>/dev/null || true)"
+OPERATOR_HOME="${OPERATOR_HOME:-$HOME}"
 
 # Locate the .NET SDK for the invoking user. Under sudo, $HOME points at
 # /root, so resolve the real operator home from SUDO_USER (or /etc/passwd)
@@ -128,6 +131,7 @@ need() {
 }
 need ffmpeg ffmpeg
 need rsync rsync
+need curl curl
 # DOTNET_ROOT is guaranteed non-empty by the fail-fast above; the explicit
 # restore_or_fail helper validates assets before each publish.
 
@@ -187,15 +191,23 @@ sudo chown -R "$SERVICE_USER:$SERVICE_USER" "$GUI_PREFIX"
 # ── 3. Launcher that ensures the service is up, then starts the GUI ─
 sudo tee "$GUI_PREFIX/launch-bosscam.sh" >/dev/null <<EOF
 #!/usr/bin/env bash
-# BossCamSuite launcher: start the service if needed, then open the GUI.
-if systemctl is-active --quiet bosscam.service 2>/dev/null; then
-  :
-else
+# BossCamSuite launcher: the service is enabled at boot and restarted by systemd.
+# A normal desktop user may not be allowed to start a system unit, so never silently
+# open the GUI against a dead API: try once, then wait for the local health endpoint.
+if ! systemctl is-active --quiet bosscam.service 2>/dev/null; then
   systemctl start bosscam.service 2>/dev/null || true
-  # Give the service time to bind before the GUI first health check.
-  sleep 1
 fi
-exec "$GUI_PREFIX/BossCam.Desktop.Avalonia" "\$@"
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  if curl --silent --fail --max-time 1 http://127.0.0.1:5317/api/health >/dev/null 2>&1; then
+    exec "$GUI_PREFIX/BossCam.Desktop.Avalonia" "\$@"
+  fi
+  sleep 1
+done
+if command -v notify-send >/dev/null 2>&1; then
+  notify-send --urgency=critical "BossCamSuite" "Local service is not responding. Check: systemctl status bosscam"
+fi
+printf '%s\n' "BossCamSuite service is not responding on http://127.0.0.1:5317." >&2
+exit 1
 EOF
 sudo chmod +x "$GUI_PREFIX/launch-bosscam.sh"
 
@@ -212,25 +224,41 @@ sudo tee "$ICON_DIR/bosscam.svg" >/dev/null <<'EOF'
 </svg>
 EOF
 
-sudo tee /usr/share/applications/bosscam-gui.desktop >/dev/null <<EOF
-[Desktop Entry]
+DESKTOP_ENTRY_CONTENT="[Desktop Entry]
 Type=Application
-Name=BossCamSuite
+Name=BOSSCAMSUITE SHRTCUT
 GenericName=Camera Control Platform
 Comment=BossCamSuite camera control, recording and diagnostics
-Exec=${GUI_PREFIX}/launch-bosscam.sh
+Exec="${GUI_PREFIX}/launch-bosscam.sh"
 Icon=bosscam
 Terminal=false
+Path=${GUI_PREFIX}
 Categories=Utility;AudioVideo;
 Keywords=camera;cctv;recording;nvr;
-EOF
+StartupNotify=true"
+
+# Install the application-menu entry.
+printf '%s
+' "$DESKTOP_ENTRY_CONTENT" | sudo tee /usr/share/applications/bosscam-gui.desktop >/dev/null
+
+# Also place a clickable shortcut on the operator's Ubuntu desktop. Desktop
+# environments require the .desktop file to be executable before allowing it
+# to launch; ownership is assigned to the real operator, never root.
+OPERATOR_DESKTOP="$OPERATOR_HOME/Desktop"
+sudo mkdir -p "$OPERATOR_DESKTOP"
+sudo chown "$SERVICE_USER:$SERVICE_USER" "$OPERATOR_DESKTOP"
+printf '%s
+' "$DESKTOP_ENTRY_CONTENT" | sudo tee "$OPERATOR_DESKTOP/BOSSCAMSUITE SHRTCUT.desktop" >/dev/null
+sudo chown "$SERVICE_USER:$SERVICE_USER" "$OPERATOR_DESKTOP/BOSSCAMSUITE SHRTCUT.desktop"
+sudo chmod +x "$OPERATOR_DESKTOP/BOSSCAMSUITE SHRTCUT.desktop"
 
 sudo update-desktop-database /usr/share/applications 2>/dev/null || true
 
 echo
 echo "=== [BossCam] Install complete ==="
 echo "  Service : systemctl status bosscam"
-echo "  GUI     : $GUI_PREFIX/launch-bosscam.sh   (or launch from the app menu)"
+echo "  GUI     : $GUI_PREFIX/launch-bosscam.sh   (or use the BOSSCAMSUITE SHRTCUT desktop icon)"
+echo "  Shortcut: $OPERATOR_DESKTOP/BOSSCAMSUITE SHRTCUT.desktop"
 echo "  Logs    : journalctl -u bosscam -f"
 echo "  API     : http://$(hostname -I | awk '{print $1}'):5317/"
 echo

@@ -217,6 +217,117 @@ public sealed record SettingValue
     public DateTimeOffset CapturedAt { get; init; } = DateTimeOffset.UtcNow;
 }
 
+/// <summary>
+/// Request to scan a device's ONVIF device service for known default credentials.
+/// Accepts either a stored <see cref="DeviceId"/> or a bare <see cref="IpAddress"/>.
+/// </summary>
+public sealed record OnvifCredentialScanRequest
+{
+    public string? DeviceId { get; init; }
+    public string? IpAddress { get; init; }
+}
+
+/// <summary>
+/// Credential pair tried during an ONVIF scan.
+/// </summary>
+public sealed record OnvifCredentialPair
+{
+    public string Username { get; init; } = string.Empty;
+    public string Password { get; init; } = string.Empty;
+}
+
+/// <summary>
+/// Result of scanning a device for ONVIF credentials.
+/// </summary>
+public sealed record OnvifCredentialScanResult
+{
+    /// <summary>True when at least one credential pair produced a successful GetCapabilities response.</summary>
+    public bool Success { get; init; }
+    /// <summary>The device service URL that answered.</summary>
+    public string? DeviceServiceUrl { get; init; }
+    /// <summary>The manufacturer string extracted from GetCapabilities.</summary>
+    public string? Manufacturer { get; init; }
+    /// <summary>The model string extracted from GetCapabilities.</summary>
+    public string? Model { get; init; }
+    /// <summary>The firmware version extracted from GetCapabilities.</summary>
+    public string? FirmwareVersion { get; init; }
+    /// <summary>The credential pair that succeeded (null when no pair worked).</summary>
+    public OnvifCredentialPair? WorkingCredential { get; init; }
+    /// <summary>All credential pairs that were attempted.</summary>
+    public IReadOnlyCollection<OnvifCredentialPair> AttemptedCredentials { get; init; } = [];
+/// <summary>
+/// Human-readable summary.
+/// </summary>
+public string? Message { get; init; }
+}
+
+/// <summary>
+/// Request to fuzz a device's known CGI endpoints for authentication bypasses.
+/// Accepts either a stored <see cref="DeviceId"/> or a bare <see cref="IpAddress"/>.
+/// When <see cref="QuickScan"/> is true, only the most common bypass vectors are tried
+/// (fast, ~2s). Full scan tries all mutations and may take 15-30s.
+/// </summary>
+public sealed record CgiFuzzRequest
+{
+    public string? DeviceId { get; init; }
+    public string? IpAddress { get; init; }
+    public bool QuickScan { get; init; }
+}
+
+/// <summary>
+/// A single probe attempt within a CGI fuzz run.
+/// </summary>
+public sealed record CgiFuzzProbe
+{
+    public string Endpoint { get; init; } = string.Empty;
+    public string Method { get; init; } = "GET";
+    public string Variant { get; init; } = string.Empty;
+    public string? Strategy { get; init; }
+}
+
+/// <summary>
+/// A positive finding from a CGI fuzz run — an endpoint that returned data
+/// without proper authentication.
+/// </summary>
+public sealed record CgiFuzzFinding
+{
+    /// <summary>The endpoint that was probed.</summary>
+    public string Endpoint { get; init; } = string.Empty;
+    /// <summary>The HTTP method used.</summary>
+    public string Method { get; init; } = "GET";
+    /// <summary>The specific mutation variant that triggered the bypass.</summary>
+    public string Variant { get; init; } = string.Empty;
+    /// <summary>What strategy produced this finding (e.g. "method-fuzz", "path-fuzz", "header-fuzz").</summary>
+    public string? Strategy { get; init; }
+    /// <summary>The HTTP status code returned.</summary>
+    public int StatusCode { get; init; }
+    /// <summary>The Content-Type of the response.</summary>
+    public string? ContentType { get; init; }
+    /// <summary>Length of the response body in bytes.</summary>
+    public int BodyLength { get; init; }
+    /// <summary>First 200 chars of the response body (for operator review).</summary>
+    public string? BodyPreview { get; init; }
+    /// <summary>Human-readable description of the finding.</summary>
+    public string? Description { get; init; }
+}
+
+/// <summary>
+/// Result of a CGI fuzz run against a device.
+/// </summary>
+public sealed record CgiFuzzResult
+{
+    /// <summary>True when the fuzz run completed (even if zero findings).</summary>
+    public bool Success { get; init; }
+    /// <summary>Total probes attempted.</summary>
+    public int TotalProbes { get; init; }
+    /// <summary>Endpoints that returned data without auth — the prize.</summary>
+    public IReadOnlyCollection<CgiFuzzFinding> Findings { get; init; } = [];
+    /// <summary>Endpoints that were gated (401/403 or "check in falied").</summary>
+    public IReadOnlyCollection<string> GatedEndpoints { get; init; } = [];
+    /// <summary>Human-readable summary.</summary>
+    public string? Message { get; init; }
+}
+
 public sealed record SettingGroup
 {
     public string Name { get; init; } = string.Empty;

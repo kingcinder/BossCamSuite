@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { DeviceIdentity } from '../types';
-  import { AppState } from '../store';
+  import { AppState } from '../store.svelte';
   import { api } from '../api';
 
   let { device, index, appState }: { device: DeviceIdentity; index: number; appState: AppState } = $props();
@@ -21,6 +21,7 @@
   let streamRun = 0;
   let isDragging = $state(false);
   let isDragOver = $state(false);
+  let snapshotTimer: ReturnType<typeof setTimeout> | undefined;
 
   const lanHeaders = () => ({
     'X-LAN-Token': localStorage.getItem('bosscam.lanToken') || '',
@@ -45,19 +46,52 @@
     streamImageUrl = nextUrl;
     if (previous) URL.revokeObjectURL(previous);
     streamFailed = false;
+    appState.setStreamStatus(device.id, 'live');
   }
 
   function stopStream() {
     streamRun += 1;
+    if (snapshotTimer) { clearTimeout(snapshotTimer); snapshotTimer = undefined; }
     streamAbortController?.abort();
     streamAbortController = undefined;
     if (streamObjectUrl) URL.revokeObjectURL(streamObjectUrl);
     streamObjectUrl = undefined;
     streamImageUrl = '';
+    appState.setStreamStatus(device.id, 'connecting');
+  }
+
+  // When the MJPEG pipe fails (locked/degraded cameras), try the snapshot endpoint so the
+  // tile still shows a live still frame instead of spinning forever. Refreshes periodically
+  // while the stream stays down; the retry loop keeps hunting for the real stream.
+  async function attemptSnapshotFallback(run: number) {
+    if (run !== streamRun) return;
+    try {
+      const res = await fetch(api.snapshotUrl(device.id), {
+        headers: lanHeaders(),
+        cache: 'no-store',
+        signal: streamAbortController?.signal,
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      if (run !== streamRun || bytes.length < 100) return;
+      const nextUrl = URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' }));
+      const previous = streamObjectUrl;
+      streamObjectUrl = nextUrl;
+      streamImageUrl = nextUrl;
+      if (previous) URL.revokeObjectURL(previous);
+      appState.setStreamStatus(device.id, 'snapshot');
+      streamFailed = false;
+      streamErrorMsg = 'Stream unavailable — showing snapshot still';
+      if (snapshotTimer) clearTimeout(snapshotTimer);
+      snapshotTimer = setTimeout(() => { if (run === streamRun) void attemptSnapshotFallback(run); }, 4000);
+    } catch {
+      // Snapshot also unavailable — the stream retry loop keeps trying.
+    }
   }
 
   async function startStream() {
     stopStream();
+    appState.setStreamStatus(device.id, 'connecting');
     const run = streamRun;
     const controller = new AbortController();
     streamAbortController = controller;
@@ -101,7 +135,10 @@
       if (controller.signal.aborted || run !== streamRun) return;
       streamFailed = true;
       streamErrorMsg = `Stream failed — retrying (${String(error)})`;
-      setTimeout(() => { if (run === streamRun) void startStream(); }, 1500);
+      appState.setStreamStatus(device.id, 'retrying');
+      void attemptSnapshotFallback(run);
+      // 5s retry leaves room for the 4s snapshot refresh to fire before the next stream attempt.
+      setTimeout(() => { if (run === streamRun) void startStream(); }, 5000);
     }
   }
 
@@ -208,7 +245,9 @@
       </strong>
       <div class="sub">{device.ipAddress || ''} · {device.hardwareModel || ''}</div>
     </div>
-    <span class="sub">#{index + 1}</span>
+    <span class="tile-status" class:live={!streamFailed && !!streamImageUrl} class:snap={appState.streamStatusByDevice[device.id] === 'snapshot'} class:rec={isRecording} data-tip-pos="below" data-tip={streamFailed ? streamErrorMsg : appState.streamStatusByDevice[device.id] === 'snapshot' ? 'Video stream unavailable — showing snapshot still' : isRecording ? 'Recording' : 'Live stream active'}>
+      {#if isRecording}● REC{:else if appState.streamStatusByDevice[device.id] === 'snapshot'}📷 Still{:else if streamFailed}↻ Retrying{:else if streamImageUrl}● Live{:else}… Connecting{/if}
+    </span>
   </div>
   <div class="view-tile-media">
     <img
@@ -222,13 +261,13 @@
     {/if}
   </div>
   <div class="view-tile-actions">
-    <button onclick={select} type="button">Select</button>
-    <button onclick={snap} type="button">Snapshot</button>
+    <button onclick={select} type="button" data-tip="Select this camera for settings">Select</button>
+    <button onclick={snap} type="button" data-tip="Save a snapshot to disk">Snapshot</button>
     {#if isRecording}
-      <button onclick={stopRec} type="button" class="stop">⏹ Stop rec</button>
+      <button onclick={stopRec} type="button" class="stop" data-tip="Stop recording this camera">⏹ Stop rec</button>
       <span class="rec-badge">● REC</span>
     {:else}
-      <button onclick={startRec} type="button">Record</button>
+      <button onclick={startRec} type="button" data-tip="Start continuous recording">Record</button>
     {/if}
   </div>
 </div>
@@ -266,9 +305,28 @@
   .view-tile-bar.recording {
     background: #1a1a0ecc;
   }
-  .view-tile-bar strong { word-break: break-word; display: flex; align-items: center; gap: 4px; }
+  .view-tile-bar > div { min-width: 0; flex: 1; }
+  .view-tile-bar strong { display: flex; align-items: center; gap: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .view-tile-bar strong.recording { color: #ffb06a; }
-  .view-tile-bar .sub { color: var(--muted); font-size: .78rem; }
+  .view-tile-bar .sub { color: var(--muted); font-size: .78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tile-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: .68rem;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: #1a1a1a;
+    color: #999;
+    border: 1px solid #66666655;
+    white-space: nowrap;
+    cursor: help;
+    flex-shrink: 0;
+  }
+  .tile-status.live { background: #1a3a1a; color: #8fdd8f; border-color: #3ecf8e66; }
+  .tile-status.snap { background: #3a2a1a; color: #ddcf8f; border-color: #cf9e3e66; }
+  .tile-status.rec { background: #3a1a1a; color: #ff8f8f; border-color: #ff3e3e66; }
   .rec-dot {
     display: inline-block;
     width: 8px;
@@ -310,13 +368,19 @@
   }
   .view-tile-actions {
     display: flex;
-    gap: 4px;
-    padding: 4px 8px 8px;
+    gap: 6px;
+    padding: 6px 10px 10px;
     flex-wrap: wrap;
   }
   .view-tile-actions button {
-    padding: 4px 8px;
-    font-size: .78rem;
+    flex: 1 1 auto;
+    min-width: 76px;
+    padding: 6px 10px;
+    font-size: .8rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: center;
     background: #1a1010cc;
     border: 1px solid var(--border);
     border-radius: 8px;

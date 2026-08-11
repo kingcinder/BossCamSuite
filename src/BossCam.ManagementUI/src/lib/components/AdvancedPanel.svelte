@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AppState } from '../store';
+  import { AppState } from '../store.svelte';
   import { api } from '../api';
   import FirmwarePanel from './FirmwarePanel.svelte';
   import type { UserAccount, PersistenceVerificationResult } from '../types';

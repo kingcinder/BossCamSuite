@@ -30,6 +30,16 @@ public static class InfrastructureServiceCollectionExtensions
                     dataRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "share", "BossCamSuite");
                 }
 
+                // LAN-only / air-gapped operation: BOSSCAM_OFFLINE=1 (or BossCam:OfflineMode=true)
+                // disables cloud/P2P tunnels and the remote relay while LAN camera control,
+                // streaming, and recording keep working. Mirrors the BOSSCAM_* env-var conventions
+                // used elsewhere (BOSSCAM_LAN_TOKEN, BOSSCAM_E2E_LIVE).
+                var offlineEnv = Environment.GetEnvironmentVariable("BOSSCAM_OFFLINE");
+                if (!options.OfflineMode && string.Equals(offlineEnv, "1", StringComparison.OrdinalIgnoreCase))
+                {
+                    options.OfflineMode = true;
+                }
+
                 options.ProtocolAssetsPath = string.IsNullOrWhiteSpace(options.ProtocolAssetsPath)
                     ? Path.Combine(baseDirectory, "assets", "protocols")
                     : options.ProtocolAssetsPath;
@@ -62,6 +72,9 @@ public static class InfrastructureServiceCollectionExtensions
                 Directory.CreateDirectory(Path.Combine(dataRoot, "recordings"));
             });
 
+        services.AddSingleton<InternetConnectivityState>();
+        services.AddSingleton<IInternetConnectivityController>(sp => sp.GetRequiredService<InternetConnectivityState>());
+        services.AddSingleton<IInternetConnectivityState>(sp => sp.GetRequiredService<InternetConnectivityState>());
         services.AddSingleton<IApplicationStore, SqliteApplicationStore>();
 
         // Cross-platform credential cipher. CompositePasswordCipher lazily generates a
@@ -91,6 +104,19 @@ public static class InfrastructureServiceCollectionExtensions
         // GetCapabilities/GetConfigurations fixtures, and returns a PTZ verdict for the operator.
         services.AddSingleton<OnvifPtzCapabilityProbe>();
 
+        // ONVIF default-credential scanner: probes /onvif/device_service with known vendor defaults
+        // to discover working credentials on locked cameras where the web UI is gated.
+        services.AddSingleton<OnvifCredentialScanner>();
+
+        // Fleet auth-state snapshot: runs the ONVIF / RTSP / NetSDK probe matrix per camera and
+        // returns a structured report (POST /api/devices/auth-snapshot) so fleet auth state is
+        // one click to re-check without replaying curl one-liners.
+        services.AddSingleton<AuthSnapshotService>();
+
+        // CGI auth-bypass fuzzer: systematically tests path variants, HTTP methods, and parameter
+        // injections against known camera CGI endpoints to find authentication bypasses.
+        services.AddSingleton<CgiFuzzer>();
+
         // Probe-driven native NetSDK stream adapter (runs ahead of MultiBrand/StreamDescriptor):
         // GETs /NetSDK/System/deviceInfo and, when the camera answers, emits the live-proven
         // 5523-W HEVC ch0 paths and stamps the nativeNetSdk marker so the generic RTSP-guess tier
@@ -106,6 +132,7 @@ public static class InfrastructureServiceCollectionExtensions
         // IHttpClientFactory for pooled connection lifecycle. Named clients allow
         // per-service timeout configuration without per-call handler creation.
         services.AddHttpClient("probe", client => { client.Timeout = TimeSpan.FromSeconds(8); });
+        services.AddHttpClient("internet-probe", client => { client.Timeout = TimeSpan.FromSeconds(3); });
         services.AddHttpClient("snapshot", client => { client.Timeout = TimeSpan.FromSeconds(8); });
         services.AddHttpClient("onvif", client => { client.Timeout = TimeSpan.FromSeconds(8); });
         services.AddHttpClient("default", client => { client.Timeout = TimeSpan.FromSeconds(8); });
