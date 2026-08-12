@@ -47,6 +47,16 @@ public sealed class RecordingService(
     // incrementing, so a clear there would erase the very debt the cap is meant to accumulate.
     private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, int> _consecutiveStallRestarts = new();
 
+    /// <summary>
+    /// Last exit-rapid-restart timestamp per device. A continuous-record device whose
+    /// recorder exits spontaneously while the source was still producing fresh segments
+    /// (e.g. a 5523-W whose RTSP session the camera drops every few minutes) is re-picked
+    /// after <see cref="BossCamRuntimeOptions.RecordingExitRestartDelaySeconds"/> instead
+    /// of waiting for the slow, backed-off continuous-record policy. The timestamp doubles
+    /// as a cooldown so a flapping camera cannot spawn a tight ffmpeg loop.
+    /// </summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, DateTimeOffset> _lastExitRestart = new();
+
     public async Task<RecordingJob> StartAsync(RecordingStartRequest request, CancellationToken cancellationToken)
     {
         var device = await store.GetDeviceAsync(request.DeviceId, cancellationToken)
@@ -717,6 +727,15 @@ public sealed class RecordingService(
                     // Clean up the helper script on spontaneous exit too (camera drop, EOF, signal)
                     // so we don't leak /tmp/bosscam-rec-*.sh when nobody ever calls StopAsync.
                     TryDeleteScript(removed.ScriptPath);
+
+                    // Recording continuity: a continuous-record device whose recorder exited
+                    // spontaneously while its source was still producing media (e.g. the 5523-W
+                    // dropping the RTSP session every few minutes) must be re-picked in seconds,
+                    // not after the slow backed-off policy cycle (up to
+                    // RecordingRecoveryMaxRetrySeconds). Only when the source demonstrably
+                    // produced a fresh segment — a dead encoder must stay on the slow path so we
+                    // never spawn-storm a locked camera.
+                    await TryScheduleExitRapidRestartAsync(removed, CancellationToken.None);
                 }
             }
             finally
@@ -724,6 +743,90 @@ public sealed class RecordingService(
                 _gate.Release();
             }
         };
+    }
+
+    /// <summary>
+    /// Schedules a rapid restart for a continuous-record device whose recorder exited
+    /// spontaneously while the source was still producing fresh segments. Guards: (1) only
+    /// devices flagged <see cref="DeviceIdentity.ContinuousRecord"/> (fleet policy devices);
+    /// (2) a fresh segment must exist in the output directory (proves the camera was alive
+    /// right up to the drop — a locked encoder gets no spawn storm); (3) a per-device
+    /// cooldown (the same delay setting) prevents a tight loop when a camera flaps
+    /// repeatedly. The restart runs off the exit handler's gate to avoid a re-entrant
+    /// deadlock, and failures fall back to the normal continuous-record policy cycle.
+    /// </summary>
+    private async Task TryScheduleExitRapidRestartAsync(RunningRecording removed, CancellationToken cancellationToken)
+    {
+        var delaySeconds = _runtimeOptions.RecordingExitRestartDelaySeconds;
+        if (delaySeconds <= 0)
+        {
+            return; // exit rapid-restart disabled
+        }
+
+        try
+        {
+            var device = await store.GetDeviceAsync(removed.Job.DeviceId, cancellationToken);
+            if (device is null || !device.ContinuousRecord)
+            {
+                return;
+            }
+
+            var dir = removed.Job.OutputDirectory;
+            if (string.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir))
+            {
+                return;
+            }
+
+            // Fresh-segment proof: the source must have written media within the stall
+            // window right up to the drop. No segment (or an ancient one) means the source
+            // was never producing — stay on the slow backed-off policy path.
+            var latest = Directory.EnumerateFiles(dir, "*.*")
+                .Where(RecordingSegmentPolicy.IsSupportedSegmentPath)
+                .Select(static p => new FileInfo(p))
+                .OrderByDescending(static f => f.LastWriteTimeUtc)
+                .FirstOrDefault();
+            if (latest is null)
+            {
+                return;
+            }
+
+            var stallTimeout = Math.Max(30, _runtimeOptions.StallTimeoutSeconds);
+            if (RecordingLifecyclePolicy.IsStalled(
+                DateTimeOffset.UtcNow,
+                new DateTimeOffset(latest.LastWriteTimeUtc, TimeSpan.Zero),
+                stallTimeout))
+            {
+                return;
+            }
+
+            var now = DateTimeOffset.UtcNow;
+            var cooldown = TimeSpan.FromSeconds(Math.Max(5, delaySeconds));
+            if (_lastExitRestart.TryGetValue(removed.Job.DeviceId, out var last) && now - last < cooldown)
+            {
+                return;
+            }
+
+            _lastExitRestart[removed.Job.DeviceId] = now;
+            var restartDelay = TimeSpan.FromSeconds(Math.Max(3, delaySeconds));
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(restartDelay, CancellationToken.None);
+                    var restarted = await StartAsync(new RecordingStartRequest { DeviceId = removed.Job.DeviceId }, CancellationToken.None);
+                    logger.LogInformation("Exit rapid-restart: new job {JobId} for device={Device} (recording continuity)", restarted.Id, removed.Job.DeviceId);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Exit rapid-restart failed for device={Device}; continuous-record policy remains the fallback", removed.Job.DeviceId);
+                }
+            }, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            // Never let exit cleanup fail because the rapid-restart bookkeeping threw.
+            logger.LogDebug(ex, "Exit rapid-restart check skipped for device={Device}", removed.Job.DeviceId);
+        }
     }
 
     public async Task<IReadOnlyCollection<RecordingJob>> GetJobsAsync(CancellationToken cancellationToken)

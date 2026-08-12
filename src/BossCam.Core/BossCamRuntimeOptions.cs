@@ -188,6 +188,17 @@ public sealed class BossCamRuntimeOptions
     public int RecordingRecoveryMaxRetrySeconds { get; set; } = 300;
 
     /// <summary>
+    /// Seconds before a spontaneous recorder exit for a continuous-record device is restarted
+    /// when the source was still producing fresh segments (e.g. a 5523-W whose RTSP session
+    /// the camera drops every few minutes). The continuous-record policy otherwise waits up to
+    /// <see cref="RecordingRecoveryMaxRetrySeconds"/> before re-picking the device, leaving a
+    /// multi-minute recording gap; this fast path re-arms the recorder in seconds. The same
+    /// value acts as the per-device cooldown so a flapping camera cannot spawn a tight ffmpeg
+    /// loop. Zero disables exit rapid-restart.
+    /// </summary>
+    public int RecordingExitRestartDelaySeconds { get; set; } = 10;
+
+    /// <summary>
     /// Absolute path to <c>scripts/recover-and-enroll-camera.sh</c>. When empty, the
     /// <c>CameraRecoveryService</c> falls back to <c>&lt;content-root&gt;/scripts/</c>
     /// then <c>&lt;cwd&gt;/scripts/</c>.

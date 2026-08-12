@@ -414,6 +414,184 @@ public sealed class RecordingResilienceTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// Exit rapid-restart (recording continuity): a continuous-record device whose recorder
+    /// exits spontaneously while a fresh segment exists must be re-picked quickly (within
+    /// RecordingExitRestartDelaySeconds) rather than waiting for the slow backed-off policy.
+    /// Uses a fake ffmpeg that writes a fresh segment then exits, exactly like a 5523-W
+    /// whose RTSP session the camera drops every few minutes.
+    /// </summary>
+    [Fact]
+    public async Task Spontaneous_Exit_Rapid_Restarts_Continuous_Record_Device_With_Fresh_Segment()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return; // fake-ffmpeg script is POSIX-only
+        }
+
+        var runtimeOptions = new BossCamRuntimeOptions
+        {
+            DatabasePath = _dbPath,
+            RecordingExitRestartDelaySeconds = 1
+        };
+        var store = new SqliteApplicationStore(Options.Create(runtimeOptions));
+        await store.InitializeAsync(CancellationToken.None);
+        Directory.CreateDirectory(_outputDir);
+
+        var device = new DeviceIdentity
+        {
+            Id = Guid.NewGuid(),
+            Name = "flappy-cam",
+            IpAddress = "10.0.0.77",
+            Port = 80,
+            DeviceType = "IPC",
+            ContinuousRecord = true
+        };
+        await store.UpsertDevicesAsync([device], CancellationToken.None);
+
+        // Fake ffmpeg: write a fresh .ts segment, then exit (simulates the camera dropping
+        // the RTSP session after ~2s of healthy recording).
+        var fakeFfmpeg = Path.Combine(_outputDir, $"fake-ffmpeg-exit-{Guid.NewGuid():N}.sh");
+        await File.WriteAllTextAsync(fakeFfmpeg,
+            $"#!/usr/bin/env bash\n" +
+            $"touch \"{_outputDir}/fresh.ts\"\n" +
+            $"sleep 2\n");
+        using (var chmod = Process.Start("chmod", $"+x {fakeFfmpeg}"))
+        {
+            chmod?.WaitForExit(2000);
+        }
+
+        var previousFfmpeg = Environment.GetEnvironmentVariable("BOSSCAM_FFMPEG_PATH");
+        Environment.SetEnvironmentVariable("BOSSCAM_FFMPEG_PATH", fakeFfmpeg);
+        try
+        {
+            var service = new RecordingService(
+                store,
+                new TransportBroker([], store, null, NullLogger<TransportBroker>.Instance),
+                new TestRecordingPipelineResolver(),
+                NullBossCamEventBroadcaster.Instance,
+                new HttpClientFactoryMock(),
+                NullLogger<RecordingService>.Instance,
+                new ApplicationStoreRecordingStore(store),
+                new RecordingProcessSupervisor(),
+                Options.Create(runtimeOptions));
+
+            var first = await service.StartAsync(new RecordingStartRequest
+            {
+                DeviceId = device.Id,
+                // Explicit RTSP URL → direct-ffmpeg pipeline (skips the snapshot probe). The
+                // fake ffmpeg IS the tracked process, so its exit fires WireExitCleanup — the
+                // snapshot pipeline's `while curl | ffmpeg` bash helper would keep the process
+                // alive when the child exits and the handler would never run.
+                SourceUrl = "rtsp://admin:@10.0.0.77:554/ch0_0.264",
+                OutputDirectory = _outputDir
+            }, CancellationToken.None);
+            Assert.True(first.IsRunning);
+
+            // Wait for the spontaneous exit (sleep 2) + rapid-restart delay (1s) + startup.
+            RecordingJob? restarted = null;
+            var deadline = DateTime.UtcNow.AddSeconds(20);
+            while (DateTime.UtcNow < deadline)
+            {
+                var jobs = await service.GetJobsAsync(CancellationToken.None);
+                restarted = jobs.FirstOrDefault(j => j.DeviceId == device.Id && j.Id != first.Id && j.IsRunning);
+                if (restarted is not null)
+                {
+                    break;
+                }
+
+                await Task.Delay(500, CancellationToken.None);
+            }
+
+            Assert.NotNull(restarted);
+            Assert.NotEqual(first.Id, restarted.Id);
+            await service.StopAsync(restarted.Id, CancellationToken.None);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("BOSSCAM_FFMPEG_PATH", previousFfmpeg);
+        }
+    }
+
+    /// <summary>
+    /// Negative guard: a device that is NOT flagged continuous-record must NOT be
+    /// auto-restarted on spontaneous exit — exit rapid-restart is reserved for the fleet
+    /// continuous-record policy devices so operator/manual jobs stay operator-controlled.
+    /// </summary>
+    [Fact]
+    public async Task Spontaneous_Exit_Does_Not_Rapid_Restart_Non_Continuous_Device()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return; // fake-ffmpeg script is POSIX-only
+        }
+
+        var runtimeOptions = new BossCamRuntimeOptions
+        {
+            DatabasePath = _dbPath,
+            RecordingExitRestartDelaySeconds = 1
+        };
+        var store = new SqliteApplicationStore(Options.Create(runtimeOptions));
+        await store.InitializeAsync(CancellationToken.None);
+        Directory.CreateDirectory(_outputDir);
+
+        var device = new DeviceIdentity
+        {
+            Id = Guid.NewGuid(),
+            Name = "manual-cam",
+            IpAddress = "10.0.0.78",
+            Port = 80,
+            DeviceType = "IPC",
+            ContinuousRecord = false
+        };
+        await store.UpsertDevicesAsync([device], CancellationToken.None);
+
+        var fakeFfmpeg = Path.Combine(_outputDir, $"fake-ffmpeg-manual-{Guid.NewGuid():N}.sh");
+        await File.WriteAllTextAsync(fakeFfmpeg,
+            $"#!/usr/bin/env bash\n" +
+            $"touch \"{_outputDir}/fresh.ts\"\n" +
+            $"sleep 2\n");
+        using (var chmod = Process.Start("chmod", $"+x {fakeFfmpeg}"))
+        {
+            chmod?.WaitForExit(2000);
+        }
+
+        var previousFfmpeg = Environment.GetEnvironmentVariable("BOSSCAM_FFMPEG_PATH");
+        Environment.SetEnvironmentVariable("BOSSCAM_FFMPEG_PATH", fakeFfmpeg);
+        try
+        {
+            var service = new RecordingService(
+                store,
+                new TransportBroker([], store, null, NullLogger<TransportBroker>.Instance),
+                new TestRecordingPipelineResolver(),
+                NullBossCamEventBroadcaster.Instance,
+                new HttpClientFactoryMock(),
+                NullLogger<RecordingService>.Instance,
+                new ApplicationStoreRecordingStore(store),
+                new RecordingProcessSupervisor(),
+                Options.Create(runtimeOptions));
+
+            var first = await service.StartAsync(new RecordingStartRequest
+            {
+                DeviceId = device.Id,
+                // Explicit RTSP URL → direct-ffmpeg pipeline so the fake ffmpeg's exit fires
+                // WireExitCleanup (see the positive test for why snapshot mode can't be used).
+                SourceUrl = "rtsp://admin:@10.0.0.78:554/ch0_0.264",
+                OutputDirectory = _outputDir
+            }, CancellationToken.None);
+            Assert.True(first.IsRunning);
+
+            // Give the spontaneous exit + rapid-restart window ample time; NO new job may appear.
+            await Task.Delay(TimeSpan.FromSeconds(6), CancellationToken.None);
+            var jobs = await service.GetJobsAsync(CancellationToken.None);
+            Assert.DoesNotContain(jobs, j => j.DeviceId == device.Id && j.Id != first.Id && j.IsRunning);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("BOSSCAM_FFMPEG_PATH", previousFfmpeg);
+        }
+    }
+
     [Fact]
     public async Task CheckStalledJobsAsync_Disabled_When_Timeout_Zero()
     {
