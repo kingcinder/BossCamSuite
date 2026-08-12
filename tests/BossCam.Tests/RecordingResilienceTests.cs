@@ -263,6 +263,158 @@ public sealed class RecordingResilienceTests : IDisposable
     }
 
     [Fact]
+    public async Task CheckStalledJobsAsync_AutoRestart_Suspends_After_Max_Consecutive_Restarts()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return; // needs a real killable child process
+        }
+
+        // NOTE: the capped options must be handed to the SERVICE, not just the store —
+        // RecordingService's optional IOptions defaults to RecordingMaxConsecutiveRestarts=3
+        // (the production value), so a cap of 1 only applies when it is injected here.
+        var runtimeOptions = new BossCamRuntimeOptions
+        {
+            DatabasePath = _dbPath,
+            RecordingMaxConsecutiveRestarts = 1
+        };
+        var store = new SqliteApplicationStore(Options.Create(runtimeOptions));
+        await store.InitializeAsync(CancellationToken.None);
+        Directory.CreateDirectory(_outputDir);
+        var service = new RecordingService(
+            store,
+            new TransportBroker([], store, null, NullLogger<TransportBroker>.Instance),
+            new TestRecordingPipelineResolver(),
+            NullBossCamEventBroadcaster.Instance,
+            new HttpClientFactoryMock(),
+            NullLogger<RecordingService>.Instance,
+            new ApplicationStoreRecordingStore(store),
+            new RecordingProcessSupervisor(),
+            Options.Create(runtimeOptions));
+        var deviceId = Guid.NewGuid();
+
+        var staleSegment = Path.Combine(_outputDir, "dev_20260101_000000.ts");
+        await File.WriteAllTextAsync(staleSegment, "x");
+        File.SetLastWriteTimeUtc(staleSegment, DateTime.UtcNow.AddMinutes(-10));
+
+        // First stall: within the cap (1 restart allowed) → auto-restart is attempted. No device
+        // exists in the store, so StartAsync throws "Device not found" — which is caught and
+        // logged, exactly like a source that refuses to start — and the counter advances to 1.
+        RecordingJob? firstResult = null;
+        using (var first = SpawnSleep())
+        {
+            var job = BuildJob(deviceId, first.Id, _outputDir, startedAt: DateTimeOffset.UtcNow);
+            await store.SaveRecordingJobsAsync([job], CancellationToken.None);
+            await service.ReconcilePersistedJobsAsync(CancellationToken.None);
+            firstResult = Assert.Single(await service.CheckStalledJobsAsync(stallTimeoutSeconds: 5, autoRestart: true, CancellationToken.None));
+            Assert.True(first.WaitForExit(5000), "first stalled pipeline should have been stopped");
+        }
+        Assert.False(firstResult!.IsRunning);
+
+        // Second stall for the SAME device: the counter now exceeds the cap → the fast
+        // auto-restart is suspended and the job is marked stopped with a clear error instead
+        // of spawning yet another ffmpeg.
+        RecordingJob? secondResult = null;
+        using (var second = SpawnSleep())
+        {
+            var job = BuildJob(deviceId, second.Id, _outputDir, startedAt: DateTimeOffset.UtcNow);
+            await store.SaveRecordingJobsAsync([job], CancellationToken.None);
+            await service.ReconcilePersistedJobsAsync(CancellationToken.None);
+            secondResult = Assert.Single(await service.CheckStalledJobsAsync(stallTimeoutSeconds: 5, autoRestart: true, CancellationToken.None));
+            Assert.True(second.WaitForExit(5000), "second stalled pipeline should have been stopped");
+        }
+        Assert.False(secondResult!.IsRunning);
+        Assert.Contains("auto-restart suspended", secondResult.LastError, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("not producing media", secondResult.LastError, StringComparison.OrdinalIgnoreCase);
+
+        // The suspension must be persisted, not just in-memory.
+        var persisted = await store.GetRecordingJobsAsync(deviceId, CancellationToken.None);
+        var latest = persisted.OrderByDescending(static j => j.StartedAt).First();
+        Assert.Contains("auto-restart suspended", latest.LastError, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task CheckStalledJobsAsync_AutoRestart_Cap_Clears_On_Fresh_Segment_Growth()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return; // needs a real killable child process
+        }
+
+        // NOTE: the capped options must be handed to the SERVICE, not just the store —
+        // RecordingService's optional IOptions defaults to RecordingMaxConsecutiveRestarts=3
+        // (the production value), so a cap of 1 only applies when it is injected here.
+        var runtimeOptions = new BossCamRuntimeOptions
+        {
+            DatabasePath = _dbPath,
+            RecordingMaxConsecutiveRestarts = 1
+        };
+        var store = new SqliteApplicationStore(Options.Create(runtimeOptions));
+        await store.InitializeAsync(CancellationToken.None);
+        Directory.CreateDirectory(_outputDir);
+        var service = new RecordingService(
+            store,
+            new TransportBroker([], store, null, NullLogger<TransportBroker>.Instance),
+            new TestRecordingPipelineResolver(),
+            NullBossCamEventBroadcaster.Instance,
+            new HttpClientFactoryMock(),
+            NullLogger<RecordingService>.Instance,
+            new ApplicationStoreRecordingStore(store),
+            new RecordingProcessSupervisor(),
+            Options.Create(runtimeOptions));
+        var deviceId = Guid.NewGuid();
+
+        var staleSegment = Path.Combine(_outputDir, "dev_20260101_000000.ts");
+        await File.WriteAllTextAsync(staleSegment, "x");
+        File.SetLastWriteTimeUtc(staleSegment, DateTime.UtcNow.AddMinutes(-10));
+
+        // Burn one restart (counter → 1) via a stale job whose restart fails (no device in store).
+        using (var burn = SpawnSleep())
+        {
+            var job = BuildJob(deviceId, burn.Id, _outputDir, startedAt: DateTimeOffset.UtcNow);
+            await store.SaveRecordingJobsAsync([job], CancellationToken.None);
+            await service.ReconcilePersistedJobsAsync(CancellationToken.None);
+            _ = await service.CheckStalledJobsAsync(stallTimeoutSeconds: 5, autoRestart: true, CancellationToken.None);
+            Assert.True(burn.WaitForExit(5000));
+        }
+
+        // A fresh segment proves the source recovered → the consecutive-restart debt is cleared.
+        var freshSegment = Path.Combine(_outputDir, "dev_20260102_000000.ts");
+        await File.WriteAllTextAsync(freshSegment, "x");
+        File.SetLastWriteTimeUtc(freshSegment, DateTime.UtcNow.AddSeconds(-1));
+        RecordingJob? healthyJob = null;
+        using (var healthy = SpawnSleep())
+        {
+            healthyJob = BuildJob(deviceId, healthy.Id, _outputDir, startedAt: DateTimeOffset.UtcNow);
+            await store.SaveRecordingJobsAsync([healthyJob], CancellationToken.None);
+            await service.ReconcilePersistedJobsAsync(CancellationToken.None);
+            var stalled = await service.CheckStalledJobsAsync(stallTimeoutSeconds: 5, autoRestart: true, CancellationToken.None);
+            Assert.Empty(stalled); // fresh growth → not stalled, and debt cleared
+            Assert.False(healthy.HasExited);
+            // Must stop the healthy pipeline explicitly: Process.Dispose (via the using) does
+            // NOT kill the child, so a live recorder left running would be re-attached by the
+            // next phase's reconcile and stall too — double-reporting the same device and
+            // burning the restart budget twice.
+            await service.StopAsync(healthyJob.Id, CancellationToken.None);
+            Assert.True(healthy.WaitForExit(5000), "healthy pipeline should have been stopped");
+        }
+
+        // Now a new stall must restart again (counter restarted from 0 → 1 ≤ cap), NOT suspend.
+        File.SetLastWriteTimeUtc(staleSegment, DateTime.UtcNow.AddMinutes(-10)); // re-stale
+        File.SetLastWriteTimeUtc(freshSegment, DateTime.UtcNow.AddMinutes(-10));
+        using (var third = SpawnSleep())
+        {
+            var job = BuildJob(deviceId, third.Id, _outputDir, startedAt: DateTimeOffset.UtcNow);
+            await store.SaveRecordingJobsAsync([job], CancellationToken.None);
+            await service.ReconcilePersistedJobsAsync(CancellationToken.None);
+            var result = Assert.Single(await service.CheckStalledJobsAsync(stallTimeoutSeconds: 5, autoRestart: true, CancellationToken.None));
+            Assert.True(third.WaitForExit(5000));
+            // No suspension error — the fresh-growth reset gave the device a fresh budget.
+            Assert.DoesNotContain("auto-restart suspended", result.LastError, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
     public async Task CheckStalledJobsAsync_Disabled_When_Timeout_Zero()
     {
         if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())

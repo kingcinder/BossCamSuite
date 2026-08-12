@@ -38,6 +38,14 @@ public sealed class RecordingService(
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly RecordingProcessSupervisor _processSupervisor = processSupervisor;
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, (DateTimeOffset mtime, long size)> _indexedCache = new(StringComparer.OrdinalIgnoreCase);
+    // Per-device consecutive stall-restart counter. A source that never produces media (dead
+    // encoder / silent RTSP) must not spawn ffmpeg forever: after RecordingMaxConsecutiveRestarts
+    // consecutive stalled restarts the fast auto-restart is suspended and the job is marked with
+    // a clear error. Reset to zero whenever a stall check observes fresh segment growth (the
+    // source demonstrably recovered) or when the cap suspends the auto-restart. NOTE: StartAsync
+    // intentionally does NOT clear it — the auto-restart path itself calls StartAsync right after
+    // incrementing, so a clear there would erase the very debt the cap is meant to accumulate.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, int> _consecutiveStallRestarts = new();
 
     public async Task<RecordingJob> StartAsync(RecordingStartRequest request, CancellationToken cancellationToken)
     {
@@ -434,13 +442,22 @@ public sealed class RecordingService(
             if (latest is null) continue;
 
             var latestWrite = new DateTimeOffset(latest.LastWriteTimeUtc, TimeSpan.Zero);
-            if (!RecordingLifecyclePolicy.IsStalled(now, latestWrite, stallTimeoutSeconds)) continue;
+            if (!RecordingLifecyclePolicy.IsStalled(now, latestWrite, stallTimeoutSeconds))
+            {
+                // Fresh segment growth proves this source is alive again — clear any prior
+                // consecutive-restart debt so a recovered camera gets the full restart budget.
+                _consecutiveStallRestarts.TryRemove(running.Job.DeviceId, out _);
+                continue;
+            }
 
             var idle = (now - latestWrite).TotalSeconds;
             logger.LogWarning("Stall detected: job={JobId} device={Device} idle={Idle:F0}s threshold={Threshold}s latest={Latest}",
                 jobId, running.Job.DeviceId, idle, stallTimeoutSeconds, latest.FullName);
 
             // Stop the stalled pipeline while holding the orchestration gate.
+            // `stoppedJob` is hoisted so the auto-restart block below (outside the gate)
+            // can persist the suspended state without re-querying the supervisor.
+            RecordingJob? stoppedJob = null;
             await _gate.WaitAsync(cancellationToken);
             try
             {
@@ -457,19 +474,58 @@ public sealed class RecordingService(
 
                 _processSupervisor.Remove(jobId, out _);
                 var stopped = current.Job with { IsRunning = false, StoppedAt = now, LastError = "Stalled: no segment growth" };
+                stoppedJob = stopped;
                 try { await _recordingStore.SaveRecordingJobsAsync([stopped], cancellationToken); }
                 catch (Exception ex) { logger.LogWarning(ex, "Failed to persist stalled recording job {JobId}", stopped.Id); }
                 _ = broadcaster.RecordingJobStoppedAsync(stopped, CancellationToken.None);
-                stalled.Add(stopped);
+                // `stalled` is populated below (outside the gate) so the suspension outcome —
+                // when the restart cap trips — is the reported result, not the raw stop.
             }
             finally
             {
                 _gate.Release();
             }
 
-            // PR-R4: Auto-restart once if configured — outside the gate to avoid deadlock
+            // PR-R4: Auto-restart once if configured — outside the gate to avoid deadlock.
+            // Cap consecutive restarts per device: a source that never produces media (e.g. a
+            // 5523-W whose encoder pipeline locked up — RTSP answers but serves zero streams)
+            // would otherwise restart a doomed ffmpeg every stall cycle forever. After
+            // RecordingMaxConsecutiveRestarts consecutive stalls with no fresh segment, the
+            // fast auto-restart is suspended and the job is marked stopped with a clear error;
+            // the continuous-record policy (slow, backed-off) remains the recovery path for a
+            // camera that genuinely comes back.
             if (autoRestart)
             {
+                // Defensive: unreachable in practice — an in-gate `continue` (process already
+                // exited) skips this whole block via the finally. Keeps the nullable analysis
+                // simple without null-forgiving operators.
+                if (stoppedJob is null)
+                {
+                    _consecutiveStallRestarts.TryRemove(running.Job.DeviceId, out _);
+                    continue;
+                }
+
+                var maxRestarts = Math.Max(0, _runtimeOptions.RecordingMaxConsecutiveRestarts);
+                var restartCount = _consecutiveStallRestarts.AddOrUpdate(
+                    running.Job.DeviceId, 1, static (_, current) => current + 1);
+                if (maxRestarts > 0 && restartCount > maxRestarts)
+                {
+                    // Cap tripped: persist the stopped job with a clear error and report it as
+                    // the outcome of this cycle. The continuous-record policy (slow, backed-off)
+                    // remains the recovery path for a camera that genuinely comes back.
+                    _consecutiveStallRestarts.TryRemove(running.Job.DeviceId, out _);
+                    var suspended = stoppedJob with
+                    {
+                        LastError = $"Camera source not producing media after {restartCount} consecutive restarts — auto-restart suspended; verify camera encoder/stream (recording continuity preserved via continuous-record policy)."
+                    };
+                    try { await _recordingStore.SaveRecordingJobsAsync([suspended], cancellationToken); }
+                    catch (Exception ex) { logger.LogWarning(ex, "Failed to persist suspended recording job {JobId}", suspended.Id); }
+                    _ = broadcaster.RecordingJobStoppedAsync(suspended, CancellationToken.None);
+                    stalled.Add(suspended);
+                    logger.LogWarning("Auto-restart suspended for device={Device} after {Count} consecutive stalls — camera source not producing media", running.Job.DeviceId, restartCount);
+                    continue;
+                }
+
                 try
                 {
                     var restarted = await StartAsync(new RecordingStartRequest { DeviceId = running.Job.DeviceId }, cancellationToken);
@@ -479,6 +535,13 @@ public sealed class RecordingService(
                 {
                     logger.LogWarning(ex, "Auto-restart failed for stalled job {JobId}", jobId);
                 }
+            }
+
+            // Report the final outcome of this cycle for the job. When the cap suspends the
+            // auto-restart, `suspended` was already added above and `continue` skipped this.
+            if (stoppedJob is not null)
+            {
+                stalled.Add(stoppedJob);
             }
         }
 

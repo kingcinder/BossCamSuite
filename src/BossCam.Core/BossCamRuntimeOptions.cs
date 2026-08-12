@@ -155,6 +155,18 @@ public sealed class BossCamRuntimeOptions
     /// <summary>PR-R4: When true, stalled pipelines auto-restart once instead of staying stopped.</summary>
     public bool StallAutoRestart { get; set; } = true;
 
+    /// <summary>
+    /// Maximum consecutive stall auto-restarts allowed for one device before the fast
+    /// auto-restart is suspended and the job is marked failed with a clear error
+    /// ("camera source not producing media"). Prevents an ffmpeg spawn storm against a
+    /// permanently-dead source — e.g. a 5523-W whose encoder pipeline locked up (RTSP
+    /// answers but serves zero media) — from restarting a doomed job every stall cycle
+    /// forever. The continuous-record policy remains the slow, backed-off recovery path
+    /// so a camera that genuinely returns is still picked up. Zero disables the cap.
+    /// Default 3.
+    /// </summary>
+    public int RecordingMaxConsecutiveRestarts { get; set; } = 3;
+
     /// <summary>Per-minute cap for /api/devices/{id}/snapshot. Each snapshot is one or more HTTP GETs against the camera.</summary>
     public int RateLimitSnapshotPerMinute { get; set; } = 30;
 
