@@ -18,6 +18,15 @@ namespace BossCam.Core.Services.Recording;
 /// </summary>
 public sealed class DirectFfmpegRecordingPipeline : IRecordingPipeline
 {
+    /// <summary>
+    /// RTSP demuxer socket I/O timeout in microseconds (10s). A 5523-W whose RTSP session the
+    /// camera silently drops (media stops but the TCP socket stays open) would otherwise block
+    /// ffmpeg's read forever — the process never exits, so recovery never fires. With this
+    /// option ffmpeg aborts the stalled input and exits, which the exit rapid-restart path
+    /// observes as a spontaneous exit and re-arms in seconds.
+    /// </summary>
+    public const int RtspSocketTimeoutMicroseconds = 10_000_000;
+
     public string Mode => "direct-ffmpeg";
 
     public RecordingHandle Start(RecordingPipelineContext context)
@@ -34,7 +43,15 @@ public sealed class DirectFfmpegRecordingPipeline : IRecordingPipeline
         };
         if (sourceUrl.StartsWith("rtsp://", StringComparison.OrdinalIgnoreCase))
         {
-            // TCP interleaved RTP. Avoid stimeout/rw_timeout — option names vary by ffmpeg build.
+            // TCP interleaved RTP. A silent RTSP stall (the 5523-W drops the media session but
+            // keeps the TCP socket open) would otherwise block ffmpeg's read forever at ~0% CPU —
+            // the process never exits, so neither the exit rapid-restart nor the stall watchdog
+            // can re-arm recording. -timeout (rtsp demuxer socket I/O timeout, microseconds) makes
+            // ffmpeg abort the input after the stall and exit, which WireExitCleanup observes as a
+            // spontaneous exit and rapid-restarts (recording continuity). Verified against the
+            // deployed ffmpeg: -timeout is accepted; stimeout/rw_timeout are rejected.
+            args.Add("-timeout");
+            args.Add(RtspSocketTimeoutMicroseconds.ToString(System.Globalization.CultureInfo.InvariantCulture));
             args.Add("-rtsp_transport");
             args.Add("tcp");
         }
@@ -105,6 +122,8 @@ public sealed class DirectFfmpegRecordingPipeline : IRecordingPipeline
         };
         if (sourceUrl.StartsWith("rtsp://", StringComparison.OrdinalIgnoreCase))
         {
+            args.Add("-timeout");
+            args.Add(RtspSocketTimeoutMicroseconds.ToString(System.Globalization.CultureInfo.InvariantCulture));
             args.Add("-rtsp_transport");
             args.Add("tcp");
         }

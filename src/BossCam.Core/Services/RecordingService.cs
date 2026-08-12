@@ -829,6 +829,53 @@ public sealed class RecordingService(
         }
     }
 
+    /// <summary>
+    /// Runs a network-bound supervision call under a hard wall-clock budget so one unreachable
+    /// camera (source-resolution probes stacking HttpClient timeouts) can never starve the
+    /// single-threaded <c>RecordingLifecycleWorker</c> loop — a stalled recorder on camera B
+    /// must still be detected while camera A is offline. On timeout the loop moves on and the
+    /// abandoned call keeps running in the background: if it later completes and starts a job,
+    /// the supervisor's dedup (GetRunningForProfileAsync + persisted-running guard) adopts it,
+    /// so recording continuity is preserved either way. The abandoned task's exceptions are
+    /// observed so an unhandled fault can never crash the process. Public because the
+    /// <c>RecordingLifecycleWorker</c> (BossCam.Service assembly) invokes it for the stall
+    /// check and both record reconciles; it is also exercised directly by unit tests.
+    /// </summary>
+    public static async Task<T> RunBoundedAsync<T>(
+        Func<CancellationToken, Task<T>> work,
+        TimeSpan budget,
+        ILogger logger,
+        string what,
+        CancellationToken cancellationToken)
+    {
+        var task = work(cancellationToken);
+        var completed = await Task.WhenAny(task, Task.Delay(budget, cancellationToken));
+        if (completed != task)
+        {
+            logger.LogWarning(
+                "Recording supervision call {What} exceeded its {Seconds:F0}s budget; continuing the loop (background work may still complete)",
+                what,
+                budget.TotalSeconds);
+            // Observe the abandoned task so a late fault is logged (never unhandled) and a
+            // late success is attributed to the budgeted call — otherwise a recording job
+            // appearing minutes after the warning would look unexplained to an operator.
+            _ = task.ContinueWith(t =>
+            {
+                if (t.IsFaulted)
+                {
+                    logger.LogWarning(t.Exception, "Abandoned supervision call {What} faulted after its budget", what);
+                }
+                else if (t.IsCompletedSuccessfully)
+                {
+                    logger.LogInformation("Abandoned supervision call {What} completed after its budget", what);
+                }
+            }, TaskContinuationOptions.ExecuteSynchronously);
+            return default!;
+        }
+
+        return await task;
+    }
+
     public async Task<IReadOnlyCollection<RecordingJob>> GetJobsAsync(CancellationToken cancellationToken)
     {
         await _gate.WaitAsync(cancellationToken);
@@ -1342,7 +1389,14 @@ public sealed class RecordingService(
 
         if (sourceUrl.StartsWith("rtsp://", StringComparison.OrdinalIgnoreCase))
         {
-            // TCP interleaved RTP. Avoid stimeout/rw_timeout — option names vary by ffmpeg build.
+            // TCP interleaved RTP. A silent RTSP stall would otherwise block ffmpeg's read
+            // forever (~0% CPU, never exits) — -timeout (rtsp demuxer socket I/O timeout, µs)
+            // aborts the stalled input so WireExitCleanup's exit rapid-restart can re-arm.
+            // Single source of truth: the argv-pinning E2E test asserts this exact string, so
+            // it must never drift from DirectFfmpegRecordingPipeline's real args.
+            sb.Append("-timeout ")
+                .Append(DirectFfmpegRecordingPipeline.RtspSocketTimeoutMicroseconds.ToString(System.Globalization.CultureInfo.InvariantCulture))
+                .Append(' ');
             sb.Append("-rtsp_transport tcp ");
         }
 

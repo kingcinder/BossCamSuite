@@ -39,6 +39,12 @@ public sealed class RecordingLifecycleWorker(
         var policyBackoff = policyRetryInterval;
         var stallBackoff = policyRetryInterval;
         var stallCheckGraceUntil = DateTimeOffset.MinValue;
+        // Hard wall-clock budget for each network-bound supervision call. Source resolution
+        // probes unreachable cameras with HttpClient timeouts that can stack into minutes;
+        // without a budget one offline camera starves stall detection for every other device.
+        // The abandoned call keeps running in the background — a late job start is deduped by
+        // the supervisor — so recording continuity is preserved while the loop always advances.
+        var supervisionBudget = TimeSpan.FromSeconds(Math.Max(10, options.Value.RecordingSupervisionCallTimeoutSeconds));
 
         using var timer = new PeriodicTimer(recoveryInterval);
         while (await timer.WaitForNextTickAsync(stoppingToken))
@@ -49,10 +55,15 @@ public sealed class RecordingLifecycleWorker(
             {
                 try
                 {
-                    var stalled = await recordingService.CheckStalledJobsAsync(
-                        stallTimeoutSeconds,
-                        options.Value.StallAutoRestart,
-                        stoppingToken);
+                    var stalled = await RecordingService.RunBoundedAsync(
+                        ct => recordingService.CheckStalledJobsAsync(
+                            stallTimeoutSeconds,
+                            options.Value.StallAutoRestart,
+                            ct),
+                        supervisionBudget,
+                        logger,
+                        "stall check",
+                        stoppingToken) ?? [];
                     if (stalled.Count > 0)
                     {
                         logger.LogWarning("Fast recovery stall check: {Count} stalled job(s) handled; next stall retry in {Delay}s", stalled.Count, stallBackoff.TotalSeconds);
@@ -79,8 +90,18 @@ public sealed class RecordingLifecycleWorker(
                 var reconciled = await recordingService.ReconcilePersistedJobsAsync(stoppingToken);
                 if (DateTimeOffset.UtcNow >= nextPolicyReconcile)
                 {
-                    var started = await recordingService.ReconcileAutoStartAsync(stoppingToken);
-                    var continuous = await recordingService.ReconcileContinuousAsync(stoppingToken);
+                    var started = await RecordingService.RunBoundedAsync(
+                        ct => recordingService.ReconcileAutoStartAsync(ct),
+                        supervisionBudget,
+                        logger,
+                        "auto-start reconcile",
+                        stoppingToken) ?? [];
+                    var continuous = await RecordingService.RunBoundedAsync(
+                        ct => recordingService.ReconcileContinuousAsync(ct),
+                        supervisionBudget,
+                        logger,
+                        "continuous-record reconcile",
+                        stoppingToken) ?? [];
                     if (reconciled.Count > 0 || started.Count > 0 || continuous.Count > 0)
                     {
                         logger.LogInformation("Fast recording reconcile persisted={Persisted} auto={Auto} continuous={Continuous} job(s)", reconciled.Count, started.Count, continuous.Count);

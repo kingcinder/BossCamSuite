@@ -149,6 +149,10 @@ public sealed class UbuntuPlatformAndStaticUiTests : IClassFixture<BossCamWebApp
             "/tmp/seg_%Y%m%d.ts",
             30);
         Assert.Contains("-rtsp_transport tcp", args, StringComparison.Ordinal);
+        // A silent RTSP stall (5523-W drops media but keeps the TCP socket open) must not hang
+        // ffmpeg forever — -timeout (rtsp demuxer socket I/O timeout, µs) aborts the stalled
+        // input so the exit rapid-restart can re-arm recording. Regression-pin it here.
+        Assert.Contains("-timeout 10000000 ", args, StringComparison.Ordinal);
         Assert.Contains("-map 0:v:0", args, StringComparison.Ordinal);
         Assert.Contains("-c:v copy", args, StringComparison.Ordinal);
         // Audio must be transcoded to AAC (not -c:a copy): the 5523-W's G.711 a-law would

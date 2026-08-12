@@ -171,6 +171,17 @@ public sealed class BossCamRuntimeOptions
     public int RateLimitSnapshotPerMinute { get; set; } = 30;
 
     /// <summary>
+    /// Hard wall-clock budget (seconds) for each network-bound call inside the single-threaded
+    /// <c>RecordingLifecycleWorker</c> supervision loop (stall check, auto-start reconcile,
+    /// continuous-record reconcile). Source resolution probes unreachable cameras with
+    /// HttpClient timeouts that can stack into minutes; without a budget, one offline camera
+    /// starves stall detection for every other device. The abandoned call keeps running in the
+    /// background (a late job start is deduped by the supervisor), so recording continuity is
+    /// preserved while the loop always progresses. Default 60s.
+    /// </summary>
+    public int RecordingSupervisionCallTimeoutSeconds { get; set; } = 60;
+
+    /// <summary>
     /// Fast recovery cadence for recording supervision. This is intentionally independent of
     /// housekeeping: a transient LAN/camera flap must not wait for the normal 15-minute cycle.
     /// Healthy recorder processes are left alone; only exited or stalled jobs are reconciled.

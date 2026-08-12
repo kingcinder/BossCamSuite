@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using BossCam.Contracts;
 using BossCam.Core;
+using BossCam.Core.Services.Recording;
 using BossCam.Infrastructure.Persistence;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -590,6 +591,74 @@ public sealed class RecordingResilienceTests : IDisposable
         {
             Environment.SetEnvironmentVariable("BOSSCAM_FFMPEG_PATH", previousFfmpeg);
         }
+    }
+
+    [Fact]
+    public void DirectFfmpeg_Rtsp_Args_Carry_Socket_Timeout_So_Silent_Stalls_Exit()
+    {
+        // A 5523-W whose RTSP session silently dies (media stops, TCP socket stays open) would
+        // otherwise block ffmpeg's read forever at ~0% CPU — the process never exits, so neither
+        // the exit rapid-restart nor the stall watchdog can re-arm recording. -timeout (rtsp
+        // demuxer socket I/O timeout, µs) must be present before -i for RTSP sources.
+        var args = DirectFfmpegRecordingPipeline.BuildFfmpegArgs(
+            "rtsp://admin:@10.0.0.77:554/ch0_0.264",
+            "/tmp/seg_%Y%m%d.ts",
+            30);
+        var list = args.ToList();
+        var timeoutIndex = list.IndexOf("-timeout");
+        Assert.True(timeoutIndex >= 0, "RTSP args must include -timeout so a silent stall exits");
+        Assert.Equal(DirectFfmpegRecordingPipeline.RtspSocketTimeoutMicroseconds.ToString(), list[timeoutIndex + 1]);
+        Assert.True(list.IndexOf("-i") > timeoutIndex, "-timeout must precede the -i input");
+        Assert.Contains("-rtsp_transport", list);
+    }
+
+    [Fact]
+    public void DirectFfmpeg_NonRtsp_Args_Do_Not_Carry_Socket_Timeout()
+    {
+        var args = DirectFfmpegRecordingPipeline.BuildFfmpegArgs(
+            "http://admin:@10.0.0.77/NetSDK/Video/encode/channel/101/snapShot",
+            "/tmp/seg_%Y%m%d.ts",
+            30);
+        Assert.DoesNotContain("-timeout", args);
+    }
+
+    [Fact]
+    public async Task RunBoundedAsync_Returns_When_Work_Exceeds_Budget()
+    {
+        // Regression: the single-threaded RecordingLifecycleWorker must never be starved by a
+        // network-bound supervision call (source-resolution probes against an unreachable
+        // camera stack HttpClient timeouts into minutes). The bounded helper returns the
+        // default promptly so the loop advances; the abandoned task's fault is observed, never
+        // unhandled.
+        var never = new TaskCompletionSource<IReadOnlyCollection<RecordingJob>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var result = await RecordingService.RunBoundedAsync(
+            _ => never.Task,
+            TimeSpan.FromMilliseconds(300),
+            NullLogger<RecordingService>.Instance,
+            "test hang",
+            CancellationToken.None);
+        sw.Stop();
+
+        Assert.Null(result);
+        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(5), "bounded call must return within the budget");
+        // Abandoned work still completes in the background — assert the completion path does
+        // not fault the observation continuation.
+        never.SetResult([]);
+        await Task.Delay(200, CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task RunBoundedAsync_Returns_Result_When_Work_Completes_In_Budget()
+    {
+        var done = Task.FromResult<IReadOnlyCollection<RecordingJob>>([]);
+        var result = await RecordingService.RunBoundedAsync(
+            _ => done,
+            TimeSpan.FromSeconds(5),
+            NullLogger<RecordingService>.Instance,
+            "test fast",
+            CancellationToken.None);
+        Assert.NotNull(result);
     }
 
     [Fact]
