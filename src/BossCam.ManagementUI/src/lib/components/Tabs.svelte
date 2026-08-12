@@ -12,6 +12,7 @@
     { id: 'network', label: 'Network' },
     { id: 'record', label: 'Record' },
     { id: 'highlights', label: 'Highlights' },
+    { id: 'recovery', label: 'Recovery' },
     { id: 'advanced', label: 'Advanced' },
   ];
 

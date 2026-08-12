@@ -90,7 +90,11 @@ KEYPROBE_SCRIPT="${KEYPROBE_SCRIPT:-scripts/5523w-interface4-keyprobe.sh}"
 DHCP_FLAG="false"; [ "$STA_DHCP" = "0" ] && DHCP_FLAG="true"
 AP_IP_CANDIDATES="${AP_IP_CANDIDATES:-192.168.1.1 192.168.0.1 10.10.10.1 192.168.2.1 172.16.0.1}"
 # Factory anyka/Wansview AP passphrases to try after "open" fails. Override with AP_PASS.
-AP_TRY_PASSWORDS="${AP_PASS:-} 12345678 1234567890 88888888 wifi1234"
+# 11111111 is CONFIRMED by the operator as the camera AP hotspot password for the
+# fleet's reset cameras (2026-08-11); it also matches the psk both other recovered
+# units carry in their saved nmcli profiles. 1234567890 was camera 2's stale saved
+# value — tried and rejected live — so 11111111 is the real factory default.
+AP_TRY_PASSWORDS="${AP_PASS:-} 12345678 1234567890 88888888 11111111 wifi1234"
 
 IFACE=""
 WERE_ON_STA=0
@@ -136,13 +140,18 @@ ap_ssid_for_serial() { # $1=serial -> camera AP SSID (JAZ7C34... -> IPCZ7C34...,
 }
 
 scan_camera_aps() { # prints nmcli -t "SSID:BSSID:SIGNAL:SECURITY" for IPCZ7C34* APs
-  # Two real bugs fixed here (observed live 2026-08-09):
+  # Three real bugs fixed here (observed live 2026-08-09/11):
   #  1. The grep anchored a trailing colon — '^IPCZ7C34:' — but the AP SSID is
   #     IPCZ7C34 + serial digits (e.g. IPCZ7C34780038910) with NO colon after
   #     IPCZ7C34, so the pattern NEVER matched. Use '^IPCZ7C34' (no colon).
   #  2. nmcli's scan list populates ASYNCHRONOUSLY after `rescan` — retry the
   #     list with a settle between passes so a slow scan can't cause a spurious
   #     "no AP visible" failure.
+  #  3. A FORCED rescan can TRANSIENTLY EMPTY the list (camera AP beacons are
+  #     low-duty; observed live 2026-08-11 when the AP was visible moments before
+  #     the reprovision but "not found" right after rescan). Fall back to a plain
+  #     `dev wifi list` (no rescan — the kernel cache still holds the beacon)
+  #     before declaring "not found".
   local try out
   nmcli dev wifi rescan >/dev/null 2>&1 || true
   for try in 1 2 3 4; do
@@ -150,6 +159,15 @@ scan_camera_aps() { # prints nmcli -t "SSID:BSSID:SIGNAL:SECURITY" for IPCZ7C34*
     if [ -n "$out" ]; then printf '%s\n' "$out"; return 0; fi
     sleep 3
   done
+  # Fallback: cached-scan list WITHOUT a fresh rescan — a transient rescan can
+  # clear the list while the kernel cache still has the beacon.
+  out=$(nmcli -t -f SSID,BSSID,SIGNAL,SECURITY dev wifi list 2>/dev/null | grep -iE '^IPCZ7C34' || true)
+  if [ -n "$out" ]; then printf '%s\n' "$out"; return 0; fi
+  # Last resort: one more rescan + one quick list pass, then give up.
+  nmcli dev wifi rescan >/dev/null 2>&1 || true
+  sleep 4
+  out=$(nmcli -t -f SSID,BSSID,SIGNAL,SECURITY dev wifi list 2>/dev/null | grep -iE '^IPCZ7C34' || true)
+  [ -n "$out" ] && printf '%s\n' "$out"
   return 0
 }
 
@@ -184,14 +202,38 @@ trap restore_network EXIT
 join_ap() { # $1=ssid $2=password-or-empty ; returns 0 when connected
   local ssid="$1" pw="${2:-}"
   if [ "$DRY_RUN" = "1" ]; then echo "  [dry] nmcli dev wifi connect $ssid${pw:+ password ****}"; return 0; fi
+  # A STALE saved connection profile (from an earlier session) wins over the
+  # password passed here — nmcli activates the EXISTING profile with its OLD psk
+  # when a connection for the SSID already exists (observed live 2026-08-11: the
+  # saved psk 1234567890 for IPCZ7C34781620744 was in the try list yet every
+  # attempt failed, because the stale profile overrode it). Delete the profile
+  # FIRST so each credentialed attempt uses exactly the password we intend; a
+  # successful join recreates it fresh.
+  # On the OPEN (passwordless) attempt we deliberately do NOT delete: if the
+  # saved profile holds the RIGHT psk (as camera 1's 11111111 did), `nmcli dev
+  # wifi connect` reuses it and succeeds immediately — that was the old code's
+  # accidental working path.
+  if [ -n "$pw" ]; then
+    nmcli con delete "$ssid" >/dev/null 2>&1 < /dev/null || true
+  fi
   # < /dev/null: without a password nmcli prompts interactively on stdin for a
   # secured AP — in a script that would HANG on an invisible prompt. Redirect
   # stdin so a WPA2 AP fails fast and the loop advances to the next candidate.
+  # `timeout 25`: a weak/intermittent camera-AP beacon can otherwise hold a
+  # connect attempt for 30-90s (observed live: the open attempt burned 84s).
   if [ -n "$pw" ]; then
-    nmcli dev wifi connect "$ssid" password "$pw" >/dev/null 2>&1 < /dev/null
+    timeout 25 nmcli dev wifi connect "$ssid" password "$pw" >/dev/null 2>&1 < /dev/null
   else
-    nmcli dev wifi connect "$ssid" >/dev/null 2>&1 < /dev/null
+    timeout 25 nmcli dev wifi connect "$ssid" >/dev/null 2>&1 < /dev/null
   fi
+}
+
+saved_ap_psk() { # $1=ssid ; prints the psk NetworkManager still remembers for this AP (or "")
+  # The psk a PRIOR successful session stored for this AP (e.g. camera 2's
+  # 1234567890). Tried right after "open" — a remembered credential beats the
+  # generic factory guess-list.
+  nmcli --show-secrets -t -f 802-11-wireless-security.psk con show "$1" 2>/dev/null \
+    | cut -d: -f2- || true
 }
 
 # ── factory-state probe over the AP link ──────────────────────────────────────
@@ -486,11 +528,42 @@ ping_sweep() { # fill the ARP cache for our subnet
   sleep 2
 }
 
-find_cam_on_lan() { # prints the camera's new LAN IP(es) matching CAM_MAC_PREFIX, or ""
+find_cam_on_lan() { # $1=exact MAC (optional) ; prints the camera's new LAN IP(es), or ""
+  # When an exact target MAC is known (from the AP BSSID), match ONLY that MAC —
+  # several 5523-W units share the 9c:a3:a9 OUI, and a prefix match would return
+  # the FIRST camera that answers (observed live 2026-08-11: recovering camera 2
+  # handed back camera 1's IP because both were on the LAN). Without an exact
+  # MAC, fall back to the OUI prefix (single-camera / auto mode).
+  local want="${1:-}" match
+  if [ -n "$want" ]; then
+    match="lladdr ${want,,}"
+  else
+    match="lladdr ${CAM_MAC_PREFIX,,}"
+  fi
   ping_sweep
   ip neigh show 2>/dev/null \
-    | grep -iE "lladdr $CAM_MAC_PREFIX" \
+    | grep -iE "$match" \
     | awk '{print $1}' | sort -u | tr '\n' ' ' || true
+}
+
+# Extract the target camera's exact MAC from the AP-scan BSSID (unescape the
+# \: nmcli escapes). Empty when no target AP is pinned (auto mode) or the scan
+# lacks the field — rediscovery then falls back to the OUI prefix.
+ap_bssid_to_mac() { # $1=AP SSID ; reads $APS (scan output, escaped \: colons) ; prints MAC or ""
+  # NOTE: do NOT `cut -d: -f2` here — nmcli escapes EVERY BSSID colon as \:, and
+  # cut splits on all colons (escaped or not), yielding only the first byte pair
+  # ("9C\\" instead of the full MAC — observed live 2026-08-11). Extract the full
+  # escaped MAC pattern first, THEN unescape.
+  local ssid="$1" bssid
+  [ -n "$ssid" ] || { echo ""; return 0; }
+  bssid=$(printf '%s\n' "${APS:-}" | grep -i "^$ssid:" | head -1 \
+    | grep -oE '([0-9A-Fa-f]{2}\\:){5}[0-9A-Fa-f]{2}' | head -1 || true)
+  [ -n "$bssid" ] || { echo ""; return 0; }
+  bssid=$(printf '%s' "$bssid" | sed 's/\\:/:/g')
+  case "$bssid" in
+    [0-9a-fA-F][0-9a-fA-F]:*) echo "$bssid" ;;
+    *) echo "" ;;
+  esac
 }
 
 # ── main ──────────────────────────────────────────────────────────────────────
@@ -580,19 +653,43 @@ else
 fi
 log "using AP    : $AP_SSID"
 printf '%s\n' "$APS" | render_ap_list
+# Exact MAC of THIS camera (AP BSSID == camera radio MAC) — used in STEP 6 so a
+# multi-camera LAN can't confuse which unit we recovered.
+TARGET_MAC=$(ap_bssid_to_mac "$AP_SSID")
+[ -n "$TARGET_MAC" ] && log "target MAC  : $TARGET_MAC"
 
 # ── 2. join the AP ────────────────────────────────────────────────────────────
 banner "── STEP 2/6: join camera AP $AP_SSID ──"
+# A remembered psk from a prior successful session beats the factory guess-list:
+# capture it BEFORE join_ap deletes the profile, try it right after "open".
+# Camera-AP beacons are low-duty/intermittent (observed live 2026-08-11: sig 49
+# AP vanished mid-run), so the whole join pass retries up to 3 times with a
+# re-scan between passes.
+REMEMBERED=$(saved_ap_psk "$AP_SSID")
+[ -n "$REMEMBERED" ] && log "  NetworkManager remembers a psk for this AP (trying it first)"
 JOINED=0
-# Try open first, then AP_PASS, then the factory default list.
-prev_pw="<sentinel>"   # never equals "" — keeps the FIRST open-AP attempt from being deduped
-for pw in "" $AP_TRY_PASSWORDS; do
-  [ -n "$pw" ] || pw=""
-  [ "$pw" = "$prev_pw" ] && continue   # dedupe (AP_PASS unset yields a leading empty)
-  prev_pw="$pw"
-  log "  trying AP join${pw:+ (password ${pw:0:4}…)}"
-  if join_ap "$AP_SSID" "$pw"; then JOINED=1; break; fi
-  [ "$DRY_RUN" = "1" ] && break
+for pass in 1 2 3; do
+  if [ "$pass" -gt 1 ]; then
+    warn "  join pass $pass/3 — camera AP beacon may be intermittent; re-scanning..."
+    sleep 5
+    APS=$(scan_camera_aps)
+    if ! printf '%s\n' "$APS" | awk -F: -v t="$AP_SSID" '$1==t {f=1} END{exit !f}' 2>/dev/null; then
+      warn "  $AP_SSID not in the re-scan on pass $pass — waiting for its beacon (10s)"
+      sleep 10
+      continue
+    fi
+  fi
+  # Try open first, then the remembered psk, then AP_PASS/factory defaults.
+  prev_pw="<sentinel>"   # never equals "" — keeps the FIRST open-AP attempt from being deduped
+  for pw in "" ${REMEMBERED:+$REMEMBERED} $AP_TRY_PASSWORDS; do
+    [ -n "$pw" ] || pw=""
+    [ "$pw" = "$prev_pw" ] && continue   # dedupe (AP_PASS unset yields a leading empty)
+    prev_pw="$pw"
+    log "  trying AP join${pw:+ (password ${pw:0:4}…)}"
+    if join_ap "$AP_SSID" "$pw"; then JOINED=1; break; fi
+    [ "$DRY_RUN" = "1" ] && break
+  done
+  [ "$JOINED" = "1" ] && break
 done
 if [ "$DRY_RUN" = "1" ]; then
   warn "dry run stops before joining the camera AP"
@@ -639,12 +736,13 @@ done
 on_sta || { warn "not on $STA_SSID yet after ${SETTLE}s — continuing discovery anyway"; }
 
 # ── 6. rediscover the camera on the LAN by MAC ────────────────────────────────
-banner "── STEP 6/6: rediscover camera on LAN by MAC ($CAM_MAC_PREFIX) ──"
+banner "── STEP 6/6: rediscover camera on LAN by MAC ($CAM_MAC_PREFIX${TARGET_MAC:+ / exact $TARGET_MAC}) ──"
 # Stale pre-reset ARP entries for the camera's old IP can linger in `ip neigh`;
-# only an IP that ANSWERS blank-admin HTTP 200 counts as re-provisioned.
+# only an IP that ANSWERS blank-admin HTTP 200 counts as re-provisioned. Match
+# the EXACT target MAC when known (multi-camera LAN safety), else the OUI prefix.
 LAN_IP=""
 for i in $(seq 1 12); do
-  for ip in $(find_cam_on_lan); do
+  for ip in $(find_cam_on_lan "$TARGET_MAC"); do
     code=$(probe_ap_ip "$ip")
     printf "  %s  -> blank-admin deviceInfo HTTP %s\n" "$ip" "$code"
     if [ "$code" = "200" ]; then LAN_IP="$ip"; break; fi

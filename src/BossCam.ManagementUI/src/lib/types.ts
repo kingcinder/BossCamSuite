@@ -370,3 +370,36 @@ export interface ClipExportResult {
   reEncoded: boolean;
   message: string | null;
 }
+
+// Camera recovery (AP hotspot → LAN → Suite enrollment)
+export interface CameraApInfo {
+  ssid: string;
+  bssid: string;
+  signal: string;
+  security: string;
+  serial: string;
+}
+
+export interface CameraRecoveryRunStatus {
+  runId: string;
+  serial: string;
+  running: boolean;
+  succeeded: boolean;
+  exitCode: number | null;
+  lanIp: string | null;
+  message: string | null;
+  logTail: string;
+}
+
+// Autonomous camera-recovery scan status (mirrors C# AutoRecoveryStatus)
+export interface AutoRecoveryStatus {
+  enabled: boolean;
+  intervalSeconds: number;
+  cooldownMinutes: number;
+  staSsid: string;
+  lastScanAtUtc: string;
+  lastScanCount: number;
+  lastAction: string;
+  activeSerial: string | null;
+  currentSsid: string;
+}

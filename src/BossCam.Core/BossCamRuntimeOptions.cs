@@ -174,4 +174,51 @@ public sealed class BossCamRuntimeOptions
 
     /// <summary>Upper bound for exponential retry delay after repeated recorder recovery failures.</summary>
     public int RecordingRecoveryMaxRetrySeconds { get; set; } = 300;
+
+    /// <summary>
+    /// Absolute path to <c>scripts/recover-and-enroll-camera.sh</c>. When empty, the
+    /// <c>CameraRecoveryService</c> falls back to <c>&lt;content-root&gt;/scripts/</c>
+    /// then <c>&lt;cwd&gt;/scripts/</c>.
+    /// </summary>
+    public string RecoveryScriptPath { get; set; } = string.Empty;
+
+    /// <summary>
+    /// When true, <see cref="CameraRecoveryAutoWorker"/> autonomously scans the host WiFi
+    /// for factory-reset camera APs (IPCZ7C34…) and runs the full recover-and-enroll
+    /// pipeline for any AP that is not already enrolled and is not in cooldown — no human
+    /// interaction required. The worker only acts while the host is connected to
+    /// <see cref="RecoveryStaSsid"/> and never runs more than one recovery at a time.
+    /// Set via <c>BossCam:RecoveryAutoScanEnabled</c> (default true).
+    /// </summary>
+    public bool RecoveryAutoScanEnabled { get; set; } = true;
+
+    /// <summary>Seconds between autonomous camera-AP scans (clamped 15–600).</summary>
+    public int RecoveryAutoScanIntervalSeconds { get; set; } = 45;
+
+    /// <summary>Cooldown (minutes) before the same camera serial is auto-recovered again after a run starts.</summary>
+    public int RecoveryAutoCooldownMinutes { get; set; } = 30;
+
+    /// <summary>
+    /// The home/STA SSID the host must be connected to for the auto-worker to scan and recover,
+    /// and the network re-provisioned cameras are joined to. Defaults match the deployed fleet.
+    /// </summary>
+    public string RecoveryStaSsid { get; set; } = "Aegon";
+
+    /// <summary>Passphrase for <see cref="RecoveryStaSsid"/> (re-provision target network).</summary>
+    public string RecoveryStaPass { get; set; } = "812354444";
+
+    /// <summary>Camera-AP hotspot passphrase used by the recovery script's factory-default try-list. The fleet's confirmed value is 11111111.</summary>
+    public string RecoveryApPass { get; set; } = "11111111";
+
+    /// <summary>
+    /// Post-recovery recording-verification attempts. After the recover-and-enroll script
+    /// reports success, the Suite independently confirms the camera actually records
+    /// (RTSP reachable + a recording job active). When no job is running it retries starting
+    /// one this many times before reporting the gap — recording continuity is the top
+    /// priority, so a camera that came back but is NOT recording is surfaced, not assumed.
+    /// </summary>
+    public int RecoveryRecordingVerifyAttempts { get; set; } = 3;
+
+    /// <summary>Seconds between post-recovery recording-verification retry attempts.</summary>
+    public int RecoveryRecordingVerifyDelaySeconds { get; set; } = 10;
 }

@@ -1,4 +1,4 @@
-import type { HealthResponse, DeviceIdentity, VideoSourceDescriptor, LiveMediaManifest, MediaStoragePaths, RecordingJob, RecordingSegment, HighlightState, WritePlan, FieldDef, FirmwareArtifact, UserAccount, PersistenceVerificationResult, ControlPointInventoryReport, WriteResult, TypedSettingGroupSnapshot, ClipExportRequest, ClipExportResult, EnrollDeviceRequest, EnrollDeviceResult, OnvifCredentialScanResult, CgiFuzzResult } from './types';
+import type { HealthResponse, DeviceIdentity, VideoSourceDescriptor, LiveMediaManifest, MediaStoragePaths, RecordingJob, RecordingSegment, HighlightState, WritePlan, FieldDef, FirmwareArtifact, UserAccount, PersistenceVerificationResult, ControlPointInventoryReport, WriteResult, TypedSettingGroupSnapshot, ClipExportRequest, ClipExportResult, EnrollDeviceRequest, EnrollDeviceResult, OnvifCredentialScanResult, CgiFuzzResult, CameraApInfo, CameraRecoveryRunStatus, AutoRecoveryStatus } from './types';
 
 const LS_LAN_TOKEN = 'bosscam.lanToken';
 
@@ -286,6 +286,10 @@ export const api = {
       body: JSON.stringify({ deviceId, ipAddress }),
     }),
 
+  /** GET /api/recovery/auto/status — autonomous camera-AP scan worker status */
+  recoveryAutoStatus: () =>
+    request<AutoRecoveryStatus>('/api/recovery/auto/status'),
+
   /** POST /api/devices/cgi-fuzz — fuzz known CGI endpoints for auth bypasses */
   cgiFuzz: (deviceId: string, ipAddress?: string, quickScan?: boolean) =>
     request<CgiFuzzResult>('/api/devices/cgi-fuzz', {
@@ -307,4 +311,20 @@ export const api = {
         }),
       }
     ),
+
+  // ── Camera Recovery (AP hotspot → LAN → Suite) ────────────────
+
+  /** GET /api/recovery/scan — list factory-reset camera APs visible on the host WiFi */
+  recoveryScan: () => request<{ aps: CameraApInfo[]; count: number }>('/api/recovery/scan'),
+
+  /** POST /api/recovery/recover — start the background recover-and-enroll pipeline */
+  recoveryStart: (serial: string, apSsid?: string) =>
+    request<{ runId: string; serial: string }>('/api/recovery/recover', {
+      method: 'POST',
+      body: JSON.stringify({ serial, apSsid }),
+    }),
+
+  /** GET /api/recovery/status/{runId} — poll a running recovery */
+  recoveryStatus: (runId: string) =>
+    request<CameraRecoveryRunStatus>(`/api/recovery/status/${runId}`),
 };

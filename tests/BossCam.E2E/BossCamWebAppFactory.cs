@@ -38,6 +38,9 @@ public sealed class BossCamWebAppFactory : WebApplicationFactory<Program>
                 ["BossCam:RecordingStartupReconcileDelaySeconds"] = "3600",
                 ["BossCam:LanAuthToken"] = string.Empty,
                 ["BossCam:DiscoveryOfflineMode"] = "true",
+                // Hermetic E2E: the autonomous camera-AP scan worker would otherwise start a
+                // 10s-delayed nmcli scanner in every test host (no NetworkManager in CI).
+                ["BossCam:RecoveryAutoScanEnabled"] = "false",
                 // E2E opt-out fixtures: tests run tight scripted batches that
                 // would otherwise hit the per-endpoint rate limiter. Production
                 // (appsettings.json + Linux overlay) keeps RateLimitEnabled=true.

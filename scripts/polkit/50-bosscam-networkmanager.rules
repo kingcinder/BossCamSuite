@@ -1,0 +1,42 @@
+// BossCamSuite — autonomous camera recovery (NetworkManager authorization)
+//
+// WHY THIS FILE EXISTS:
+// The BossCamSuite service runs as the system user 'cody' (uid 1000) under systemd.
+// Systemd service processes are NOT members of an interactive logind session, so
+// NetworkManager's default polkit policy denies them NetworkManager control — which
+// is exactly what the autonomous recovery pipeline needs: `nmcli dev wifi connect`
+// to join a factory-reset camera's AP hotspot, then reconnect to the home WiFi.
+// (Observed live 2026-08-11: `nmcli dev wifi rescan` from the service context was
+// denied, while the same command from a terminal succeeded.)
+//
+// This rule grants uid 1000 only the NetworkManager actions the recovery pipeline
+// uses. Install with:
+//   sudo install -m 644 -o root -g root \
+//     scripts/polkit/50-bosscam-networkmanager.rules \
+//     /etc/polkit-1/rules.d/50-bosscam-networkmanager.rules
+// then: sudo systemctl restart polkit (or reboot). No polkit change is needed for
+// the scan (list) — that works off the kernel cache from any context.
+// NOTE on action registration (verified 2026-08-11 on NetworkManager 1.46):
+//   `nmcli dev wifi connect` is NOT gated by a `wifi.connect` polkit action on this NM
+//   version — that action is not registered. WiFi activation goes through
+//   `org.freedesktop.NetworkManager.network-control` (registered), `wifi.scan` for the
+//   rescan, and `settings.modify.system` for profile writes. The rule lists all three,
+//   so both directions of the recovery (join the camera AP, then reconnect home WiFi)
+//   are covered. pkcheck confirms: network-control AUTHORIZED, wifi.scan AUTHORIZED.
+//   (wifi.connect is kept in the list only for older NM versions that still register it;
+//   polkit ignores unregistered actions.)
+polkit.addRule(function (action, subject) {
+    if (subject.user == "cody") {
+        var recoveryActions = [
+            "org.freedesktop.NetworkManager.network-control",
+            "org.freedesktop.NetworkManager.wifi.connect",
+            "org.freedesktop.NetworkManager.wifi.scan",
+            "org.freedesktop.NetworkManager.enable-disable-wifi",
+            "org.freedesktop.NetworkManager.settings.modify.system",
+            "org.freedesktop.NetworkManager.settings.modify.own"
+        ];
+        if (recoveryActions.indexOf(action.id) !== -1) {
+            return polkit.Result.YES;
+        }
+    }
+});

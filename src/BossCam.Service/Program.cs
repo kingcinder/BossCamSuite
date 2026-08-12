@@ -44,6 +44,10 @@ builder.Services.AddBossCamCore();
 builder.Services.AddHostedService<BossCamBootstrapWorker>();
 builder.Services.AddHostedService<RecordingLifecycleWorker>();
 builder.Services.AddHostedService<ConnectivityWatchdogWorker>();
+// Autonomous camera recovery: periodically scans for factory-reset camera APs and runs
+// the full recover-and-enroll pipeline with no human interaction (AP hotspot → home WiFi
+// → LAN → Suite enrollment + recording).
+builder.Services.AddHostedService<CameraRecoveryAutoWorker>();
 // WAN/cloud availability is advisory only: this worker gates optional cloud transports
 // automatically while LAN recording and streaming remain independent.
 builder.Services.AddHostedService<InternetConnectivityWorker>();
@@ -103,7 +107,8 @@ app.MapDevicesEndpoints()
    .MapDiagnosticsEndpoints()
    .MapFirmwareContractsProtocolsEndpoints()
    .MapPlaybackEndpoints()
-   .MapConnectivityEndpoints();
+   .MapConnectivityEndpoints()
+   .MapRecoveryEndpoints();
 
 // SPA fallback for operator console.
 app.MapFallback(async context =>

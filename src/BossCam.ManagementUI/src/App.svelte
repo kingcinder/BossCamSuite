@@ -16,6 +16,7 @@
   import HighlightsPanel from './lib/components/HighlightsPanel.svelte';
   import AdvancedPanel from './lib/components/AdvancedPanel.svelte';
   import FirmwarePanel from './lib/components/FirmwarePanel.svelte';
+  import RecoveryPanel from './lib/components/RecoveryPanel.svelte';
 
   let appState = new AppState();
 
@@ -328,6 +329,12 @@
     {#if appState.activeTab === 'highlights'}
       <section class="panel active">
         <HighlightsPanel appState={appState} />
+      </section>
+    {/if}
+
+    {#if appState.activeTab === 'recovery'}
+      <section class="panel active">
+        <RecoveryPanel appState={appState} />
       </section>
     {/if}
 

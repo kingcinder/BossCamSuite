@@ -37,6 +37,7 @@ public static class CoreServiceCollectionExtensions
         services.AddSingleton<FirmwareCatalogService>();
         services.AddSingleton<TransportFailoverService>();
         services.AddSingleton<ConnectionDiagnosticService>();
+        services.AddSingleton<CameraRecoveryService>();
 
         // Recording pipelines (refactor of P2 #12). RecordingService resolves the three
         // implementations by mode via IRecordingPipelineResolver, so swapping any pipeline
