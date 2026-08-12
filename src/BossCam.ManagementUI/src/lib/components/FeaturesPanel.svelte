@@ -289,7 +289,7 @@
       <input type="checkbox" bind:checked={showExpert} />
       Show expert / blocked
     </label>
-    <label class="inline-check force-apply" data-tip="Unlock every control and apply each change with expert override (bypasses write-verification gating). Changes are still checked by the camera's own read-back.">
+    <label class="inline-check force-apply" data-tip-pos="below" data-tip="Unlock every control and apply each change with expert override (bypasses write-verification gating). Changes are still checked by the camera's own read-back.">
       <input type="checkbox" bind:checked={forceApply} onchange={(e) => { if ((e.target as HTMLInputElement).checked) showExpert = true; }} />
       ⚡ Force apply (edit everything)
     </label>
