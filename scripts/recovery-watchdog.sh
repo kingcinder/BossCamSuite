@@ -177,7 +177,7 @@ fi
 
 # ── 2. worker staleness ─────────────────────────────────────────────────────
 ENABLED=$(json_get "$JSON_BODY" "enabled")
-if [ "$ENABLED" != "True" ]; then
+if [ "$(printf '%s' "$ENABLED" | tr 'A-Z' 'a-z')" != "true" ]; then
   log "auto-recovery worker DISABLED (RecoveryAutoScanEnabled=false) — staleness check skipped"
   set_flag stale_alerted 0
 else

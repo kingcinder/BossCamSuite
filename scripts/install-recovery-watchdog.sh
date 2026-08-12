@@ -81,7 +81,7 @@ Environment=NOTIFY_CMD=${NOTIFY_CMD}
 # Config comes ONLY from Environment= above (no positional args — the script
 # reads its env, so an operator editing the Environment= lines sees the effect).
 ExecStart=${WD_SCRIPT}
-TimeoutStartSec=30
+TimeoutStartSec=60
 TimeoutStopSec=10
 SyslogIdentifier=${TIMER_NAME}
 UNITEOF
