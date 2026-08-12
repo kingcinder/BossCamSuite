@@ -1227,7 +1227,9 @@ public sealed class RecordingService(
     }
 
     /// <summary>
-    /// High-res RTSP (HEVC/H264) + drop PCMA audio. Segment to MPEG-TS for kill-safe files.
+    /// High-res RTSP (HEVC/H264) + transcode PCMA audio to AAC (copying a-law into MPEG-TS
+    /// would produce an unlabeled bin_data private stream, not a decodable audio track).
+    /// Segment to MPEG-TS for kill-safe files.
     /// </summary>
     public static string BuildFfmpegArgs(string sourceUrl, string segmentPattern, int segmentSeconds)
     {
@@ -1244,8 +1246,10 @@ public sealed class RecordingService(
         sb.Append("-i \"").Append(sourceUrl).Append("\" ");
         // PR-R7: Map best video + best audio stream when available. Use optional audio
         // (-map 0:a:0?) so the pipeline doesn't fail if no audio track exists.
+        // Audio transcoded to AAC: 5523-W cameras emit G.711 a-law, which the TS muxer
+        // would otherwise write as an unlabeled bin_data private stream.
         sb.Append("-map 0:v:0 -c:v copy ");
-        sb.Append("-map 0:a:0? -c:a copy ");
+        sb.Append("-map 0:a:0? -c:a aac -b:a 128k ");
         sb.Append("-f segment -segment_time ").Append(Math.Max(10, segmentSeconds));
         sb.Append(" -segment_format mpegts -reset_timestamps 1 -strftime 1 \"");
         sb.Append(segmentPattern).Append('"');

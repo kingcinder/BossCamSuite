@@ -42,6 +42,10 @@ public sealed class DirectFfmpegRecordingPipeline : IRecordingPipeline
         args.Add(sourceUrl);
         // Map the best video stream (copy) plus the best audio stream when the source has one.
         // PR-R7: use an optional audio map so video-only sources still record without failing.
+        // Audio is transcoded to AAC (not copied) because these cameras emit G.711 a-law,
+        // which ffmpeg's MPEG-TS muxer writes as an unlabeled private data stream
+        // (stream_type 6 / bin_data) — present in the file but not a decodable audio track.
+        // AAC is natively muxable into TS, so recordings carry real playable audio.
         args.Add("-map");
         args.Add("0:v:0");
         args.Add("-c:v");
@@ -49,7 +53,9 @@ public sealed class DirectFfmpegRecordingPipeline : IRecordingPipeline
         args.Add("-map");
         args.Add("0:a:0?");
         args.Add("-c:a");
-        args.Add("copy");
+        args.Add("aac");
+        args.Add("-b:a");
+        args.Add("128k");
         args.Add("-f");
         args.Add("segment");
         args.Add("-segment_time");
@@ -109,11 +115,15 @@ public sealed class DirectFfmpegRecordingPipeline : IRecordingPipeline
         args.Add("-c:v");
         args.Add("copy");
         // PR-R7: match the runtime Start() path — map best audio stream when present
-        // (optional map so video-only sources don't fail), copy codec.
+        // (optional map so video-only sources don't fail). Audio transcoded to AAC so the
+        // G.711 a-law source becomes a real decodable TS audio track (copy would mux it
+        // as bin_data private-stream garbage).
         args.Add("-map");
         args.Add("0:a:0?");
         args.Add("-c:a");
-        args.Add("copy");
+        args.Add("aac");
+        args.Add("-b:a");
+        args.Add("128k");
         args.Add("-f");
         args.Add("segment");
         args.Add("-segment_time");

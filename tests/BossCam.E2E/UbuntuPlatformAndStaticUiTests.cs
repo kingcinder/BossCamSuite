@@ -151,6 +151,11 @@ public sealed class UbuntuPlatformAndStaticUiTests : IClassFixture<BossCamWebApp
         Assert.Contains("-rtsp_transport tcp", args, StringComparison.Ordinal);
         Assert.Contains("-map 0:v:0", args, StringComparison.Ordinal);
         Assert.Contains("-c:v copy", args, StringComparison.Ordinal);
+        // Audio must be transcoded to AAC (not -c:a copy): the 5523-W's G.711 a-law would
+        // otherwise mux into MPEG-TS as an unlabeled bin_data private stream, not a
+        // decodable audio track. Regression-pin the fix here.
+        Assert.Contains("-c:a aac", args, StringComparison.Ordinal);
+        Assert.Contains("-b:a 128k", args, StringComparison.Ordinal);
         Assert.Contains("mpegts", args, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("stimeout", args, StringComparison.Ordinal);
         Assert.DoesNotContain("rw_timeout", args, StringComparison.Ordinal);
