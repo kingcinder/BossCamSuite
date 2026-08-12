@@ -367,7 +367,18 @@ public sealed class LanDirectNetSdkRestAdapter(
     // therefore surfaced, not a hand-picked subset.
     internal static readonly Dictionary<string, string[]> ReadEndpoints = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["Device"] = ["/NetSDK/System/deviceInfo", "/NetSDK/System/time/localTime", "/NetSDK/System/time/ntp"],
+        ["Device"] =
+        [
+            "/NetSDK/System/deviceInfo",
+            "/NetSDK/System/deviceInfo/deviceName",
+            "/NetSDK/System/deviceInfo/deviceAddress",
+            "/NetSDK/System/capabilities",
+            "/NetSDK/System/time/localTime",
+            "/NetSDK/System/time/ntp",
+            "/NetSDK/System/time/rtc",
+            "/NetSDK/System/time/timeZone",
+            "/NetSDK/System/time/calendarStyle"
+        ],
         ["Network"] =
         [
             "/NetSDK/Network/interface",
@@ -381,6 +392,8 @@ public sealed class LanDirectNetSdkRestAdapter(
             "/NetSDK/Network/interfaces/1/wireless",
             "/NetSDK/Network/Ports",
             "/NetSDK/Network/Port/1",
+            "/NetSDK/Network/port",
+            "/NetSDK/Network/port/1",
             "/NetSDK/Network/Dns",
             "/NetSDK/Network/Esee"
         ],
@@ -411,7 +424,10 @@ public sealed class LanDirectNetSdkRestAdapter(
             "/NetSDK/Video/encode/channel/101/snapShot",
             "/NetSDK/Video/motionDetection/channels",
             "/NetSDK/Video/motionDetection/channel/1",
-            "/NetSDK/Video/motionDetection/channel/1/status"
+            "/NetSDK/Video/motionDetection/channel/1/status",
+            "/NetSDK/Video/FaceDetection",
+            "/NetSDK/Video/HumanDetect",
+            "/NetSDK/Video/cordon"
         ],
         ["Detection"] =
         [
@@ -445,8 +461,10 @@ public sealed class LanDirectNetSdkRestAdapter(
             "/NetSDK/Video/input/channel/1/privacyMask/1"
         ],
         ["Storage"] = ["/NetSDK/SDCard/status", "/NetSDK/SDCard/media/search", "/NetSDK/SDCard/media/playbackFLV", "/NetSDK/SDCard/media/playbackByName", "/NetSDK/SDCard/media/playbackControl", "/NetSDK/SDCard/media/getFileByTime", "/NetSDK/SDCard/media/getFileByName", "/NetSDK/SDCard/media/captureFrame", "/NetSDK/SDCard/format"],
-        ["Schedule"] = ["/NetSDK/Schedule/channels", "/NetSDK/Schedule/channel/1"],
-        ["Wireless"] = ["/NetSDK/Wireless/modules"],
+        ["Schedule"] = ["/NetSDK/Schedule/channels", "/NetSDK/Schedule/channel/1", "/NetSDK/System/AlarmSchedule", "/NetSDK/System/AlarmScheduleV2", "/NetSDK/System/AlarmTone", "/NetSDK/System/RecordSchedule"],
+        ["Wireless"] = ["/NetSDK/Wireless/modules", "/NetSDK/Wireless/ScanApList", "/NetSDK/Network/wireless/stationSignal", "/NetSDK/Network/wireless/allStaInfo", "/NetSDK/Network/Wireless/status"],
+        ["LedPwm"] = ["/NetSDK/System/ledpwm", "/NetSDK/System/ledpwm/ChannelInfo"],
+        ["Integrations"] = ["/NetSDK/FTP", "/NetSDK/RTMP", "/NetSDK/System/gb28181", "/NetSDK/System/gat1400"],
         ["Alarm"] = ["/NetSDK/Alarm/channels", "/NetSDK/Alarm/channel/1", "/NetSDK/Alarm/messageCallback"]
     };
 

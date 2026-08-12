@@ -9,14 +9,14 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u8bbe\u5907\u4fe1\u606f\u3002",
+        "description": "用于获取设备信息。",
         "query": "None.",
         "content": "None.",
         "success_return": "DeviceInfo JSON Form.",
         "notes": ""
       },
       "PUT": {
-        "description": "\u7528\u4e8e\u8bbe\u7f6e\u8bbe\u5907\u4fe1\u606f\u3002",
+        "description": "用于设置设备信息。",
         "query": "None.",
         "content": "DeviceInfo JSON Form.",
         "success_return": "Response JSON Form",
@@ -39,18 +39,18 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u7cfb\u7edf\u672c\u5730\u65f6\u95f4\u4fe1\u606f\u3002",
+        "description": "用于获取系统本地时间信息。",
         "query": "None.",
         "content": "None.",
         "success_return": "ISO8601 Date-Time Format String.",
         "notes": "2"
       },
       "PUT": {
-        "description": "\u7528\u4e8e\u66f4\u65b0\u7cfb\u7edf\u672c\u5730\u65f6\u95f4\u4fe1\u606f\u3002",
+        "description": "用于更新系统本地时间信息。",
         "query": "None.",
         "content": "ISO8601 Date-Time Format String.",
         "success_return": "Response JSON Form",
-        "notes": ": \u5982\u5317\u4eac\u65f6\u95f4 2013 \u5e74 8 \u6708 16 \u65e5\u4e0b\u5348 5 \u70b9 30 \u5206 8 \u79d2\uff0c\u53ef\u4ee5\u8868\u793a\u4e3a 2004-05-03T17:30:08+08:00\u3002"
+        "notes": ": 如北京时间 2013 年 8 月 16 日下午 5 点 30 分 8 秒，可以表示为 2004-05-03T17:30:08+08:00。"
       }
     },
     "inference_flags": {
@@ -69,14 +69,14 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u8bf7\u6c42\u540c\u6b65\u56fd\u9645\u6807\u51c6\u65f6\u95f4\u3002",
+        "description": "用于请求同步国际标准时间。",
         "query": "None.",
         "content": "None.",
         "success_return": "TimeNtp JSON Form",
         "notes": ""
       },
       "PUT": {
-        "description": "\u7528\u4e8e\u8bbe\u7f6e ntp \u914d\u7f6e\u4fe1\u606f\u3002",
+        "description": "用于设置 ntp 配置信息。",
         "query": "None.",
         "content": "TimeNtp JSON Form",
         "success_return": "Response JSON Form",
@@ -98,7 +98,7 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u6240\u6709\u97f3\u9891\u8f93\u5165\u901a\u9053\u914d\u7f6e\u3002",
+        "description": "用于获取所有音频输入通道配置。",
         "query": "None.",
         "content": "None.",
         "success_return": "AudioInputChannel Array JSON Form.",
@@ -121,14 +121,14 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u6307\u5b9a\u97f3\u9891\u8f93\u5165\u901a\u9053\u914d\u7f6e\u3002",
+        "description": "用于获取指定音频输入通道配置。",
         "query": "None.",
         "content": "None.",
         "success_return": "AudioInputChannel JSON Form.",
         "notes": ""
       },
       "PUT": {
-        "description": "\u7528\u4e8e\u66f4\u65b0\u6307\u5b9a\u97f3\u9891\u8f93\u5165\u901a\u9053\u914d\u7f6e\u3002",
+        "description": "用于更新指定音频输入通道配置。",
         "query": "None.",
         "content": "AudioInputChannel JSON Form.",
         "success_return": "Response JSON Form.",
@@ -150,7 +150,7 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u97f3\u9891\u7f16\u7801\u901a\u9053\u914d\u7f6e\u5217\u8868\u3002",
+        "description": "用于获取音频编码通道配置列表。",
         "query": "None.",
         "content": "None.",
         "success_return": "AudioEncodeChannel Array JSON Form.",
@@ -174,14 +174,14 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u6307\u5b9a\u97f3\u9891\u7f16\u7801\u901a\u9053\u914d\u7f6e\u3002",
+        "description": "用于获取指定音频编码通道配置。",
         "query": "None.",
         "content": "None.",
         "success_return": "AudioEncodeChannel JSON Form.",
         "notes": ""
       },
       "PUT/POST": {
-        "description": "\u7528\u4e8e\u66f4\u65b0\u6307\u5b9a\u97f3\u9891\u7f16\u7801\u901a\u9053\u914d\u7f6e\u3002",
+        "description": "用于更新指定音频编码通道配置。",
         "query": "None.",
         "content": "AudioEncodeChannel JSON Form.",
         "success_return": "Response JSON Form.",
@@ -203,7 +203,7 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u89c6\u9891\u8f93\u5165\u901a\u9053\u914d\u7f6e\u5217\u8868\u3002",
+        "description": "用于获取视频输入通道配置列表。",
         "query": "None.",
         "content": "None.",
         "success_return": "VideoInputChannel Array JSON Form.",
@@ -226,14 +226,14 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u89c6\u9891\u8f93\u5165\u901a\u9053\u914d\u7f6e\u5217\u8868\u3002",
+        "description": "用于获取视频输入通道配置列表。",
         "query": "None.",
         "content": "None.",
         "success_return": "VideoInputChannel JSON Form.",
         "notes": ""
       },
       "PUT": {
-        "description": "\u7528\u4e8e\u66f4\u65b0\u89c6\u9891\u8f93\u5165\u901a\u9053\u914d\u7f6e\u5217\u8868\u3002",
+        "description": "用于更新视频输入通道配置列表。",
         "query": "None.",
         "content": "VideoInputChannel JSON Form.",
         "success_return": "Response JSON Form.",
@@ -256,14 +256,14 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u89c6\u9891\u8f93\u5165\u901a\u9053\u9510\u5ea6\u914d\u7f6e\u503c\u3002",
+        "description": "用于获取视频输入通道锐度配置值。",
         "query": "None.",
         "content": "None.",
         "success_return": "Interger.",
         "notes": ""
       },
       "PUT": {
-        "description": "\u7528\u4e8e\u66f4\u65b0\u89c6\u9891\u8f93\u5165\u901a\u9053\u9510\u5ea6\u914d\u7f6e\u503c\u3002",
+        "description": "用于更新视频输入通道锐度配置值。",
         "query": "None.",
         "content": "Interger.",
         "success_return": "Response JSON Form.",
@@ -286,14 +286,14 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u89c6\u9891\u8f93\u5165\u901a\u9053\u4eae\u5ea6\u914d\u7f6e\u503c\u3002",
+        "description": "用于获取视频输入通道亮度配置值。",
         "query": "None.",
         "content": "None.",
         "success_return": "Interger.",
         "notes": ""
       },
       "PUT": {
-        "description": "\u7528\u4e8e\u66f4\u65b0\u89c6\u9891\u8f93\u5165\u901a\u9053\u4eae\u5ea6\u914d\u7f6e\u503c\u3002",
+        "description": "用于更新视频输入通道亮度配置值。",
         "query": "None.",
         "content": "Interger.",
         "success_return": "Response JSON Form.",
@@ -316,14 +316,14 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u89c6\u9891\u8f93\u5165\u901a\u9053 flip \u914d\u7f6e\u503c\u3002",
+        "description": "用于获取视频输入通道 flip 配置值。",
         "query": "None.",
         "content": "None.",
         "success_return": "Boolean",
         "notes": ""
       },
       "PUT": {
-        "description": "\u7528\u4e8e\u66f4\u65b0\u89c6\u9891\u8f93\u5165\u901a\u9053 flip \u914d\u7f6e\u503c\u3002",
+        "description": "用于更新视频输入通道 flip 配置值。",
         "query": "None.",
         "content": "Boolean",
         "success_return": "Response JSON Form.",
@@ -346,14 +346,14 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u89c6\u9891\u8f93\u5165\u901a\u9053 mirror \u914d\u7f6e\u503c\u3002",
+        "description": "用于获取视频输入通道 mirror 配置值。",
         "query": "None.",
         "content": "None.",
         "success_return": "Boolean",
         "notes": ""
       },
       "PUT": {
-        "description": "\u7528\u4e8e\u66f4\u65b0\u89c6\u9891\u8f93\u5165\u901a\u9053 mirror \u914d\u7f6e\u503c\u3002",
+        "description": "用于更新视频输入通道 mirror 配置值。",
         "query": "None.",
         "content": "Boolean",
         "success_return": "Response JSON Form.",
@@ -376,14 +376,14 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u89c6\u9891\u8f93\u5165\u901a\u9053\u9971\u548c\u5ea6\u914d\u7f6e\u503c\u3002",
+        "description": "用于获取视频输入通道饱和度配置值。",
         "query": "None.",
         "content": "None.",
         "success_return": "Interger.",
         "notes": ""
       },
       "PUT": {
-        "description": "\u7528\u4e8e\u66f4\u65b0\u89c6\u9891\u8f93\u5165\u901a\u9053\u9971\u548c\u5ea6\u914d\u7f6e\u503c\u3002",
+        "description": "用于更新视频输入通道饱和度配置值。",
         "query": "None.",
         "content": "Interger.",
         "success_return": "Response JSON Form.",
@@ -406,14 +406,14 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u89c6\u9891\u8f93\u5165\u901a\u9053\u8272\u5ea6\u914d\u7f6e\u503c\u3002",
+        "description": "用于获取视频输入通道色度配置值。",
         "query": "None.",
         "content": "None.",
         "success_return": "Interger.",
         "notes": ""
       },
       "PUT": {
-        "description": "\u7528\u4e8e\u66f4\u65b0\u89c6\u9891\u8f93\u5165\u901a\u9053\u8272\u5ea6\u914d\u7f6e\u503c\u3002",
+        "description": "用于更新视频输入通道色度配置值。",
         "query": "None.",
         "content": "Interger.",
         "success_return": "Response JSON Form.",
@@ -436,14 +436,14 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u89c6\u9891\u8f93\u5165\u901a\u9053\u5bf9\u6bd4\u5ea6\u914d\u7f6e\u503c\u3002",
+        "description": "用于获取视频输入通道对比度配置值。",
         "query": "None.",
         "content": "None.",
         "success_return": "Interger.",
         "notes": ""
       },
       "PUT": {
-        "description": "\u7528\u4e8e\u66f4\u65b0\u89c6\u9891\u8f93\u5165\u901a\u9053\u5bf9\u6bd4\u5ea6\u914d\u7f6e\u503c\u3002",
+        "description": "用于更新视频输入通道对比度配置值。",
         "query": "None.",
         "content": "Interger.",
         "success_return": "Response JSON Form.",
@@ -465,7 +465,7 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u6307\u5b9a\u89c6\u9891\u8f93\u5165\u901a\u9053\u9690\u79c1\u533a\u57df\u914d\u7f6e\u5217\u8868\u3002",
+        "description": "用于获取指定视频输入通道隐私区域配置列表。",
         "query": "None.",
         "content": "None.",
         "success_return": "VideoPrivacyMask Array JSON Form.",
@@ -488,14 +488,14 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u6307\u5b9a\u89c6\u9891\u8f93\u5165\u901a\u9053\u4e0a\u6307\u5b9a\u9690\u79c1\u533a\u57df\u914d\u7f6e\u3002",
+        "description": "用于获取指定视频输入通道上指定隐私区域配置。",
         "query": "None.",
         "content": "None.",
         "success_return": "VideoPrivacyMask JSON Form.",
         "notes": ""
       },
       "PUT": {
-        "description": "\u7528\u4e8e\u66f4\u65b0\u6307\u5b9a\u89c6\u9891\u8f93\u5165\u901a\u9053\u4e0a\u6307\u5b9a\u9690\u79c1\u533a\u57df\u914d\u7f6e\u3002",
+        "description": "用于更新指定视频输入通道上指定隐私区域配置。",
         "query": "None.",
         "content": "VideoPrivacyMask JSON Form.",
         "success_return": "Response JSON Form.",
@@ -517,7 +517,7 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u89c6\u9891\u7f16\u7801\u901a\u9053\u914d\u7f6e\u5217\u8868\u3002",
+        "description": "用于获取视频编码通道配置列表。",
         "query": "None.",
         "content": "None.",
         "success_return": "VideoEncodeChannel Array JSON Form.",
@@ -540,18 +540,18 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u6307\u5b9a\u89c6\u9891\u7f16\u7801\u901a\u9053\u914d\u7f6e\u3002",
+        "description": "用于获取指定视频编码通道配置。",
         "query": "None.",
         "content": "None.",
         "success_return": "VideoEncodeChannel JSON Form.",
         "notes": ""
       },
       "PUT": {
-        "description": "\u7528\u4e8e\u66f4\u65b0\u6307\u5b9a\u89c6\u9891\u7f16\u7801\u901a\u9053\u914d\u7f6e\u3002",
+        "description": "用于更新指定视频编码通道配置。",
         "query": "None.",
         "content": "VideoEncodeChannel JSON Form.",
         "success_return": "Response JSON Form.",
-        "notes": ": \u4e3a\u4e86\u652f\u6301\u591a\u4e2a\u89c6\u9891\u8f93\u5165\u8bbe\u5907\uff0c\u5728 URL \u4e2d\u7684\u89c6\u9891\u8f93\u5165\u901a\u9053 ID \u9700\u8981\u5305\u542b\u89c6\u9891\u8f93\u5165\u901a\u9053 ID\uff0c\u56e0 \u6b64\u5b9a\u4e49\u4e3a\uff1a\u89c6\u9891\u7f16\u7801\u7801\u6d41 ID+\u89c6\u9891\u8f93\u5165\u901a\u9053 ID*100\uff0c\u4f8b\u5982\uff0c\u89c6\u9891\u8f93\u5165\u901a\u9053 1 \u7684\u7b2c\u4e00\u4e2a\u89c6\u9891 \u7f16\u7801\u7801\u6d41\u5bf9\u5e94\u7684 URL \u5e94\u8be5\u4e3a/NetSDK/Video/encode/channel/101\uff0c\u7b2c\u4e8c\u4e2a\u89c6\u9891\u7f16\u7801\u7801\u6d41\u5bf9\u5e94 \u7684 URL \u5e94\u8be5\u4e3a/NetSDK/Video/encode/channel/102\u3002"
+        "notes": ": 为了支持多个视频输入设备，在 URL 中的视频输入通道 ID 需要包含视频输入通道 ID，因 此定义为：视频编码码流 ID+视频输入通道 ID*100，例如，视频输入通道 1 的第一个视频 编码码流对应的 URL 应该为/NetSDK/Video/encode/channel/101，第二个视频编码码流对应 的 URL 应该为/NetSDK/Video/encode/channel/102。"
       }
     },
     "inference_flags": {
@@ -570,14 +570,14 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u6307\u5b9a\u89c6\u9891\u7f16\u7801\u901a\u9053\u4e0a\u901a\u9053\u540d\u79f0\u53e0\u52a0\u5c42\u914d\u7f6e\u3002",
+        "description": "用于获取指定视频编码通道上通道名称叠加层配置。",
         "query": "None.",
         "content": "None.",
         "success_return": "VideoChanelNameOverlay JSON Form.",
         "notes": ""
       },
       "PUT": {
-        "description": "\u7528\u4e8e\u66f4\u65b0\u6307\u5b9a\u89c6\u9891\u7f16\u7801\u901a\u9053\u4e0a\u901a\u9053\u540d\u79f0\u53e0\u52a0\u5c42\u914d\u7f6e\u3002",
+        "description": "用于更新指定视频编码通道上通道名称叠加层配置。",
         "query": "None.",
         "content": "VideoChanelNameOverlay JSON Form.",
         "success_return": "Response JSON Form.",
@@ -600,14 +600,14 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u6307\u5b9a\u89c6\u9891\u7f16\u7801\u901a\u9053\u4e0a\u65e5\u671f\u65f6\u95f4\u53e0\u52a0\u5c42\u914d\u7f6e\u3002",
+        "description": "用于获取指定视频编码通道上日期时间叠加层配置。",
         "query": "None.",
         "content": "None.",
         "success_return": "VideoDatetimeOverlay JSON Form.",
         "notes": ""
       },
       "PUT": {
-        "description": "\u7528\u4e8e\u66f4\u65b0\u6307\u5b9a\u89c6\u9891\u7f16\u7801\u901a\u9053\u4e0a\u65e5\u671f\u65f6\u95f4\u53e0\u52a0\u5c42\u914d\u7f6e\u3002",
+        "description": "用于更新指定视频编码通道上日期时间叠加层配置。",
         "query": "None.",
         "content": "VideoDatetimeOverlay JSON Form.",
         "success_return": "Response JSON Form.",
@@ -630,14 +630,14 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u6307\u5b9a\u89c6\u9891\u7f16\u7801\u901a\u9053\u4e0a\u8bbe\u5907\u5e8f\u53f7\u53e0\u52a0\u5c42\u914d\u7f6e\u5217\u8868\u3002",
+        "description": "用于获取指定视频编码通道上设备序号叠加层配置列表。",
         "query": "None.",
         "content": "None.",
         "success_return": "VideoDeviceIDOverlay JSON Form.",
         "notes": ""
       },
       "PUT": {
-        "description": "\u7528\u4e8e\u66f4\u65b0\u6307\u5b9a\u89c6\u9891\u7f16\u7801\u901a\u9053\u4e0a\u8bbe\u5907\u5e8f\u53f7\u53e0\u52a0\u5c42\u914d\u7f6e\u5217\u8868\u3002",
+        "description": "用于更新指定视频编码通道上设备序号叠加层配置列表。",
         "query": "None.",
         "content": "VideoDeviceIDOverlay JSON Form.",
         "success_return": "Response JSON Form.",
@@ -659,11 +659,11 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u6307\u5b9a\u89c6\u9891\u7f16\u7801\u901a\u9053\u4e0a\u6587\u672c\u53e0\u52a0\u5c42\u914d\u7f6e\u5217\u8868\u3002",
+        "description": "用于获取指定视频编码通道上文本叠加层配置列表。",
         "query": "None.",
         "content": "None.",
         "success_return": "VideoTextOverlay Array JSON Form.",
-        "notes": ": \u8be5\u63a5\u53e3\u4fdd\u7559\u3002"
+        "notes": ": 该接口保留。"
       }
     },
     "inference_flags": {
@@ -682,18 +682,18 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u6307\u5b9a\u89c6\u9891\u7f16\u7801\u901a\u9053\u4e0a\u6307\u5b9a\u6587\u672c\u53e0\u52a0\u5c42\u914d\u7f6e\u3002",
+        "description": "用于获取指定视频编码通道上指定文本叠加层配置。",
         "query": "None.",
         "content": "None.",
         "success_return": "VideoTextOverlay JSON Form.",
         "notes": ""
       },
       "PUT": {
-        "description": "\u7528\u4e8e\u66f4\u65b0\u6307\u5b9a\u89c6\u9891\u7f16\u7801\u901a\u9053\u4e0a\u6307\u5b9a\u6587\u672c\u53e0\u52a0\u5c42\u914d\u7f6e\u3002",
+        "description": "用于更新指定视频编码通道上指定文本叠加层配置。",
         "query": "None.",
         "content": "VideoTextOverlay JSON Form.",
         "success_return": "Response JSON Form.",
-        "notes": "10 : \u8be5\u63a5\u53e3\u4fdd\u7559\u3002"
+        "notes": "10 : 该接口保留。"
       }
     },
     "inference_flags": {
@@ -711,7 +711,7 @@
     ],
     "details": {
       "PUT": {
-        "description": "\u7528\u4e8e\u5bf9\u6307\u5b9a\u89c6\u9891\u7f16\u7801\u901a\u9053\u8bf7\u6c42\u4e00\u4e2a\u5173\u952e\u5e27\u3002",
+        "description": "用于对指定视频编码通道请求一个关键帧。",
         "query": "None.",
         "content": "None.",
         "success_return": "Response JSON Form.",
@@ -733,10 +733,10 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u6307\u5b9a\u89c6\u9891\u7f16\u7801\u901a\u9053\u5feb\u7167\u56fe\u7247\u3002",
+        "description": "用于获取指定视频编码通道快照图片。",
         "query": "resolutionWidth integer",
         "content": "None.",
-        "success_return": "JPEG over HTTP\u3002",
+        "success_return": "JPEG over HTTP。",
         "notes": "resolutionHeight integer :"
       }
     },
@@ -755,7 +755,7 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u89c6\u9891\u8fd0\u52a8\u4fa6\u6d4b\u901a\u9053\u914d\u7f6e\u5217\u8868\u3002",
+        "description": "用于获取视频运动侦测通道配置列表。",
         "query": "None.",
         "content": "None.",
         "success_return": "VideoMotionDetectionChannel Array JSON Form.",
@@ -778,14 +778,14 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u6307\u5b9a\u89c6\u9891\u8fd0\u52a8\u4fa6\u6d4b\u901a\u9053\u914d\u7f6e\u3002",
+        "description": "用于获取指定视频运动侦测通道配置。",
         "query": "None.",
         "content": "None.",
         "success_return": "VideoMotionDetectionChannel JSON Form.",
         "notes": "11"
       },
       "PUT": {
-        "description": "\u7528\u4e8e\u66f4\u65b0\u6307\u5b9a\u89c6\u9891\u8fd0\u52a8\u4fa6\u6d4b\u901a\u9053\u914d\u7f6e\u3002",
+        "description": "用于更新指定视频运动侦测通道配置。",
         "query": "None.",
         "content": "VideoMotionDetectionChannel JSON Form.",
         "success_return": "Response JSON Form.",
@@ -808,14 +808,14 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u6307\u5b9a\u89c6\u9891\u8fd0\u52a8\u4fa6\u6d4b\u901a\u9053\u72b6\u6001\u3002",
+        "description": "用于获取指定视频运动侦测通道状态。",
         "query": "None.",
         "content": "None.",
         "success_return": "Boolean",
         "notes": ""
       },
       "DELETE": {
-        "description": "\u7528\u4e8e\u6e05\u9664\u6307\u5b9a\u89c6\u9891\u8fd0\u52a8\u4fa6\u6d4b\u901a\u9053\u72b6\u6001\u3002",
+        "description": "用于清除指定视频运动侦测通道状态。",
         "query": "None.",
         "content": "None.",
         "success_return": "Response JSON Form.",
@@ -837,7 +837,7 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u62a5\u8b66\u8f93\u5165\u901a\u9053\u914d\u7f6e\u5217\u8868\u3002",
+        "description": "用于获取报警输入通道配置列表。",
         "query": "None.",
         "content": "None.",
         "success_return": "AlarmInputChannel Array JSON Form.",
@@ -860,14 +860,14 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u6307\u5b9a\u62a5\u8b66\u8f93\u5165\u901a\u9053\u914d\u7f6e\u3002",
+        "description": "用于获取指定报警输入通道配置。",
         "query": "None.",
         "content": "None.",
         "success_return": "AlarmInputChannel JSON Form.",
         "notes": ""
       },
       "PUT": {
-        "description": "\u7528\u4e8e\u66f4\u65b0\u6307\u5b9a\u62a5\u8b66\u8f93\u5165\u901a\u9053\u914d\u7f6e\u3002",
+        "description": "用于更新指定报警输入通道配置。",
         "query": "None.",
         "content": "AlarmInputChannel JSON Form.",
         "success_return": "Response JSON Form.",
@@ -889,7 +889,7 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u6307\u5b9a\u62a5\u8b66\u8f93\u5165\u901a\u9053\u72b6\u6001\u3002",
+        "description": "用于获取指定报警输入通道状态。",
         "query": "None.",
         "content": "None.",
         "success_return": "AlarmIOPortStatus JSON Form.",
@@ -911,7 +911,7 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u62a5\u8b66\u8f93\u51fa\u901a\u9053\u914d\u7f6e\u5217\u8868\u3002",
+        "description": "用于获取报警输出通道配置列表。",
         "query": "None.",
         "content": "None.",
         "success_return": "AlarmOutputChannel Array JSON Form.",
@@ -934,14 +934,14 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u6307\u5b9a\u62a5\u8b66\u8f93\u51fa\u901a\u9053\u914d\u7f6e\u3002",
+        "description": "用于获取指定报警输出通道配置。",
         "query": "None.",
         "content": "None.",
         "success_return": "AlarmOutputChannel JSON Form.",
         "notes": "13"
       },
       "PUT": {
-        "description": "\u7528\u4e8e\u66f4\u65b0\u6307\u5b9a\u62a5\u8b66\u8f93\u51fa\u901a\u9053\u914d\u7f6e\u3002",
+        "description": "用于更新指定报警输出通道配置。",
         "query": "None.",
         "content": "AlarmOutputChannel JSON Form.",
         "success_return": "Response JSON Form.",
@@ -964,14 +964,14 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u6307\u5b9a\u62a5\u8b66\u8f93\u51fa\u901a\u9053\u72b6\u6001\u3002",
+        "description": "用于获取指定报警输出通道状态。",
         "query": "None.",
         "content": "None.",
         "success_return": "AlarmIOPortStatus JSON Form.",
         "notes": ""
       },
       "DELETE": {
-        "description": "\u7528\u4e8e\u6e05\u9664\u6307\u5b9a\u62a5\u8b66\u8f93\u51fa\u901a\u9053\u72b6\u6001\u3002",
+        "description": "用于清除指定报警输出通道状态。",
         "query": "None.",
         "content": "None.",
         "success_return": "Response JSON Form.",
@@ -993,7 +993,7 @@
     ],
     "details": {
       "PUT": {
-        "description": "\u7528\u4e8e\u624b\u52a8\u89e6\u53d1\u6307\u5b9a\u62a5\u8b66\u8f93\u51fa\u901a\u9053\u8f93\u51fa\u3002",
+        "description": "用于手动触发指定报警输出通道输出。",
         "query": "outputState low",
         "content": "None.",
         "success_return": "Response JSON Form.",
@@ -1015,7 +1015,7 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u4e91\u53f0\u901a\u9053\u914d\u7f6e\u5217\u8868\u3002",
+        "description": "用于获取云台通道配置列表。",
         "query": "None.",
         "content": "None.",
         "success_return": "PTZChannel Array JSON Form.",
@@ -1038,14 +1038,14 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u6307\u5b9a\u4e91\u53f0\u901a\u9053\u914d\u7f6e\u3002",
+        "description": "用于获取指定云台通道配置。",
         "query": "None.",
         "content": "None.",
         "success_return": "PTZChannel JSON Form.",
         "notes": ""
       },
       "PUT": {
-        "description": "\u7528\u4e8e\u66f4\u65b0\u6307\u5b9a\u4e91\u53f0\u901a\u9053\u914d\u7f6e\u3002",
+        "description": "用于更新指定云台通道配置。",
         "query": "None.",
         "content": "PTZChannel JSON Form.",
         "success_return": "Response JSON Form.",
@@ -1067,7 +1067,7 @@
     ],
     "details": {
       "PUT": {
-        "description": "\u7528\u4e8e\u63a7\u5236\u6307\u5b9a\u4e91\u53f0\u901a\u9053\u3002",
+        "description": "用于控制指定云台通道。",
         "query": "command:string pan_left",
         "content": "None.",
         "success_return": "Response JSON Form.",
@@ -1089,7 +1089,7 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u7f51\u7edc\u4f20\u8f93\u7801\u6d41\u901a\u9053\u914d\u7f6e\u5217\u8868\u3002",
+        "description": "用于获取网络传输码流通道配置列表。",
         "query": "None.",
         "content": "None.",
         "success_return": "StreamChannel Array JSON Form.",
@@ -1111,7 +1111,7 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u6307\u5b9a\u7f51\u7edc\u4f20\u8f93\u7801\u6d41\u901a\u9053\u914d\u7f6e\u3002",
+        "description": "用于获取指定网络传输码流通道配置。",
         "query": "None.",
         "content": "None.",
         "success_return": "StreamChannel JSON Form.",
@@ -1133,7 +1133,7 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u7f51\u7edc\u63a5\u53e3\u914d\u7f6e\u5217\u8868\u3002",
+        "description": "用于获取网络接口配置列表。",
         "query": "None.",
         "content": "None.",
         "success_return": "NetworkInterfaceList JSON Form.",
@@ -1156,18 +1156,18 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u6307\u5b9a\u7f51\u7edc\u63a5\u53e3\u914d\u7f6e\u3002",
+        "description": "用于获取指定网络接口配置。",
         "query": "None.",
         "content": "None.",
         "success_return": "NetworkInterfaceList JSON Form.",
         "notes": ""
       },
       "PUT": {
-        "description": "\u7528\u4e8e\u66f4\u65b0\u6307\u5b9a\u7f51\u7edc\u63a5\u53e3\u914d\u7f6e\u3002",
+        "description": "用于更新指定网络接口配置。",
         "query": "None.",
         "content": "NetworkInterfaceList JSON Form.",
         "success_return": "Response JSON Form.",
-        "notes": ":\u5217\u8868\u6709 4 \u4e2a\u7f51\u7edc\u63a5\u53e3\uff0c\u5176\u4e2d id \u4e3a 1 \u7684\u662f\u672c\u5730 IP \u914d\u7f6e\uff0cid \u4e3a 2 \u7684\u662f\u4fdd\u7559\u63a5\u53e3\uff0cid \u4e3a 3 \u7684\u662f\u9ed8\u8ba4 IP \u914d\u7f6e\uff0cid \u4e3a 4 \u7684\u662f wifi \u914d\u7f6e\uff0c\u8bf7\u7559\u610f interfaceName \u5c5e\u6027"
+        "notes": ":列表有 4 个网络接口，其中 id 为 1 的是本地 IP 配置，id 为 2 的是保留接口，id 为 3 的是默认 IP 配置，id 为 4 的是 wifi 配置，请留意 interfaceName 属性"
       }
     },
     "inference_flags": {
@@ -1177,8 +1177,8 @@
     },
     "settled_verdict": {
       "date": "2026-08-10",
-      "status": "SETTLED LIVE \u2014 interface id 4 is the WiFi config slot",
-      "summary": "The PUT note lists 4 interfaces: id 1 = local IP config, id 2 = reserved, id 3 = default IP, id 4 = WiFi config. Live 5523-W re-provision confirms interface/4 is the WiFi slot \u2014 the station-mode wireless write and the lan read-modify-write both target /NetSDK/Network/interface/4. Future tooling should address WiFi as interface/4, not guess.",
+      "status": "SETTLED LIVE — interface id 4 is the WiFi config slot",
+      "summary": "The PUT note lists 4 interfaces: id 1 = local IP config, id 2 = reserved, id 3 = default IP, id 4 = WiFi config. Live 5523-W re-provision confirms interface/4 is the WiFi slot — the station-mode wireless write and the lan read-modify-write both target /NetSDK/Network/interface/4. Future tooling should address WiFi as interface/4, not guess.",
       "evidence": "PUT note (this entry); live re-provision 2026-08-09/10 (scripts/5523w-wifi-reprovision.sh targets interface/4); docs/reports/2026-08-10-rest-keyprobe-verdict.md"
     }
   },
@@ -1192,14 +1192,14 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u6307\u5b9a\u7f51\u7edc\u63a5\u53e3 LAN \u914d\u7f6e\u3002",
+        "description": "用于获取指定网络接口 LAN 配置。",
         "query": "None.",
         "content": "None.",
         "success_return": "NetworkInterfaceLan JSON Form.",
         "notes": ""
       },
       "PUT": {
-        "description": "\u7528\u4e8e\u66f4\u65b0\u6307\u5b9a\u7f51\u7edc\u63a5\u53e3 LAN \u914d\u7f6e\u3002",
+        "description": "用于更新指定网络接口 LAN 配置。",
         "query": "None.",
         "content": "NetworkInterfaceLan JSON Form.",
         "success_return": "Response JSON Form.",
@@ -1213,7 +1213,7 @@
     },
     "settled_verdict": {
       "date": "2026-08-10",
-      "status": "SETTLED LIVE \u2014 lan gateway keys; do not re-derive the writable lever",
+      "status": "SETTLED LIVE — lan gateway keys; do not re-derive the writable lever",
       "canonical_keys": [
         "addressingType",
         "dhcp",
@@ -1222,8 +1222,8 @@
         "staticGateway",
         "OnvifAutoAdapt"
       ],
-      "summary": "GET /NetSDK/Network/interface/4 (the lan block nested in the interface body) returns {addressingType:static, OnvifAutoAdapt:false, dhcp:true, staticIP:10.0.0.29, staticNetmask:255.255.255.0, staticGateway:10.0.0.1} \u2014 the catalog omits the real keys dhcp + OnvifAutoAdapt. lan.dhcp is the ONLY reliably writable lever; full-form writes requesting addressingType:static (and OnvifAutoAdapt:false) are normalized back to dynamic/true on this firmware \u2014 a static baseline is NOT restorable via REST writes. Write the lan block explicitly (read-modify-write) with dhcp:true for DHCP / the staticIP trio for static, then verify-GET.",
-      "evidence": "Live probe 10.0.0.29 2026-08-10 (\u00a75.3b payload-truth appendix, docs/reports/2026-08-09-controlled-verify-experiment-protocol.md); drop forensics docs/reports/2026-08-10-dot29-post-reprovision-drop-forensics.md"
+      "summary": "GET /NetSDK/Network/interface/4 (the lan block nested in the interface body) returns {addressingType:static, OnvifAutoAdapt:false, dhcp:true, staticIP:10.0.0.29, staticNetmask:255.255.255.0, staticGateway:10.0.0.1} — the catalog omits the real keys dhcp + OnvifAutoAdapt. lan.dhcp is the ONLY reliably writable lever; full-form writes requesting addressingType:static (and OnvifAutoAdapt:false) are normalized back to dynamic/true on this firmware — a static baseline is NOT restorable via REST writes. Write the lan block explicitly (read-modify-write) with dhcp:true for DHCP / the staticIP trio for static, then verify-GET.",
+      "evidence": "Live probe 10.0.0.29 2026-08-10 (§5.3b payload-truth appendix, docs/reports/2026-08-09-controlled-verify-experiment-protocol.md); drop forensics docs/reports/2026-08-10-dot29-post-reprovision-drop-forensics.md"
     }
   },
   {
@@ -1236,14 +1236,14 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u6307\u5b9a\u7f51\u7edc\u63a5\u53e3\u914d\u7f6e\u3002",
+        "description": "用于获取指定网络接口配置。",
         "query": "None.",
         "content": "None.",
         "success_return": "NetworkInterfacePppoe JSON Form.",
         "notes": ""
       },
       "PUT": {
-        "description": "\u7528\u4e8e\u66f4\u65b0\u6307\u5b9a\u7f51\u7edc\u63a5\u53e3\u914d\u7f6e\u3002",
+        "description": "用于更新指定网络接口配置。",
         "query": "None.",
         "content": "NetworkInterfacePppoe JSON Form.",
         "success_return": "Response JSON Form.",
@@ -1266,14 +1266,14 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u6307\u5b9a\u7f51\u7edc\u63a5\u53e3 DDNS \u914d\u7f6e\u3002",
+        "description": "用于获取指定网络接口 DDNS 配置。",
         "query": "None.",
         "content": "None.",
         "success_return": "NetworkInterfaceDdns JSON Form.",
         "notes": ""
       },
       "PUT": {
-        "description": "\u7528\u4e8e\u66f4\u65b0\u6307\u5b9a\u7f51\u7edc\u63a5\u53e3 DDNS \u914d\u7f6e\u3002",
+        "description": "用于更新指定网络接口 DDNS 配置。",
         "query": "None.",
         "content": "NetworkInterfaceDdns JSON Form.",
         "success_return": "Response JSON Form.",
@@ -1296,14 +1296,14 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u6307\u5b9a\u7f51\u7edc\u63a5\u53e3 WIRELESS \u914d\u7f6e\u3002",
+        "description": "用于获取指定网络接口 WIRELESS 配置。",
         "query": "None.",
         "content": "None.",
         "success_return": "NetworkInterfaceWireless JSON Form.",
         "notes": ""
       },
       "PUT": {
-        "description": "\u7528\u4e8e\u66f4\u65b0\u6307\u5b9a\u7f51\u7edc\u63a5\u53e3 WIRELESS \u914d\u7f6e\u3002",
+        "description": "用于更新指定网络接口 WIRELESS 配置。",
         "query": "None.",
         "content": "NetworkInterfaceWireless JSON Form.",
         "success_return": "Response JSON Form.",
@@ -1317,18 +1317,18 @@
     },
     "settled_verdict": {
       "date": "2026-08-10",
-      "status": "SETTLED LIVE \u2014 do not re-litigate the key spelling",
+      "status": "SETTLED LIVE — do not re-litigate the key spelling",
       "canonical_rest_key": "wirelessMode",
       "wire_plane_key": "wireless",
-      "summary": "REST GET returns wirelessMode; PUT wirelessMode round-trips in BOTH body shapes (nested stationMode + flat siblings); PUT using the wire-plane key 'wireless' is REJECTED in both shapes. The wire-plane 'wireless' spelling is correct only for interpreting media-info frames \u2014 it cannot be written back through the REST PUT.",
-      "evidence": "Live probe 10.0.0.29 (blank admin) 2026-08-10 11:22Z/11:53Z, verified via the \u00a75.8 delegation chain; campaign ledger local-camera-recovery/ledger/JAZ7C34780038910.jsonl; report docs/reports/2026-08-10-rest-keyprobe-verdict.md"
+      "summary": "REST GET returns wirelessMode; PUT wirelessMode round-trips in BOTH body shapes (nested stationMode + flat siblings); PUT using the wire-plane key 'wireless' is REJECTED in both shapes. The wire-plane 'wireless' spelling is correct only for interpreting media-info frames — it cannot be written back through the REST PUT.",
+      "evidence": "Live probe 10.0.0.29 (blank admin) 2026-08-10 11:22Z/11:53Z, verified via the §5.8 delegation chain; campaign ledger local-camera-recovery/ledger/JAZ7C34780038910.jsonl; report docs/reports/2026-08-10-rest-keyprobe-verdict.md"
     },
     "settled_verdict_station_dhcp": {
       "date": "2026-08-10",
-      "status": "SETTLED LIVE \u2014 write-only wire-plane hint; do not treat as a REST schema key",
+      "status": "SETTLED LIVE — write-only wire-plane hint; do not treat as a REST schema key",
       "key": "wirelessStationDhcp",
-      "summary": "wirelessStationDhcp appears 0 times in the catalog schema and is NEVER echoed by the REST GET \u2014 it is a write-only wire-plane (media-info frame) hint with INVERTED semantics: write false = DHCP addressing (STA_DHCP=1), write true = static (STA_DHCP=0). One-shot: a PUT false flips the lan block addressingType static\u2192dynamic + OnvifAutoAdapt false\u2192true once, then the flag disappears from subsequent GETs. The deterministic REST lever is the explicit lan {addressingType, dhcp} write on /NetSDK/Network/interface/4, not this flag.",
-      "evidence": "Live probe 10.0.0.29 2026-08-10 (\u00a75.3b payload-truth appendix, docs/reports/2026-08-09-controlled-verify-experiment-protocol.md); beacon payload decode docs/reports/2026-08-10-beacon-payload-decode.md"
+      "summary": "wirelessStationDhcp appears 0 times in the catalog schema and is NEVER echoed by the REST GET — it is a write-only wire-plane (media-info frame) hint with INVERTED semantics: write false = DHCP addressing (STA_DHCP=1), write true = static (STA_DHCP=0). One-shot: a PUT false flips the lan block addressingType static→dynamic + OnvifAutoAdapt false→true once, then the flag disappears from subsequent GETs. The deterministic REST lever is the explicit lan {addressingType, dhcp} write on /NetSDK/Network/interface/4, not this flag.",
+      "evidence": "Live probe 10.0.0.29 2026-08-10 (§5.3b payload-truth appendix, docs/reports/2026-08-09-controlled-verify-experiment-protocol.md); beacon payload decode docs/reports/2026-08-10-beacon-payload-decode.md"
     }
   },
   {
@@ -1340,11 +1340,11 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u6240\u6709\u7f51\u7edc\u7aef\u53e3\u914d\u7f6e\u5217\u8868\u3002",
+        "description": "用于获取所有网络端口配置列表。",
         "query": "None.",
         "content": "None.",
         "success_return": "NetworkPortListJSON Form.",
-        "notes": ": web/data \u7aef\u53e3\u53ea\u662f\u7528 ID \u4e3a 1 \u7684\uff0c\u5176\u4f59\u4e3a\u4fdd\u7559\u63a5\u53e3"
+        "notes": ": web/data 端口只是用 ID 为 1 的，其余为保留接口"
       }
     },
     "inference_flags": {
@@ -1364,14 +1364,14 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u6307\u5b9a\u7f51\u7edc\u7aef\u53e3\u914d\u7f6e\u3002",
+        "description": "用于获取指定网络端口配置。",
         "query": "None.",
         "content": "None.",
         "success_return": "NetworkPortListJSON Form.",
         "notes": ""
       },
       "PUT/POST": {
-        "description": "\u7528\u4e8e\u66f4\u65b0\u6307\u5b9a\u7f51\u7edc\u7aef\u53e3\u914d\u7f6e\u3002",
+        "description": "用于更新指定网络端口配置。",
         "query": "None.",
         "content": "NetworkPortList JSON Form.",
         "success_return": "Response JSON Form.",
@@ -1395,14 +1395,14 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u7f51\u7edc DNS \u914d\u7f6e\u3002",
+        "description": "用于获取网络 DNS 配置。",
         "query": "None.",
         "content": "None.",
         "success_return": "NetworkDns JSON Form.",
         "notes": ""
       },
       "PUT/POST": {
-        "description": "\u7528\u4e8e\u66f4\u65b0\u7f51\u7edc DNS \u914d\u7f6e\u3002",
+        "description": "用于更新网络 DNS 配置。",
         "query": "None.",
         "content": "NetworkDns JSON Form.",
         "success_return": "Response JSON Form.",
@@ -1426,14 +1426,14 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6 ESEE \u914d\u7f6e\u3002",
+        "description": "用于获取 ESEE 配置。",
         "query": "None.",
         "content": "None.",
         "success_return": "NetworkEsee JSON Form.",
         "notes": ""
       },
       "PUT/POST": {
-        "description": "\u7528\u4e8e\u66f4\u65b0 ESEE \u914d\u7f6e\u3002",
+        "description": "用于更新 ESEE 配置。",
         "query": "None.",
         "content": "NetworkEsee JSON Form.",
         "success_return": "Response JSON Form.",
@@ -1455,11 +1455,11 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6 SDCard media",
+        "description": "用于获取 SDCard media",
         "query": "None.",
         "content": "None.",
         "success_return": "SDCardDbMedia JSON Form.",
-        "notes": ": \u6309 beginUTC, endUTC \u83b7\u53d6 SDCsrd db media"
+        "notes": ": 按 beginUTC, endUTC 获取 SDCsrd db media"
       }
     },
     "inference_flags": {
@@ -1477,7 +1477,7 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u56de\u653e SDCard media",
+        "description": "用于回放 SDCard media",
         "query": "None.",
         "content": "None.",
         "success_return": "Integer 0.",
@@ -1499,7 +1499,7 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u683c\u5f0f\u5316 SDCard",
+        "description": "用于格式化 SDCard",
         "query": "None.",
         "content": "None.",
         "success_return": "Integer 0.",
@@ -1521,11 +1521,11 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6 SDCard \u72b6\u6001",
+        "description": "用于获取 SDCard 状态",
         "query": "None.",
         "content": "None.",
         "success_return": "Sdcard status.",
-        "notes": ": Sdcard status:1\u3001work 2\u3001ejected 3\u3001fserror 4\u3001formatting 5\u3001zombie"
+        "notes": ": Sdcard status:1、work 2、ejected 3、fserror 4、formatting 5、zombie"
       }
     },
     "inference_flags": {
@@ -1545,18 +1545,18 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u56fe\u50cf\u5904\u7406\u914d\u7f6e",
+        "description": "用于获取图像处理配置",
         "query": "None.",
         "content": "None.",
         "success_return": "Image JSON Form.",
         "notes": ""
       },
       "PUT/POST": {
-        "description": "\u7528\u4e8e\u8bbe\u7f6e\u56fe\u50cf\u5904\u7406\u914d\u7f6e",
+        "description": "用于设置图像处理配置",
         "query": "None.",
         "content": "Image JSON Form.",
         "success_return": "Response JSON Form.",
-        "notes": ": \u67e5\u8be2\u7528get\uff0c\u8bbe\u7f6e\u7528put\uff0c\u8bbe\u7f6e\u6210\u529f\u540e\u8fd4\u56deok\u7684json\u4fe1\u606f\u3002"
+        "notes": ": 查询用get，设置用put，设置成功后返回ok的json信息。"
       }
     },
     "inference_flags": {
@@ -1576,18 +1576,18 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u7ea2\u5916\u914d\u7f6e",
+        "description": "用于获取红外配置",
         "query": "None.",
         "content": "None.",
         "success_return": "IrCutFilter JSON Form.",
         "notes": ""
       },
       "PUT/POST": {
-        "description": "\u7528\u4e8e\u8bbe\u7f6e\u7ea2\u5916\u914d\u7f6e",
+        "description": "用于设置红外配置",
         "query": "None.",
         "content": "IrCutFilter JSON Form.",
         "success_return": "Response JSON Form.",
-        "notes": "21 : \u67e5\u8be2\u7528 get\uff0c\u8bbe\u7f6e\u7528 put\uff0c\u8bbe\u7f6e\u6210\u529f\u540e\u8fd4\u56de ok \u7684 json \u4fe1\u606f\u3002"
+        "notes": "21 : 查询用 get，设置用 put，设置成功后返回 ok 的 json 信息。"
       }
     },
     "inference_flags": {
@@ -1607,18 +1607,18 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u624b\u52a8\u9510\u5ea6\u914d\u7f6e",
+        "description": "用于获取手动锐度配置",
         "query": "None.",
         "content": "None.",
         "success_return": "ManualSharpness JSON Form.",
         "notes": ""
       },
       "PUT/POST": {
-        "description": "\u7528\u4e8e\u8bbe\u7f6e\u624b\u52a8\u9510\u5ea6\u914d\u7f6e",
+        "description": "用于设置手动锐度配置",
         "query": "None.",
         "content": "ManualSharpness JSON Form.",
         "success_return": "Response JSON Form.",
-        "notes": ": \u67e5\u8be2\u7528 get\uff0c\u8bbe\u7f6e\u7528 put\uff0c\u8bbe\u7f6e\u6210\u529f\u540e\u8fd4\u56de ok \u7684 json \u4fe1\u606f\u3002"
+        "notes": ": 查询用 get，设置用 put，设置成功后返回 ok 的 json 信息。"
       }
     },
     "inference_flags": {
@@ -1638,18 +1638,18 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6 3D \u53bb\u566a\u914d\u7f6e",
+        "description": "用于获取 3D 去噪配置",
         "query": "None.",
         "content": "None.",
         "success_return": "Denoise3D JSON Form.",
         "notes": ""
       },
       "PUT/POST": {
-        "description": "\u7528\u4e8e\u8bbe\u7f6e 3D \u53bb\u566a\u914d\u7f6e",
+        "description": "用于设置 3D 去噪配置",
         "query": "None.",
         "content": "Denoise3D JSON Form.",
         "success_return": "Response JSON Form.",
-        "notes": ": \u67e5\u8be2\u7528 get\uff0c\u8bbe\u7f6e\u7528 put\uff0c\u8bbe\u7f6e\u6210\u529f\u540e\u8fd4\u56de ok \u7684 json \u4fe1\u606f\u3002"
+        "notes": ": 查询用 get，设置用 put，设置成功后返回 ok 的 json 信息。"
       }
     },
     "inference_flags": {
@@ -1669,18 +1669,18 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u5bbd\u52a8\u6001\u914d\u7f6e",
+        "description": "用于获取宽动态配置",
         "query": "None.",
         "content": "None.",
         "success_return": "WDR JSON Form.",
         "notes": "22"
       },
       "PUT/POST": {
-        "description": "\u7528\u4e8e\u8bbe\u7f6e\u5bbd\u52a8\u6001\u914d\u7f6e",
+        "description": "用于设置宽动态配置",
         "query": "None.",
         "content": "WDR JSON Form.",
         "success_return": "Response JSON Form.",
-        "notes": ": \u67e5\u8be2\u7528 get\uff0c\u8bbe\u7f6e\u7528 put\uff0c\u8bbe\u7f6e\u6210\u529f\u540e\u8fd4\u56de ok \u7684 json \u4fe1\u606f\u3002"
+        "notes": ": 查询用 get，设置用 put，设置成功后返回 ok 的 json 信息。"
       }
     },
     "inference_flags": {
@@ -1699,18 +1699,18 @@
     ],
     "details": {
       "GET": {
-        "description": "\u7528\u4e8e\u83b7\u53d6\u81ea\u52a8\u5bf9\u7126\u7edf\u8ba1",
+        "description": "用于获取自动对焦统计",
         "query": "None.",
         "content": "None.",
-        "success_return": "Unsigned short: Focus Metries Value\uff08text/html\uff09",
+        "success_return": "Unsigned short: Focus Metries Value（text/html）",
         "notes": ""
       },
       "DELETE": {
-        "description": "\u7528\u4e8e\u6e05\u9664\u81ea\u52a8\u5bf9\u7126\u7edf\u8ba1\u63a8\u9001",
+        "description": "用于清除自动对焦统计推送",
         "query": "None.",
         "content": "None",
         "success_return": "Response JSON Form",
-        "notes": ": \u67e5\u8be2\u7528 get\uff0cget \u540e\u8bbe\u5907\u4f1a\u5bf9\u8be5 socket \u8fdb\u884c\u4e3b\u52a8\u63a8\u9001 HTTP \u6570\u636e\u5305\uff0c\u63a8\u9001\u5931\u8d25 100 \u6b21\u4f1a\u81ea\u52a8 \u6e05\u9664\u63a8\u9001\u72b6\u6001\u3002\u4e3b\u52a8\u6e05\u9664\u7528 delete\uff0c\u6e05\u9664\u6210\u529f\u540e\u8fd4\u56de ok \u7684 json \u4fe1\u606f\u3002 Appendix I Data Structure DeviceInfo { /* rw, string, */ \"deviceName\", /* rw, integer, \"1-128\", */ 23 \"deviceAddress\", /* ro, string, */ \"description\", /* ro, string, */ \"model\", /* ro, string, */ \"serialNumber\", /* ro, string, */ \"macAddress\", /* ro, string, */ \"firmwareVersion\", /* ro, string, */ \"firmwareReleaseDate\", /* ro, string, */ \"firmwareVersion\", /* ro, string, */ \"hardwareVersion\", } TimeNtp { /* rw, boolean, [true, false] */ \" ntpEnabled\", /* rw, string, \"max\": 64, */ \" ntpServerDomain\", } AudioInputChannel { /* ro, integer, */ \"id\", /* ro, string, \"input,output\", */ \"workMode\", /* rw, integer, \"8000\", */ \"sampleRate\", /* rw, integer, \"16\", */ \"sampleBitWidth\", /* rw, integer, \"0-100\", */ \"inputVolume\", /* rw, integer, \"0-100\", */ \"outputVolume\", } AudioEncodeChannel 24 { /* ro, integer, */ \"id\", /* ro, integer, */ \"audioInputChannelID\", /* rw, boolean, */ \"enabled\", /* rw, string, \"G.711alaw,G.711ulaw\", */ \"codecType\", } VideoPrivacyMask { /* ro, integer, */ \"id\", /* ro, boolean, */ \"enabled\", /* ro, float, \"0-100\", the relative percentage to capture size */ \"regionX\", \"regionY\", \"regionWidth\", \"regionHeight\", /* ro, string, the mask color, RGB888 format, such as red \"ff0000\" */ \"regionColor\", } VideoInputChannel 25 { /* ro, integer, */ \"id\", /* ro, integer, \"50,60\", */ \"powerLineFrequencyMode\", /* ro, integer, the video capture size, */ \"captureWidth\", \"captureWidthProperty\", /* ro, integer, depends on the <powerLineFrequencyMode>, */ \"captureFrameRate\", /* ro, integer, \"0-100\", */ \"brightnessLevel\", \"contrastLevel\", \"sharpnessLevel\", \"saturationLevel\", \"hueLevel\", /* video privacy mask list, */ \"privacyMask\" : [], } VideoChannelNameOverlay { /* rw, boolean, indicates the overlay shows or not, */ \"enabled\", /* rw, float, \"0-100\", indicates the location of overlay, */ /* the relative percentage of video size, */ \"regionX\", \"regionY\", } VideoDatetimeOverlay 26 { /* rw, boolean, indicates the overlay shows or not, */ \"enabled\", \"regionX\", \"regionY\", /* rw, string, */ /* \"YYYY/MM/DD,MM/DD/YYYY,DD/MM/YYYY\", */ /* \"YYYY-MM-DD,MM-DD-YYYY,DD-MM-YYYY\", */ /* indicates the date format to display, */ \"dateFormat\", /* rw, integer, \"12,24\", indicates the time format to display, */ \"timeFormat\", /* rw, boolean, */ \"displayWeek\", } VideoDeviceIDOverlay { /* rw, boolean, indicates the overlay shows or not, */ \"enabled\", \"regionX\", \"regionY\", } VideoTextOverlay { /* rw, boolean, indicates the overlay shows or not, */ \"enabled\", \"regionX\", \"regionY\", /* rw, string, */ \"message\", } VideoEncodeChannel { /* ro, integer, */ \"id\", /* rw, string, */ \"channelName\", /* rw, boolean, */ \"enabled\", /* ro, integer, refers to </NetSDK/Video/input/channel/ID>, */ \"videoInputChannelID\", 27 /* rw, string, \"H.264\", */ \"codecType\", /* rw, string, \"baseline,main,high\", */ \"h264Profile\", /* rw, string, format <width x height>, */ \"resolution\", /* rw, boolean, */ \"freeResolution\", /* rw, integer, indicates the video size when <freeResolution> true, */ \"resolutionWidth\", \"resolutionHeight\", /* rw, string, \"CBR,VBR\", */ \"bitRateControlType\", /* rw, integer, */ \"constantBitRate\", /* rw, integer, */ \"frameRate\", /* rw, integer, */ \"keyFrameInterval\", /* rw, string, \"JPEG\" */ \"snapShotImageType\", /* the channel name overlay of this encoding, */ \"channelNameOverlay\", /* the datetime overlay of this encoding, */ \"datetimeOverlay\", /* the device ID overlay of this encoding, */ \"deviceIDOverlay\", /* the text overlay of this encoding, */ \"textOverlay\" : [], } VideoMotionDetectionGrid { /* ro, integer, */ \"rowGranularity\", /* ro, integer, */ \"columnGranularity \", /* rw, a boolean <rowGranularity> by <columnGranularity> matrix, */ \"granularity\", /* ro, integer, \"0-100\" */ \"sensitivityLevel\", } VideoMotionDetectionRegion 28 { /* ro, integer, */ \"id\", /* rw, boolean, */ \"enabled\", /* rw, float, \"0-100\" */ \"regionX\", \"regionY\", \"regionWidth\", \"regionHeight\", /* ro, integer, \"0-100\" */ \"sensitivityLevel\", } VideoMotionDetectionChannel { /* ro, integer, */ \"id\", /* rw, boolean, */ \"enabled\", /* rw, string, \"grid,region\", */ \" detectionType\", /* refers to <VideoMotionDetectionGrid>, */ \" detectionGrid\", /* refers to <VideoMotionDetectionRegion>, */ \" detectionRegion\" : [], } AlarmInputChannel { /* ro, integer, */ \"id\", \"active\" : { /* rw, string, \"high,low\", */ \"defaultState\", /* rw, string, \"high,low\", */ \"activeState\", } } AlarmOutputChannel { /* ro, integer, */ \"id\", 29 \"active\" : { /* rw, string, \"high,low\", */ \"defaultState\", \"activeState\", }, /* rw, string, \"continuous,low\", */ \"powerOnState\", /* rw, integer, \"1000-\", in millisecond */ \"pulseDuration\", } AlarmIOPortStatus { /* ro, string, \"input,output\", the type of this alarm IO port */ \"type\", /* ro, string, \"high,low\", the current state of this alarm IO port */ \"state\", /* ro, boolean, */ \"active\", } PTZChannel { /* ro, integer, */ \"id\", /* ro, integer, */ \"serialPortID\", \"videoInputID\", /* ro, string, \"half,full\", */ \"duplexMode\", /* ro, string, \"internal,external\", */ \"controlType, \"externalControl\" : { /* rw, string, */ \"protocol\", /* rw, integer, */ \"address\", }, } StreamTransportRTSP { /* ro, boolean, */ 30 \"enabled\", /* ro, boolean, */ \"authorization\", /* rtsp://<ipAddress>[:<port>]/<absolutePath>, */ /* ro, string, */ \"absolutePath\", /* ro, integer, \"1-60000\", */ \"port\", } StreamTransportRTSPoverHTTP { /* ro, boolean, */ \"enabled\", /* ro, boolean, */ \"authorization\", /* ro, string, \"GET\", */ \"requestMethod\", /* http://<ipAddress>[:<port>]/<absolutePath>, */ /* ro, string, */ \"absolutePath\", /* ro, integer, \"1-60000\", */ \"port\", } StreamTransportFLVoverHTTP { /* ro, boolean, */ \"enabled\", /* ro, boolean, */ \"authorization\", /* ro, string, \"GET\", */ \"requestMethod\", /* http://<ipAddress>[:<port>]/<absolutePath>, */ /* ro, string, */ \"absolutePath\", /* ro, integer, \"1-60000\", */ \"port\", } StreamTransportRTMP { /* ro, boolean, */ \"enabled\", 31 /* ro, boolean, */ \"authorization\", /* rtmp://<ipAddress>[:<port>]/<absolutePath>, */ /* ro, string, */ \"absolutePath\", /* ro, integer, \"1-60000\", */ \"port\", } StreamChannel { /* ro, ineteger, */ \"id\", /* ro, ineteger, refers to </NetSDK/audio/encode/channel/ID>, */ \"audioEncodeChannelID\", /* ro, ineteger, refers to </NetSDK/video/encode/channel/ID>, */ \"videoEncodeChannelID\", /* refers to <StreamTransportRTSP>, */ \"transportRTSP\", /* refers to <StreamTransportRTSPoverHTTP>, */ \"transportRTSPoverHTTP\", /* refers to <StreamTransportFLVoverHTTP>, */ \"transportFLVoverHTTP\", /* refers to <StreamTransportRTMP>, */ \"transportRTMP\", } NetworkInterfaceList { /* ro, integer, */ \"id\", /* ro, string, */ \"interfaceName\", /* refers to <NetworkInterfaceLan>, */ \"lan\", /* refers to <NetworkInterfaceUpnp>, */ \"upnp\", /* refers to <NetworkInterfacePppoe>, */ \"pppoe\", /* refers to <NetworkInterfaceDdns>, */ \"ddns\", /* refers to <NetworkInterfaceWireless>, */ \"wireless\", /* refers to <NetworkInterfaceAccessPointMode>, */ 32 \"accessPointMode\", /* refers to <NetworkInterfaceDhcpServer>, */ \"dhcpServer\", } NetworkInterfaceLan { /* rw, string, */ \" ipVersion\", /* rw, string, [\"static\", \"dynamic\"] */ \" addressingType\", /* rw, string, */ \" staticIP\", /* rw, string, */ \" staticNetmask\", /* rw, string, */ \" staticGateway\", } NetworkInterfaceUpnp { /* ro, boolean, */ \"enabled\", } NetworkInterfacePppoe { /* ro, boolean, */ \"enabled\", /* rw, string, \"max\": 64 * \"pppoeUserName\", /* rw, string, \"max\": 64 * \"pppoePassword\", } NetworkInterfaceDns { /* ro, boolean, */ \"enabled\", /*rw,string, \"DYNDDNS\",\"NOIP\",\"3322\", \"CHANGEIP\",\"POPDVR\",\"SKYBEST\",\"DVRTOP\"*/ \"ddnsProvider\", /* rw, string, \"max\": 64 */ \"ddnsUrl\", 33 /* rw, string, \"max\": 64 */ \"ddnsUserName\", /* rw, string, \"max\": 64 */ \"ddnsPassword\", } NetworkInterfaceWireless { /* rw, string, [\"none\",\"accessPoint\",\"stationMode\"] */ \"wirelessMode\", /* refers to < stationMode >, */ \"stationMode\", } NetworkInterfaceStationMode { /* ro, string, */ \"wirelessStaMode\", /* rw, string, \"max\": 48 */ \"wirelessApBssId\", /* rw, string, \"max\": 32 */ \"wirelessApEssId\", /* rw, string, \"min\": 8,\"max\": 63 */ \"wirelessApPsk\", } NetworkInterfaceAccessPointMode { /* ro, string, */ \"wirelessBssId\", /* rw, string, \"max\": 32 */ \"wirelessEssId\", /* rw, string, \"min\": 8,\"max\": 63 */ \"wirelessPsk\", /* rw, string, [\"802.11b\",\"802.11g\",\"802.11n\",\"802.11bg\",\"802.11bgn\"] */ \"wirelessApMode\", /*rw,string, [\"Auto\",\"1\",\"2\",\"3\",\"4\",\"5\", \"6\",\"7\",\"8\",\"9\",\"10\",\"11\",\"12\",\"13\",\"14\"]*/ \"wirelessApMode80211nChannel\", /* ro,boolean, */ \"wirelessEssIdBroadcastingEnabled\", /* rw, string, [\"WPA_PSK\",\"WPA2_PSK\"] */ \"wirelessWpaMode\", } 34 NetworkInterfaceDhcpServer { /* ro, boolean, */ \"enabled\", /* ro, boolean, */ \"dhcpAutoSettingEnabled\", /* rw, string, \"max\": 64 */ \"dhcpIpRange\", /* rw, string, \"max\": 32 */ \"dhcpIpNumber\", /* rw, string, \"max\": 32 */ \"dhcpIpDns\", /* rw, string, \"max\": 32 */ \"dhcpIpGateway\", } NetworkPortList { /* ro, integer, */ \"id\", /* ro, string, */ \"portName\", /* rw, integer, \"min\" : 1, \"max\" 60000 */ \"value\", } NetworkDNS { /* ro, string, */ \"preferredDns\", /* ro, string, */ \"staticAlternateDns\", } NetworkEsee { /* ro, boolean, */ \"enabled\", } SDCardDbMedia { /* rw, integer, */ 35 \"sessionID\" /* rw, integer, */ \"channelID\". /* rw, integer, */ \"beginUTC\" /* rw, integer, */ \"endUTC\" /* rw, strng, */ \"type\" }, Image { /* rw, string, [ \"auto\", \"indoor\", \"outdoor\"], */ \"sceneMode\" /* refers to <ImageIrCutFilter>, */ \"irCutFilter\" /* refers to < ImageManualSharpness>, */ \"manualSharpness\" /* refers to <ImageDenoise3d>, */ \"denoise3d\" /* refers to <ImageWDR>, */ \"WDR\" /* rw, string, [\"auto\", \"bright\", \"dark\"]*/ \"exposureMode\" /* rw, string, [\"auto\", \"indoor\", \"outdoor\"]*/ \"awbMode\" /* rw, string, [\"close\", \"only night\", \"day-night\", \"auto\"]*/ \"lowlightMode\" } IrCutFilter { /* rw, string, [\"hardware\", \"software\"] */ \"irCutControlMode\" /* rw, string, [\"auto\", \"daylight\", \"night\"]*/ \"irCutMode\" } ManualSharpness { /* ro, boolean, */ \"enabled\" 36 /* rw, integer, \"min\" : 0, \"max\" : 255, \"def\" : 170*/ \"sharpnessLevel\" } Denoise3d { /* ro, boolean, */ \"enabled\" /* rw, integer, \"min\" : 1, \"max\" : 5, \"def\" : 1*/ \"denoise3dStrength\" } WDR { /* ro, boolean, */ \"enabled\" /* rw, integer, \"min\" : 1, \"max\" : 5, \"def\" : 3 */ \"WDRStrength\" } 37 - Many endpoints support GET for read and PUT/POST for write. - Preserve exact path capitalization when testing firmware. - Some PDFs contain OCR errors; validate against live device responses. - Use authenticated HTTP requests if device requires login/session. 1. Generate Python client from endpoint list. 2. Probe live device and compare supported routes. 3. Build ONVIF + NETSDK bridge. 4. Auto-discover writable image/night-vision settings."
+        "notes": ": 查询用 get，get 后设备会对该 socket 进行主动推送 HTTP 数据包，推送失败 100 次会自动 清除推送状态。主动清除用 delete，清除成功后返回 ok 的 json 信息。 Appendix I Data Structure DeviceInfo { /* rw, string, */ \"deviceName\", /* rw, integer, \"1-128\", */ 23 \"deviceAddress\", /* ro, string, */ \"description\", /* ro, string, */ \"model\", /* ro, string, */ \"serialNumber\", /* ro, string, */ \"macAddress\", /* ro, string, */ \"firmwareVersion\", /* ro, string, */ \"firmwareReleaseDate\", /* ro, string, */ \"firmwareVersion\", /* ro, string, */ \"hardwareVersion\", } TimeNtp { /* rw, boolean, [true, false] */ \" ntpEnabled\", /* rw, string, \"max\": 64, */ \" ntpServerDomain\", } AudioInputChannel { /* ro, integer, */ \"id\", /* ro, string, \"input,output\", */ \"workMode\", /* rw, integer, \"8000\", */ \"sampleRate\", /* rw, integer, \"16\", */ \"sampleBitWidth\", /* rw, integer, \"0-100\", */ \"inputVolume\", /* rw, integer, \"0-100\", */ \"outputVolume\", } AudioEncodeChannel 24 { /* ro, integer, */ \"id\", /* ro, integer, */ \"audioInputChannelID\", /* rw, boolean, */ \"enabled\", /* rw, string, \"G.711alaw,G.711ulaw\", */ \"codecType\", } VideoPrivacyMask { /* ro, integer, */ \"id\", /* ro, boolean, */ \"enabled\", /* ro, float, \"0-100\", the relative percentage to capture size */ \"regionX\", \"regionY\", \"regionWidth\", \"regionHeight\", /* ro, string, the mask color, RGB888 format, such as red \"ff0000\" */ \"regionColor\", } VideoInputChannel 25 { /* ro, integer, */ \"id\", /* ro, integer, \"50,60\", */ \"powerLineFrequencyMode\", /* ro, integer, the video capture size, */ \"captureWidth\", \"captureWidthProperty\", /* ro, integer, depends on the <powerLineFrequencyMode>, */ \"captureFrameRate\", /* ro, integer, \"0-100\", */ \"brightnessLevel\", \"contrastLevel\", \"sharpnessLevel\", \"saturationLevel\", \"hueLevel\", /* video privacy mask list, */ \"privacyMask\" : [], } VideoChannelNameOverlay { /* rw, boolean, indicates the overlay shows or not, */ \"enabled\", /* rw, float, \"0-100\", indicates the location of overlay, */ /* the relative percentage of video size, */ \"regionX\", \"regionY\", } VideoDatetimeOverlay 26 { /* rw, boolean, indicates the overlay shows or not, */ \"enabled\", \"regionX\", \"regionY\", /* rw, string, */ /* \"YYYY/MM/DD,MM/DD/YYYY,DD/MM/YYYY\", */ /* \"YYYY-MM-DD,MM-DD-YYYY,DD-MM-YYYY\", */ /* indicates the date format to display, */ \"dateFormat\", /* rw, integer, \"12,24\", indicates the time format to display, */ \"timeFormat\", /* rw, boolean, */ \"displayWeek\", } VideoDeviceIDOverlay { /* rw, boolean, indicates the overlay shows or not, */ \"enabled\", \"regionX\", \"regionY\", } VideoTextOverlay { /* rw, boolean, indicates the overlay shows or not, */ \"enabled\", \"regionX\", \"regionY\", /* rw, string, */ \"message\", } VideoEncodeChannel { /* ro, integer, */ \"id\", /* rw, string, */ \"channelName\", /* rw, boolean, */ \"enabled\", /* ro, integer, refers to </NetSDK/Video/input/channel/ID>, */ \"videoInputChannelID\", 27 /* rw, string, \"H.264\", */ \"codecType\", /* rw, string, \"baseline,main,high\", */ \"h264Profile\", /* rw, string, format <width x height>, */ \"resolution\", /* rw, boolean, */ \"freeResolution\", /* rw, integer, indicates the video size when <freeResolution> true, */ \"resolutionWidth\", \"resolutionHeight\", /* rw, string, \"CBR,VBR\", */ \"bitRateControlType\", /* rw, integer, */ \"constantBitRate\", /* rw, integer, */ \"frameRate\", /* rw, integer, */ \"keyFrameInterval\", /* rw, string, \"JPEG\" */ \"snapShotImageType\", /* the channel name overlay of this encoding, */ \"channelNameOverlay\", /* the datetime overlay of this encoding, */ \"datetimeOverlay\", /* the device ID overlay of this encoding, */ \"deviceIDOverlay\", /* the text overlay of this encoding, */ \"textOverlay\" : [], } VideoMotionDetectionGrid { /* ro, integer, */ \"rowGranularity\", /* ro, integer, */ \"columnGranularity \", /* rw, a boolean <rowGranularity> by <columnGranularity> matrix, */ \"granularity\", /* ro, integer, \"0-100\" */ \"sensitivityLevel\", } VideoMotionDetectionRegion 28 { /* ro, integer, */ \"id\", /* rw, boolean, */ \"enabled\", /* rw, float, \"0-100\" */ \"regionX\", \"regionY\", \"regionWidth\", \"regionHeight\", /* ro, integer, \"0-100\" */ \"sensitivityLevel\", } VideoMotionDetectionChannel { /* ro, integer, */ \"id\", /* rw, boolean, */ \"enabled\", /* rw, string, \"grid,region\", */ \" detectionType\", /* refers to <VideoMotionDetectionGrid>, */ \" detectionGrid\", /* refers to <VideoMotionDetectionRegion>, */ \" detectionRegion\" : [], } AlarmInputChannel { /* ro, integer, */ \"id\", \"active\" : { /* rw, string, \"high,low\", */ \"defaultState\", /* rw, string, \"high,low\", */ \"activeState\", } } AlarmOutputChannel { /* ro, integer, */ \"id\", 29 \"active\" : { /* rw, string, \"high,low\", */ \"defaultState\", \"activeState\", }, /* rw, string, \"continuous,low\", */ \"powerOnState\", /* rw, integer, \"1000-\", in millisecond */ \"pulseDuration\", } AlarmIOPortStatus { /* ro, string, \"input,output\", the type of this alarm IO port */ \"type\", /* ro, string, \"high,low\", the current state of this alarm IO port */ \"state\", /* ro, boolean, */ \"active\", } PTZChannel { /* ro, integer, */ \"id\", /* ro, integer, */ \"serialPortID\", \"videoInputID\", /* ro, string, \"half,full\", */ \"duplexMode\", /* ro, string, \"internal,external\", */ \"controlType, \"externalControl\" : { /* rw, string, */ \"protocol\", /* rw, integer, */ \"address\", }, } StreamTransportRTSP { /* ro, boolean, */ 30 \"enabled\", /* ro, boolean, */ \"authorization\", /* rtsp://<ipAddress>[:<port>]/<absolutePath>, */ /* ro, string, */ \"absolutePath\", /* ro, integer, \"1-60000\", */ \"port\", } StreamTransportRTSPoverHTTP { /* ro, boolean, */ \"enabled\", /* ro, boolean, */ \"authorization\", /* ro, string, \"GET\", */ \"requestMethod\", /* http://<ipAddress>[:<port>]/<absolutePath>, */ /* ro, string, */ \"absolutePath\", /* ro, integer, \"1-60000\", */ \"port\", } StreamTransportFLVoverHTTP { /* ro, boolean, */ \"enabled\", /* ro, boolean, */ \"authorization\", /* ro, string, \"GET\", */ \"requestMethod\", /* http://<ipAddress>[:<port>]/<absolutePath>, */ /* ro, string, */ \"absolutePath\", /* ro, integer, \"1-60000\", */ \"port\", } StreamTransportRTMP { /* ro, boolean, */ \"enabled\", 31 /* ro, boolean, */ \"authorization\", /* rtmp://<ipAddress>[:<port>]/<absolutePath>, */ /* ro, string, */ \"absolutePath\", /* ro, integer, \"1-60000\", */ \"port\", } StreamChannel { /* ro, ineteger, */ \"id\", /* ro, ineteger, refers to </NetSDK/audio/encode/channel/ID>, */ \"audioEncodeChannelID\", /* ro, ineteger, refers to </NetSDK/video/encode/channel/ID>, */ \"videoEncodeChannelID\", /* refers to <StreamTransportRTSP>, */ \"transportRTSP\", /* refers to <StreamTransportRTSPoverHTTP>, */ \"transportRTSPoverHTTP\", /* refers to <StreamTransportFLVoverHTTP>, */ \"transportFLVoverHTTP\", /* refers to <StreamTransportRTMP>, */ \"transportRTMP\", } NetworkInterfaceList { /* ro, integer, */ \"id\", /* ro, string, */ \"interfaceName\", /* refers to <NetworkInterfaceLan>, */ \"lan\", /* refers to <NetworkInterfaceUpnp>, */ \"upnp\", /* refers to <NetworkInterfacePppoe>, */ \"pppoe\", /* refers to <NetworkInterfaceDdns>, */ \"ddns\", /* refers to <NetworkInterfaceWireless>, */ \"wireless\", /* refers to <NetworkInterfaceAccessPointMode>, */ 32 \"accessPointMode\", /* refers to <NetworkInterfaceDhcpServer>, */ \"dhcpServer\", } NetworkInterfaceLan { /* rw, string, */ \" ipVersion\", /* rw, string, [\"static\", \"dynamic\"] */ \" addressingType\", /* rw, string, */ \" staticIP\", /* rw, string, */ \" staticNetmask\", /* rw, string, */ \" staticGateway\", } NetworkInterfaceUpnp { /* ro, boolean, */ \"enabled\", } NetworkInterfacePppoe { /* ro, boolean, */ \"enabled\", /* rw, string, \"max\": 64 * \"pppoeUserName\", /* rw, string, \"max\": 64 * \"pppoePassword\", } NetworkInterfaceDns { /* ro, boolean, */ \"enabled\", /*rw,string, \"DYNDDNS\",\"NOIP\",\"3322\", \"CHANGEIP\",\"POPDVR\",\"SKYBEST\",\"DVRTOP\"*/ \"ddnsProvider\", /* rw, string, \"max\": 64 */ \"ddnsUrl\", 33 /* rw, string, \"max\": 64 */ \"ddnsUserName\", /* rw, string, \"max\": 64 */ \"ddnsPassword\", } NetworkInterfaceWireless { /* rw, string, [\"none\",\"accessPoint\",\"stationMode\"] */ \"wirelessMode\", /* refers to < stationMode >, */ \"stationMode\", } NetworkInterfaceStationMode { /* ro, string, */ \"wirelessStaMode\", /* rw, string, \"max\": 48 */ \"wirelessApBssId\", /* rw, string, \"max\": 32 */ \"wirelessApEssId\", /* rw, string, \"min\": 8,\"max\": 63 */ \"wirelessApPsk\", } NetworkInterfaceAccessPointMode { /* ro, string, */ \"wirelessBssId\", /* rw, string, \"max\": 32 */ \"wirelessEssId\", /* rw, string, \"min\": 8,\"max\": 63 */ \"wirelessPsk\", /* rw, string, [\"802.11b\",\"802.11g\",\"802.11n\",\"802.11bg\",\"802.11bgn\"] */ \"wirelessApMode\", /*rw,string, [\"Auto\",\"1\",\"2\",\"3\",\"4\",\"5\", \"6\",\"7\",\"8\",\"9\",\"10\",\"11\",\"12\",\"13\",\"14\"]*/ \"wirelessApMode80211nChannel\", /* ro,boolean, */ \"wirelessEssIdBroadcastingEnabled\", /* rw, string, [\"WPA_PSK\",\"WPA2_PSK\"] */ \"wirelessWpaMode\", } 34 NetworkInterfaceDhcpServer { /* ro, boolean, */ \"enabled\", /* ro, boolean, */ \"dhcpAutoSettingEnabled\", /* rw, string, \"max\": 64 */ \"dhcpIpRange\", /* rw, string, \"max\": 32 */ \"dhcpIpNumber\", /* rw, string, \"max\": 32 */ \"dhcpIpDns\", /* rw, string, \"max\": 32 */ \"dhcpIpGateway\", } NetworkPortList { /* ro, integer, */ \"id\", /* ro, string, */ \"portName\", /* rw, integer, \"min\" : 1, \"max\" 60000 */ \"value\", } NetworkDNS { /* ro, string, */ \"preferredDns\", /* ro, string, */ \"staticAlternateDns\", } NetworkEsee { /* ro, boolean, */ \"enabled\", } SDCardDbMedia { /* rw, integer, */ 35 \"sessionID\" /* rw, integer, */ \"channelID\". /* rw, integer, */ \"beginUTC\" /* rw, integer, */ \"endUTC\" /* rw, strng, */ \"type\" }, Image { /* rw, string, [ \"auto\", \"indoor\", \"outdoor\"], */ \"sceneMode\" /* refers to <ImageIrCutFilter>, */ \"irCutFilter\" /* refers to < ImageManualSharpness>, */ \"manualSharpness\" /* refers to <ImageDenoise3d>, */ \"denoise3d\" /* refers to <ImageWDR>, */ \"WDR\" /* rw, string, [\"auto\", \"bright\", \"dark\"]*/ \"exposureMode\" /* rw, string, [\"auto\", \"indoor\", \"outdoor\"]*/ \"awbMode\" /* rw, string, [\"close\", \"only night\", \"day-night\", \"auto\"]*/ \"lowlightMode\" } IrCutFilter { /* rw, string, [\"hardware\", \"software\"] */ \"irCutControlMode\" /* rw, string, [\"auto\", \"daylight\", \"night\"]*/ \"irCutMode\" } ManualSharpness { /* ro, boolean, */ \"enabled\" 36 /* rw, integer, \"min\" : 0, \"max\" : 255, \"def\" : 170*/ \"sharpnessLevel\" } Denoise3d { /* ro, boolean, */ \"enabled\" /* rw, integer, \"min\" : 1, \"max\" : 5, \"def\" : 1*/ \"denoise3dStrength\" } WDR { /* ro, boolean, */ \"enabled\" /* rw, integer, \"min\" : 1, \"max\" : 5, \"def\" : 3 */ \"WDRStrength\" } 37 - Many endpoints support GET for read and PUT/POST for write. - Preserve exact path capitalization when testing firmware. - Some PDFs contain OCR errors; validate against live device responses. - Use authenticated HTTP requests if device requires login/session. 1. Generate Python client from endpoint list. 2. Probe live device and compare supported routes. 3. Build ONVIF + NETSDK bridge. 4. Auto-discover writable image/night-vision settings."
       }
     },
     "inference_flags": {
@@ -1801,7 +1801,7 @@
         "query": "None.",
         "content": "None.",
         "success_return": "JSON token / status.",
-        "notes": "verify = MD5hex(TOUPPER(nonce)+request_id+'Japass^2>.j') \u2014 2-field oc_cal_message_verify, confirmed 42/42 live STS pairs (docs/reports/2026-08-09-controlled-verify-experiment-protocol.md; salt cross-referenced in docs/reports/2026-08-11-nvr-salt-cross-reference.md)."
+        "notes": "verify = MD5hex(TOUPPER(nonce)+request_id+'Japass^2>.j') — 2-field oc_cal_message_verify, confirmed 42/42 live STS pairs (docs/reports/2026-08-09-controlled-verify-experiment-protocol.md; salt cross-referenced in docs/reports/2026-08-11-nvr-salt-cross-reference.md)."
       }
     },
     "inference_flags": {
@@ -1824,7 +1824,7 @@
         "query": "None.",
         "content": "None.",
         "success_return": "JSON status; 500 error envelope {error, error_description, msg} on invalid verify.",
-        "notes": "method=post&eseeid=%s&verify=%s&request_id=%s \u2014 verify = MD5hex(TOUPPER(nonce)+eseeid+TOUPPER(request_id)+'Japass^2>.j'). NVR salt confirmed in docs/reports/2026-08-11-nvr-salt-cross-reference.md."
+        "notes": "method=post&eseeid=%s&verify=%s&request_id=%s — verify = MD5hex(TOUPPER(nonce)+eseeid+TOUPPER(request_id)+'Japass^2>.j'). NVR salt confirmed in docs/reports/2026-08-11-nvr-salt-cross-reference.md."
       }
     },
     "inference_flags": {
@@ -1847,7 +1847,7 @@
         "query": "None.",
         "content": "None.",
         "success_return": "JSON token.",
-        "notes": "Wire shape &eseeid=\u2026&request_id=<random>&verify=\u2026&channel=0&type=1 (docs/reports/2026-08-09-capture-extraction-inventory.md)."
+        "notes": "Wire shape &eseeid=…&request_id=<random>&verify=…&channel=0&type=1 (docs/reports/2026-08-09-capture-extraction-inventory.md)."
       }
     },
     "inference_flags": {
@@ -3219,5 +3219,802 @@
       "request_response_schema_links_partly_inferred": true
     },
     "provenance": "Mined from FWHI102 NVR web bundle (squashfs /web/): dist/build.js + dist/import.js + main.js/view1.js + WebClient.exe (NSIS-unpacked NetSdk.dll / iotlink.dll / P2PSDKClient.dll) + app.out / cgi.app strings. Extraction report: docs/reports/2026-08-11-firmware-full-extraction-report.md"
+  },
+  {
+    "title": "System LED PWM (White Light)",
+    "tag": "System",
+    "endpoint": "/NetSDK/System/ledpwm",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "Read LED PWM duty-cycle (white light) control.",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "LED PWM JSON form.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "Set LED PWM duty-cycle (white light) control.",
+        "query": "None.",
+        "content": "LED PWM JSON form.",
+        "success_return": "Response JSON Form.",
+        "notes": ""
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+  },
+  {
+    "title": "System LED PWM Channel Info",
+    "tag": "System",
+    "endpoint": "/NetSDK/System/ledpwm/ChannelInfo",
+    "methods": [
+      "GET"
+    ],
+    "details": {
+      "GET": {
+        "description": "Read LED PWM per-channel info.",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "Channel JSON array.",
+        "notes": ""
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+  },
+  {
+    "title": "System Alarm Schedule",
+    "tag": "System",
+    "endpoint": "/NetSDK/System/AlarmSchedule",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "Read alarm schedule (time segments per day).",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "Schedule JSON form.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "Set alarm schedule (time segments per day).",
+        "query": "None.",
+        "content": "Schedule JSON form.",
+        "success_return": "Response JSON Form.",
+        "notes": ""
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+  },
+  {
+    "title": "System Alarm Schedule V2",
+    "tag": "System",
+    "endpoint": "/NetSDK/System/AlarmScheduleV2",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "Read alarm schedule (V2 payload).",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "Schedule JSON form.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "Set alarm schedule (V2 payload).",
+        "query": "None.",
+        "content": "Schedule JSON form.",
+        "success_return": "Response JSON Form.",
+        "notes": ""
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+  },
+  {
+    "title": "System Alarm Tone",
+    "tag": "System",
+    "endpoint": "/NetSDK/System/AlarmTone",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "Read alarm tone config.",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "Tone JSON form.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "Set alarm tone config.",
+        "query": "None.",
+        "content": "Tone JSON form.",
+        "success_return": "Response JSON Form.",
+        "notes": ""
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+  },
+  {
+    "title": "System Record Schedule",
+    "tag": "System",
+    "endpoint": "/NetSDK/System/RecordSchedule",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "Read record schedule (time segments per day).",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "Schedule JSON form.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "Set record schedule (time segments per day).",
+        "query": "None.",
+        "content": "Schedule JSON form.",
+        "success_return": "Response JSON Form.",
+        "notes": ""
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+  },
+  {
+    "title": "System Time Calendar Style",
+    "tag": "System",
+    "endpoint": "/NetSDK/System/time/calendarStyle",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "Read calendar style (e.g. lunar/gregorian).",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "Style JSON form.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "Set calendar style.",
+        "query": "None.",
+        "content": "Style JSON form.",
+        "success_return": "Response JSON Form.",
+        "notes": ""
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+  },
+  {
+    "title": "System Time Zone",
+    "tag": "System",
+    "endpoint": "/NetSDK/System/time/timeZone",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "Read time zone offset.",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "TimeZone JSON form.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "Set time zone offset.",
+        "query": "None.",
+        "content": "TimeZone JSON form.",
+        "success_return": "Response JSON Form.",
+        "notes": ""
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+  },
+  {
+    "title": "System RTC",
+    "tag": "System",
+    "endpoint": "/NetSDK/System/time/rtc",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "Read real-time clock.",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "RTC JSON form.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "Set real-time clock.",
+        "query": "None.",
+        "content": "RTC JSON form.",
+        "success_return": "Response JSON Form.",
+        "notes": ""
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+  },
+  {
+    "title": "System Device Name",
+    "tag": "System",
+    "endpoint": "/NetSDK/System/deviceInfo/deviceName",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "Read device name.",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "Name JSON form.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "Set device name.",
+        "query": "None.",
+        "content": "Name JSON form.",
+        "success_return": "Response JSON Form.",
+        "notes": ""
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+  },
+  {
+    "title": "System Device Address",
+    "tag": "System",
+    "endpoint": "/NetSDK/System/deviceInfo/deviceAddress",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "Read device address (location text).",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "Address JSON form.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "Set device address (location text).",
+        "query": "None.",
+        "content": "Address JSON form.",
+        "success_return": "Response JSON Form.",
+        "notes": ""
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+  },
+  {
+    "title": "System Capabilities",
+    "tag": "System",
+    "endpoint": "/NetSDK/System/capabilities",
+    "methods": [
+      "GET"
+    ],
+    "details": {
+      "GET": {
+        "description": "Read device capability set.",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "Capabilities JSON form.",
+        "notes": ""
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+  },
+  {
+    "title": "Video Cordon (Tripwire)",
+    "tag": "Video",
+    "endpoint": "/NetSDK/Video/cordon",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "Read cordon/tripwire detection config.",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "Cordon JSON form.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "Set cordon/tripwire detection config.",
+        "query": "None.",
+        "content": "Cordon JSON form.",
+        "success_return": "Response JSON Form.",
+        "notes": ""
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+  },
+  {
+    "title": "Video Face Detection",
+    "tag": "Video",
+    "endpoint": "/NetSDK/Video/FaceDetection",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "Read face detection config.",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "FaceDetection JSON form.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "Set face detection config.",
+        "query": "None.",
+        "content": "FaceDetection JSON form.",
+        "success_return": "Response JSON Form.",
+        "notes": ""
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+  },
+  {
+    "title": "Video Human Detection",
+    "tag": "Video",
+    "endpoint": "/NetSDK/Video/HumanDetect",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "Read human/person detection config.",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "HumanDetect JSON form.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "Set human/person detection config.",
+        "query": "None.",
+        "content": "HumanDetect JSON form.",
+        "success_return": "Response JSON Form.",
+        "notes": ""
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+  },
+  {
+    "title": "Network Wireless Station Signal",
+    "tag": "Network",
+    "endpoint": "/NetSDK/Network/wireless/stationSignal",
+    "methods": [
+      "GET"
+    ],
+    "details": {
+      "GET": {
+        "description": "Read current WiFi station signal strength.",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "Signal JSON form.",
+        "notes": ""
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+  },
+  {
+    "title": "Network Wireless Station Info",
+    "tag": "Network",
+    "endpoint": "/NetSDK/Network/wireless/allStaInfo",
+    "methods": [
+      "GET"
+    ],
+    "details": {
+      "GET": {
+        "description": "Read WiFi station info (SSID/BSSID/rssi).",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "StaInfo JSON array.",
+        "notes": ""
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+  },
+  {
+    "title": "Wireless Scan AP List",
+    "tag": "Wireless",
+    "endpoint": "/NetSDK/Wireless/ScanApList",
+    "methods": [
+      "GET",
+      "POST"
+    ],
+    "details": {
+      "GET": {
+        "description": "Read last WiFi AP scan result list.",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "AP list JSON array.",
+        "notes": ""
+      },
+      "POST": {
+        "description": "Trigger a WiFi AP scan and return the list.",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "AP list JSON array.",
+        "notes": ""
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+  },
+  {
+    "title": "Network Wireless Status",
+    "tag": "Network",
+    "endpoint": "/NetSDK/Network/Wireless/status",
+    "methods": [
+      "GET"
+    ],
+    "details": {
+      "GET": {
+        "description": "Read wireless link status.",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "Status JSON form.",
+        "notes": ""
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+  },
+  {
+    "title": "Network Ports",
+    "tag": "Network",
+    "endpoint": "/NetSDK/Network/port",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "Read HTTP/RTSP/ONVIF port config.",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "Port JSON array/form.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "Set HTTP/RTSP/ONVIF port config.",
+        "query": "None.",
+        "content": "Port JSON form.",
+        "success_return": "Response JSON Form.",
+        "notes": ""
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+  },
+  {
+    "title": "FTP Upload Config",
+    "tag": "System",
+    "endpoint": "/NetSDK/FTP",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "Read FTP upload config.",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "FTP JSON form.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "Set FTP upload config.",
+        "query": "None.",
+        "content": "FTP JSON form.",
+        "success_return": "Response JSON Form.",
+        "notes": ""
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+  },
+  {
+    "title": "RTMP Push Config",
+    "tag": "System",
+    "endpoint": "/NetSDK/RTMP",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "Read RTMP push config.",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "RTMP JSON form.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "Set RTMP push config.",
+        "query": "None.",
+        "content": "RTMP JSON form.",
+        "success_return": "Response JSON Form.",
+        "notes": ""
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+  },
+  {
+    "title": "System GB28181 (PSIA gateway)",
+    "tag": "System",
+    "endpoint": "/NetSDK/System/gb28181",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "Read GB28181 platform access config.",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "GB28181 JSON form.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "Set GB28181 platform access config.",
+        "query": "None.",
+        "content": "GB28181 JSON form.",
+        "success_return": "Response JSON Form.",
+        "notes": ""
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+  },
+  {
+    "title": "System GAT1400",
+    "tag": "System",
+    "endpoint": "/NetSDK/System/gat1400",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "Read GAT1400 config.",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "GAT1400 JSON form.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "Set GAT1400 config.",
+        "query": "None.",
+        "content": "GAT1400 JSON form.",
+        "success_return": "Response JSON Form.",
+        "notes": ""
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+  },
+  {
+    "title": "Video Motion Detection Channel",
+    "tag": "Video",
+    "endpoint": "/NetSDK/Video/motionDetection/channel/*",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "Read motion detection config for a channel.",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "Motion JSON form.",
+        "notes": "Firmware-proven channel-scoped form."
+      },
+      "PUT": {
+        "description": "Set motion detection config for a channel.",
+        "query": "None.",
+        "content": "Motion JSON form.",
+        "success_return": "Response JSON Form.",
+        "notes": "Firmware-proven channel-scoped form."
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+  },
+  {
+    "title": "Audio Input Channel",
+    "tag": "Audio",
+    "endpoint": "/NetSDK/Audio/input/channel/*",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "Read audio input channel config.",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "Audio JSON form.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "Set audio input channel config.",
+        "query": "None.",
+        "content": "Audio JSON form.",
+        "success_return": "Response JSON Form.",
+        "notes": ""
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+  },
+  {
+    "title": "Audio Encode Channel",
+    "tag": "Audio",
+    "endpoint": "/NetSDK/Audio/encode/channel/*",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "Read audio encode channel config.",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "Audio JSON form.",
+        "notes": ""
+      },
+      "PUT": {
+        "description": "Set audio encode channel config.",
+        "query": "None.",
+        "content": "Audio JSON form.",
+        "success_return": "Response JSON Form.",
+        "notes": ""
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
   }
 ]

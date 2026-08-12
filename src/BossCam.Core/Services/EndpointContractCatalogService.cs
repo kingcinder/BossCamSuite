@@ -1268,6 +1268,716 @@ public sealed class EndpointContractCatalogService(
                         }
                     }
                 ]
+            },
+            // ── Firmware-proven 5523-W surface (anyka_ipc 3.6.103.5721106 string table) ──────
+            // Every endpoint + field name below was extracted verbatim from the camera binary
+            // (RESTful_NetSDK*_OnPut/_OnGet handlers, $.fieldProperty descriptor strings, and
+            // [%s:%d] log formats). These are the real wire keys, not SDK-doc guesses.
+            new EndpointContract
+            {
+                ContractKey = "system.ledpwm",
+                Endpoint = "/NetSDK/System/ledpwm",
+                Method = "PUT",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.VideoImage,
+                GroupName = "Video / Image",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.Safe,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
+                Fields =
+                [
+                    new ContractField
+                    {
+                        Key = "ledPwmSwitch",
+                        DisplayName = "LED PWM Switch",
+                        SourcePath = "$.ledPwm.switch",
+                        Kind = ContractFieldKind.Boolean,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.Safe,
+                        Evidence = new ContractEvidence
+                        {
+                            TruthState = ContractTruthState.Inferred,
+                            Source = "firmware-string",
+                            Notes = "[%s:%d]ledPwm.switch: %d — RESTful_NetSDKSystemLedPwm_OnPut."
+                        }
+                    },
+                    new ContractField
+                    {
+                        Key = "ledPwmProject",
+                        DisplayName = "LED PWM Project",
+                        SourcePath = "$.ledPwm.project",
+                        Kind = ContractFieldKind.Integer,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.Safe,
+                        Validation = new ContractValidationRule { Min = 0, Max = 64 },
+                        Evidence = new ContractEvidence
+                        {
+                            TruthState = ContractTruthState.Inferred,
+                            Source = "firmware-string",
+                            Notes = "[%s:%d]ledPwm.nProject: %d — NK_Enum_MapN1LedPwmProduct."
+                        }
+                    },
+                    new ContractField
+                    {
+                        Key = "ledPwmChannelCount",
+                        DisplayName = "LED PWM Channel Count",
+                        SourcePath = "$.ledPwm.nChannelCount",
+                        Kind = ContractFieldKind.Integer,
+                        Writable = false,
+                        DisruptionClass = DisruptionClass.Safe,
+                        Evidence = new ContractEvidence
+                        {
+                            TruthState = ContractTruthState.Inferred,
+                            Source = "firmware-string",
+                            Notes = "[%s:%d]ledPwm.nChannelCount: %d — read-only."
+                        }
+                    },
+                    new ContractField
+                    {
+                        Key = "ledPwmChannelInfo",
+                        DisplayName = "LED PWM Channel Info",
+                        SourcePath = "$.channelInfo",
+                        Kind = ContractFieldKind.Array,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.Safe,
+                        Evidence = new ContractEvidence
+                        {
+                            TruthState = ContractTruthState.Inferred,
+                            Source = "firmware-string",
+                            Notes = "$.channelInfo[%d].{type,channel,num,numMotion,schedule[%d]} — KP2PCFG_MakeLedPwm."
+                        }
+                    }
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "system.ledpwm.channelInfo",
+                Endpoint = "/NetSDK/System/ledpwm/ChannelInfo",
+                Method = "GET",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.VideoImage,
+                GroupName = "Video / Image",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.Safe,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = false, PartialWriteAllowed = false },
+                Fields =
+                [
+                    new ContractField
+                    {
+                        Key = "ledPwmChannelInfo",
+                        DisplayName = "LED PWM Channel Info",
+                        SourcePath = "$.channelInfo",
+                        Kind = ContractFieldKind.Array,
+                        Writable = false,
+                        DisruptionClass = DisruptionClass.Safe,
+                        Evidence = new ContractEvidence
+                        {
+                            TruthState = ContractTruthState.Inferred,
+                            Source = "firmware-string",
+                            Notes = "RESTful_NetSDKSystemLedPwmChannelInfo_OnGet."
+                        }
+                    }
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "system.alarm.schedule",
+                Endpoint = "/NetSDK/System/AlarmSchedule",
+                Method = "PUT",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.MotionPrivacyAlarms,
+                GroupName = "Motion / Privacy / Alarms",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.ServiceImpacting,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
+                Fields =
+                [
+                    new ContractField
+                    {
+                        Key = "alarmScheduleEnabled",
+                        DisplayName = "Alarm Schedule Enabled",
+                        SourcePath = "$.AlarmSchedule[0].Enabled",
+                        Kind = ContractFieldKind.Boolean,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.ServiceImpacting,
+                        Evidence = new ContractEvidence
+                        {
+                            TruthState = ContractTruthState.Inferred,
+                            Source = "firmware-string",
+                            Notes = "$.AlarmSchedule[%d].Enabled — RESTful_NetSDKSystemAlarmSchedule handler."
+                        }
+                    },
+                    NumericField("alarmScheduleWeekday", "Alarm Schedule Weekday", "$.AlarmSchedule[0].Weekday", 0, 127),
+                    StringField("alarmScheduleBegin", "Alarm Schedule Begin", "$.AlarmSchedule[0].BeginTime"),
+                    StringField("alarmScheduleEnd", "Alarm Schedule End", "$.AlarmSchedule[0].EndTime")
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "system.record.schedule",
+                Endpoint = "/NetSDK/System/RecordSchedule",
+                Method = "PUT",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.StoragePlayback,
+                GroupName = "Storage / Playback",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.ServiceImpacting,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
+                Fields =
+                [
+                    new ContractField
+                    {
+                        Key = "recordScheduleEnabled",
+                        DisplayName = "Record Schedule Enabled",
+                        SourcePath = "$.RecordSchedule[0].Enabled",
+                        Kind = ContractFieldKind.Boolean,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.ServiceImpacting,
+                        Evidence = new ContractEvidence
+                        {
+                            TruthState = ContractTruthState.Inferred,
+                            Source = "firmware-string",
+                            Notes = "$.RecordSchedule[%d].Enabled — RESTful_NetSDKSystemRecordSchedule handler."
+                        }
+                    },
+                    EnumField("recordScheduleType", "Record Type", "$.RecordSchedule[0].RecType", ["manual", "schedule", "alarm", "alarmAndSchedule"]) with
+                    {
+                        Evidence = new ContractEvidence
+                        {
+                            TruthState = ContractTruthState.Inferred,
+                            Source = "firmware-string",
+                            Notes = "RecType opt[0..3] proven by firmware; the four string labels are inferred (match Hikvision convention) — confirm against a live device before relying on writes."
+                        }
+                    },
+                    NumericField("recordScheduleWeekday", "Record Schedule Weekday", "$.RecordSchedule[0].Weekday", 0, 127),
+                    StringField("recordScheduleBegin", "Record Schedule Begin", "$.RecordSchedule[0].BeginTime"),
+                    StringField("recordScheduleEnd", "Record Schedule End", "$.RecordSchedule[0].EndTime")
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "video.face.detection",
+                Endpoint = "/NetSDK/Video/FaceDetection",
+                Method = "PUT",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.MotionPrivacyAlarms,
+                GroupName = "Motion / Privacy / Alarms",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.ServiceImpacting,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
+                Fields =
+                [
+                    new ContractField
+                    {
+                        Key = "faceDetectionSupported",
+                        DisplayName = "Face Detection Supported",
+                        SourcePath = "$.SupportFaceDetect",
+                        Kind = ContractFieldKind.Boolean,
+                        Writable = false,
+                        DisruptionClass = DisruptionClass.Safe,
+                        Evidence = new ContractEvidence
+                        {
+                            TruthState = ContractTruthState.Inferred,
+                            Source = "firmware-string",
+                            Notes = "$.SupportFaceDetect / $.Capabilities.SupportFaceDetect — RESTful_NetSDKVideoFaceDetect_OnGet."
+                        }
+                    },
+                    NumericField("faceDetectionMaxNum", "Face Detection Max", "$.MaxFaceDetectNum", 0, 32) with { Writable = false },
+                    new ContractField
+                    {
+                        Key = "faceDetectionEnabled",
+                        DisplayName = "Face Detection",
+                        SourcePath = "$.enabled",
+                        Kind = ContractFieldKind.Boolean,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.ServiceImpacting,
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "firmware-string", Notes = "onVideoFaceDetect event; enable flag is the writable lever." }
+                    }
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "video.human.detect",
+                Endpoint = "/NetSDK/Video/HumanDetect",
+                Method = "PUT",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.MotionPrivacyAlarms,
+                GroupName = "Motion / Privacy / Alarms",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.ServiceImpacting,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
+                Fields =
+                [
+                    new ContractField
+                    {
+                        Key = "humanDetectSupported",
+                        DisplayName = "Human Detect Supported",
+                        SourcePath = "$.SupportHumanDetect",
+                        Kind = ContractFieldKind.Boolean,
+                        Writable = false,
+                        DisruptionClass = DisruptionClass.Safe,
+                        Evidence = new ContractEvidence
+                        {
+                            TruthState = ContractTruthState.Inferred,
+                            Source = "firmware-string",
+                            Notes = "$.SupportHumanDetect / $.Capabilities.SupportHumanDetect — RESTful_NetSDKVideoHumanDetect_OnGet."
+                        }
+                    },
+                    NumericField("humanDetectMaxNum", "Human Detect Max", "$.MaxHumanDetectNum", 0, 32) with { Writable = false },
+                    new ContractField
+                    {
+                        Key = "humanDetectEnabled",
+                        DisplayName = "Human Detection",
+                        SourcePath = "$.enabled",
+                        Kind = ContractFieldKind.Boolean,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.ServiceImpacting,
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "firmware-string", Notes = "OemVideoHumanDetect config; enable flag is the writable lever." }
+                    }
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "video.cordon",
+                Endpoint = "/NetSDK/Video/cordon",
+                Method = "PUT",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.MotionPrivacyAlarms,
+                GroupName = "Motion / Privacy / Alarms",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.ServiceImpacting,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
+                Fields =
+                [
+                    new ContractField
+                    {
+                        Key = "cordonEnabled",
+                        DisplayName = "Cordon Enabled",
+                        SourcePath = "$.bEnableCordon",
+                        Kind = ContractFieldKind.Boolean,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.ServiceImpacting,
+                        Evidence = new ContractEvidence
+                        {
+                            TruthState = ContractTruthState.Inferred,
+                            Source = "firmware-string",
+                            Notes = "[%s:%d]bEnableCordon=%d enCordonType=%d — CFG_MakeJsonVCordon."
+                        }
+                    },
+                    NumericField("cordonType", "Cordon Type", "$.enCordonType", 0, 3),
+                    new ContractField
+                    {
+                        Key = "cordonLines",
+                        DisplayName = "Cordon Lines",
+                        SourcePath = "$.stCordonLinelist",
+                        Kind = ContractFieldKind.Array,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.ServiceImpacting,
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "firmware-string", Notes = "CFG_ParseJsonCordonLine list." }
+                    },
+                    new ContractField
+                    {
+                        Key = "cordonAreas",
+                        DisplayName = "Cordon Areas",
+                        SourcePath = "$.stCordonArealist",
+                        Kind = ContractFieldKind.Array,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.ServiceImpacting,
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "firmware-string", Notes = "Cordon area list." }
+                    }
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "system.time.rtc",
+                Endpoint = "/NetSDK/System/time/rtc",
+                Method = "PUT",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.UsersMaintenance,
+                GroupName = "Users / Maintenance",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.Safe,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
+                Fields =
+                [
+                    new ContractField
+                    {
+                        Key = "rtc",
+                        DisplayName = "RTC",
+                        SourcePath = "$.rtc",
+                        Kind = ContractFieldKind.String,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.Safe,
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "firmware-string", Notes = "$.rtc + bRtc — APIS_RTC_Read/Write." }
+                    }
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "system.time.timezone",
+                Endpoint = "/NetSDK/System/time/timeZone",
+                Method = "PUT",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.UsersMaintenance,
+                GroupName = "Users / Maintenance",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.Safe,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
+                Fields =
+                [
+                    EnumField("timeZone", "Time Zone", "$.timeZone", ["GMT-11:00", "GMT-10:00", "GMT-09:00", "GMT-08:00", "GMT-07:00", "GMT-06:00", "GMT-05:00", "GMT-04:30", "GMT-04:00", "GMT-03:30", "GMT-03:00", "GMT-02:00", "GMT-01:00", "GMT+01:00", "GMT+02:00", "GMT+03:00", "GMT+03:30", "GMT+04:00", "GMT+04:30", "GMT+05:00", "GMT+05:30", "GMT+05:45", "GMT+06:00", "GMT+06:30", "GMT+07:00", "GMT+08:00", "GMT+09:00", "GMT+09:30", "GMT+10:00", "GMT+11:00", "GMT+12:00", "GMT+13:00"]) with
+                    {
+                        Evidence = new ContractEvidence
+                        {
+                            TruthState = ContractTruthState.Inferred,
+                            Source = "firmware-string",
+                            Notes = "$.timeZoneProperty.opt[%d] — GMT offset enum extracted verbatim from firmware (observed set; no GMT±00:00 or GMT-12:00 in binary)."
+                        }
+                    }
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "system.time.calendarStyle",
+                Endpoint = "/NetSDK/System/time/calendarStyle",
+                Method = "PUT",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.UsersMaintenance,
+                GroupName = "Users / Maintenance",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.Safe,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
+                Fields =
+                [
+                    EnumField("calendarStyle", "Calendar Style", "$.calendarStyle", ["Gregorian", "Lunar"]) with
+                    {
+                        Evidence = new ContractEvidence
+                        {
+                            TruthState = ContractTruthState.Inferred,
+                            Source = "firmware-string",
+                            Notes = "$.calendarStyleProperty.opt[0..1]."
+                        }
+                    }
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "network.gb28181",
+                Endpoint = "/NetSDK/System/gb28181",
+                Method = "PUT",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.NetworkWireless,
+                GroupName = "Network / Wireless",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.ServiceImpacting,
+                RequiresRebootToTakeEffect = true,
+                PersistenceExpectedAfterReboot = true,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
+                Fields =
+                [
+                    new ContractField
+                    {
+                        Key = "gb28181Enabled",
+                        DisplayName = "GB28181 Enabled",
+                        SourcePath = "$.bGB28181",
+                        Kind = ContractFieldKind.Boolean,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.ServiceImpacting,
+                        Evidence = new ContractEvidence
+                        {
+                            TruthState = ContractTruthState.Inferred,
+                            Source = "firmware-string",
+                            Notes = "bGB28181 — N1Device_EvtSetGb28181Config / GB28181_Server."
+                        }
+                    },
+                    StringField("gb28181Server", "GB28181 Server", "$.GB28181_Server"),
+                    NumericField("gb28181SipPort", "GB28181 SIP Port", "$.sipServerport", 1, 65535),
+                    NumericField("gb28181ServerPort", "GB28181 Server Port", "$.ServerPort", 1, 65535)
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "network.gat1400",
+                Endpoint = "/NetSDK/System/gat1400",
+                Method = "PUT",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.NetworkWireless,
+                GroupName = "Network / Wireless",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.ServiceImpacting,
+                RequiresRebootToTakeEffect = true,
+                PersistenceExpectedAfterReboot = true,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
+                Fields =
+                [
+                    new ContractField
+                    {
+                        Key = "gat1400Enabled",
+                        DisplayName = "GAT1400 Enabled",
+                        SourcePath = "$.bGAT1400",
+                        Kind = ContractFieldKind.Boolean,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.ServiceImpacting,
+                        Evidence = new ContractEvidence
+                        {
+                            TruthState = ContractTruthState.Inferred,
+                            Source = "firmware-string",
+                            Notes = "Inferred toggle mirroring the bGB28181 convention (N1Device_EvtSetGat1400Config); not a verbatim string — verify against live device."
+                        }
+                    }
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "network.ftp",
+                Endpoint = "/NetSDK/FTP",
+                Method = "PUT",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.NetworkWireless,
+                GroupName = "Network / Wireless",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.ServiceImpacting,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
+                Fields =
+                [
+                    new ContractField
+                    {
+                        Key = "ftpScheduleEnabled",
+                        DisplayName = "FTP Schedule Enabled",
+                        SourcePath = "$.ScheduleEnabled",
+                        Kind = ContractFieldKind.Boolean,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.ServiceImpacting,
+                        Evidence = new ContractEvidence
+                        {
+                            TruthState = ContractTruthState.Inferred,
+                            Source = "firmware-string",
+                            Notes = "$.ScheduleEnabled / $.ScheduleScheme[%d] — FTP schedule form."
+                        }
+                    },
+                    new ContractField
+                    {
+                        Key = "ftpSchedule",
+                        DisplayName = "FTP Schedule",
+                        SourcePath = "$.schedule",
+                        Kind = ContractFieldKind.Array,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.ServiceImpacting,
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "firmware-string", Notes = "$.schedule / $.stFtpSchedule[%d]." }
+                    }
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "network.rtmp",
+                Endpoint = "/NetSDK/RTMP",
+                Method = "PUT",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.NetworkWireless,
+                GroupName = "Network / Wireless",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.ServiceImpacting,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
+                Fields =
+                [
+                    StringField("rtmpUrl", "RTMP URL", "$.rtmpUrl")
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "network.wireless.signal",
+                Endpoint = "/NetSDK/Network/wireless/stationSignal",
+                Method = "GET",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.NetworkWireless,
+                GroupName = "Network / Wireless",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.Safe,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = false, PartialWriteAllowed = false },
+                Fields =
+                [
+                    StringField("stationSignal", "Station Signal", "$.SignalStrength", writable: false),
+                    StringField("stationSignalRaw", "Station Signal Raw", "$.stationsignal", writable: false)
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "network.port",
+                Endpoint = "/NetSDK/Network/port",
+                Method = "PUT",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.NetworkWireless,
+                GroupName = "Network / Wireless",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.NetworkChanging,
+                RequiresRebootToTakeEffect = true,
+                PersistenceExpectedAfterReboot = true,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
+                Fields =
+                [
+                    new ContractField
+                    {
+                        Key = "httpPort",
+                        DisplayName = "HTTP Port",
+                        SourcePath = "$.httpPort",
+                        Kind = ContractFieldKind.Port,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.NetworkChanging,
+                        Validation = new ContractValidationRule { Min = 1, Max = 65535 },
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "firmware-string", Notes = "Port JSON form (RESTful_NetSDKNetworkPort handler); verify field keys live." }
+                    },
+                    new ContractField
+                    {
+                        Key = "rtspPort",
+                        DisplayName = "RTSP Port",
+                        SourcePath = "$.rtspPort",
+                        Kind = ContractFieldKind.Port,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.NetworkChanging,
+                        Validation = new ContractValidationRule { Min = 1, Max = 65535 },
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "firmware-string", Notes = "Port JSON form; verify field keys live." }
+                    },
+                    new ContractField
+                    {
+                        Key = "onvifPort",
+                        DisplayName = "ONVIF Port",
+                        SourcePath = "$.onvifPort",
+                        Kind = ContractFieldKind.Port,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.NetworkChanging,
+                        Validation = new ContractValidationRule { Min = 1, Max = 65535 },
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "firmware-string", Notes = "Port JSON form; verify field keys live." }
+                    }
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "system.device.name",
+                Endpoint = "/NetSDK/System/deviceInfo/deviceName",
+                Method = "PUT",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.UsersMaintenance,
+                GroupName = "Users / Maintenance",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.Safe,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
+                Fields =
+                [
+                    StringField("deviceName", "Device Name", "$.deviceName")
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "system.device.address",
+                Endpoint = "/NetSDK/System/deviceInfo/deviceAddress",
+                Method = "PUT",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.UsersMaintenance,
+                GroupName = "Users / Maintenance",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.Safe,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
+                Fields =
+                [
+                    StringField("deviceAddress", "Device Address", "$.deviceAddress")
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "system.alarm.tone",
+                Endpoint = "/NetSDK/System/AlarmTone",
+                Method = "PUT",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.MotionPrivacyAlarms,
+                GroupName = "Motion / Privacy / Alarms",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.ServiceImpacting,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
+                Fields =
+                [
+                    new ContractField
+                    {
+                        Key = "alarmToneEnabled",
+                        DisplayName = "Alarm Tone Enabled",
+                        SourcePath = "$.AlarmTone[0].Enabled",
+                        Kind = ContractFieldKind.Boolean,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.ServiceImpacting,
+                        Evidence = new ContractEvidence
+                        {
+                            TruthState = ContractTruthState.Inferred,
+                            Source = "firmware-string",
+                            Notes = "$.AlarmTone[%d] per-id (0..2) config form."
+                        }
+                    },
+                    StringField("alarmTone", "Alarm Tone", "$.AlarmTone[0].tone")
+                ]
+            },
+            new EndpointContract
+            {
+                ContractKey = "system.alarm.scheduleV2",
+                Endpoint = "/NetSDK/System/AlarmScheduleV2",
+                Method = "PUT",
+                Surface = ContractSurface.NetSdkRest,
+                GroupKind = TypedSettingGroupKind.MotionPrivacyAlarms,
+                GroupName = "Motion / Privacy / Alarms",
+                Scope = scope,
+                DisruptionClass = DisruptionClass.ServiceImpacting,
+                TruthState = ContractTruthState.Inferred,
+                ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
+                Fields =
+                [
+                    new ContractField
+                    {
+                        Key = "alarmScheduleV2Enabled",
+                        DisplayName = "Alarm Schedule V2 Enabled",
+                        SourcePath = "$.ScheduleEnabled",
+                        Kind = ContractFieldKind.Boolean,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.ServiceImpacting,
+                        Evidence = new ContractEvidence
+                        {
+                            TruthState = ContractTruthState.Inferred,
+                            Source = "firmware-string",
+                            Notes = "V2 payload uses the ScheduleEnabled/ScheduleScheme family (mirrors FTP schedule form)."
+                        }
+                    },
+                    new ContractField
+                    {
+                        Key = "alarmScheduleV2",
+                        DisplayName = "Alarm Schedule V2",
+                        SourcePath = "$.ScheduleScheme",
+                        Kind = ContractFieldKind.Array,
+                        Writable = true,
+                        ExpertOnly = true,
+                        DisruptionClass = DisruptionClass.ServiceImpacting,
+                        Evidence = new ContractEvidence
+                        {
+                            TruthState = ContractTruthState.Inferred,
+                            Source = "firmware-string",
+                            Notes = "$.ScheduleScheme[%d] time-segment array; composite payload."
+                        }
+                    }
+                ]
             }
         ];
     }

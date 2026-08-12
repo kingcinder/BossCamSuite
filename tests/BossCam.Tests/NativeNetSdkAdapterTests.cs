@@ -531,6 +531,30 @@ public sealed class NativeNetSdkAdapterTests
         // Wireless — mined from HISISDK.h HISI_WIRELESSINFO (HISI_ALARM_WIRELESS = 0x13)
         Assert.Contains(all, e => e.Contains("/NetSDK/Wireless/modules", StringComparison.Ordinal));
 
+        // Firmware-proven 5523-W surface (anyka_ipc string table) — LedPwm / schedules / smart video
+        Assert.Contains(all, e => e.Contains("/NetSDK/System/ledpwm", StringComparison.Ordinal));
+        Assert.Contains(all, e => e.Contains("/NetSDK/System/ledpwm/ChannelInfo", StringComparison.Ordinal));
+        Assert.Contains(all, e => e.Contains("/NetSDK/System/AlarmSchedule", StringComparison.Ordinal));
+        Assert.Contains(all, e => e.Contains("/NetSDK/System/AlarmScheduleV2", StringComparison.Ordinal));
+        Assert.Contains(all, e => e.Contains("/NetSDK/System/AlarmTone", StringComparison.Ordinal));
+        Assert.Contains(all, e => e.Contains("/NetSDK/System/RecordSchedule", StringComparison.Ordinal));
+        Assert.Contains(all, e => e.Contains("/NetSDK/Video/FaceDetection", StringComparison.Ordinal));
+        Assert.Contains(all, e => e.Contains("/NetSDK/Video/HumanDetect", StringComparison.Ordinal));
+        Assert.Contains(all, e => e.Contains("/NetSDK/Video/cordon", StringComparison.Ordinal));
+        Assert.Contains(all, e => e.Contains("/NetSDK/System/time/rtc", StringComparison.Ordinal));
+        Assert.Contains(all, e => e.Contains("/NetSDK/System/time/timeZone", StringComparison.Ordinal));
+        Assert.Contains(all, e => e.Contains("/NetSDK/System/time/calendarStyle", StringComparison.Ordinal));
+        Assert.Contains(all, e => e.Contains("/NetSDK/System/deviceInfo/deviceName", StringComparison.Ordinal));
+        Assert.Contains(all, e => e.Contains("/NetSDK/System/deviceInfo/deviceAddress", StringComparison.Ordinal));
+        Assert.Contains(all, e => e.Contains("/NetSDK/FTP", StringComparison.Ordinal));
+        Assert.Contains(all, e => e.Contains("/NetSDK/RTMP", StringComparison.Ordinal));
+        Assert.Contains(all, e => e.Contains("/NetSDK/System/gb28181", StringComparison.Ordinal));
+        Assert.Contains(all, e => e.Contains("/NetSDK/System/gat1400", StringComparison.Ordinal));
+        Assert.Contains(all, e => e.Contains("/NetSDK/Network/wireless/stationSignal", StringComparison.Ordinal));
+        Assert.Contains(all, e => e.Contains("/NetSDK/Network/wireless/allStaInfo", StringComparison.Ordinal));
+        Assert.Contains(all, e => e.Contains("/NetSDK/Wireless/ScanApList", StringComparison.Ordinal));
+        Assert.Contains(all, e => e.Contains("/NetSDK/Network/port", StringComparison.Ordinal));
+
         // Alarm — mined from HISISDK.h alarm channel setup + message callback
         Assert.Contains(all, e => e.Contains("/NetSDK/Alarm/channels", StringComparison.Ordinal));
         Assert.Contains(all, e => e.Contains("/NetSDK/Alarm/channel/1", StringComparison.Ordinal));
