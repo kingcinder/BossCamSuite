@@ -20,6 +20,11 @@
   // Expert override: per-item and global
   let showExpert = $state(false);
   let expertOverrides = $state<Record<string, boolean>>({});
+  // Global force-apply: unlocks every control and applies each write with
+  // expert override so settings are ACTUALLY editable even before the
+  // write-verification pass has proven them. Writes are still verified by
+  // the backend's semantic read-back (PersistedAfterDelay etc.).
+  let forceApply = $state(false);
 
   // Refresh when device changes or when features tab selected
   $effect(() => {
@@ -130,7 +135,7 @@
     applying = new Set(applying).add(key);
     toggleValues[key] = checked;
     try {
-      const override = expertOverrides[key] ?? false;
+      const override = forceApply || (expertOverrides[key] ?? false);
       const result = await api.applyTypedField(appState.selectedDeviceId, item.fieldKey, checked, override);
       if (result.success) {
         appState.showToast(`${item.displayName || item.fieldKey} → ${checked ? 'ON' : 'OFF'} ✓`);
@@ -154,7 +159,7 @@
     applying = new Set(applying).add(key);
     sliderValues[key] = value;
     try {
-      const override = expertOverrides[key] ?? false;
+      const override = forceApply || (expertOverrides[key] ?? false);
       const result = await api.applyTypedField(appState.selectedDeviceId, item.fieldKey, value, override);
       if (result.success) {
         appState.showToast(`${item.displayName || item.fieldKey} → ${value} ✓`);
@@ -177,7 +182,7 @@
     applying = new Set(applying).add(key);
     enumValues[key] = value;
     try {
-      const override = expertOverrides[key] ?? false;
+      const override = forceApply || (expertOverrides[key] ?? false);
       const result = await api.applyTypedField(appState.selectedDeviceId, item.fieldKey, value, override);
       if (result.success) {
         appState.showToast(`${item.displayName || item.fieldKey} → ${value} ✓`);
@@ -227,10 +232,19 @@
 
   /** Returns true if the control is eligible for normal UI but not yet write-verified */
   function needsProbe(item: ControlPointInventoryItem): boolean {
+    // Force-apply mode unlocks every control immediately — no probe required.
+    if (forceApply) return false;
     return item.normalUiEligible
       && !item.exactBlocker
       && !item.readWriteState.startsWith('Writable')
       && !item.readWriteState.startsWith('Read');
+  }
+
+  /// True when the control is currently interactive (not disabled).
+  function isControlEnabled(item: ControlPointInventoryItem): boolean {
+    if (isApplying(item)) return false;
+    // Force-apply unlocks every control; otherwise only write-verified ones.
+    return forceApply || item.readWriteState.startsWith('Writable');
   }
 
   function stateClass(item: ControlPointInventoryItem): string {
@@ -275,7 +289,19 @@
       <input type="checkbox" bind:checked={showExpert} />
       Show expert / blocked
     </label>
+    <label class="inline-check force-apply" data-tip="Unlock every control and apply each change with expert override (bypasses write-verification gating). Changes are still checked by the camera's own read-back.">
+      <input type="checkbox" bind:checked={forceApply} onchange={(e) => { if ((e.target as HTMLInputElement).checked) showExpert = true; }} />
+      ⚡ Force apply (edit everything)
+    </label>
   </div>
+
+  {#if forceApply}
+    <div class="force-apply-banner">
+      ⚡ Force apply is ON — every control is editable and writes bypass
+      verification gating. Writes are still read-back verified by the camera.
+      Expert / blocked controls are also shown and unlocked.
+    </div>
+  {/if}
 
   <!-- Probe progress indicator -->
   {#if appState.probeStatus && !appState.probeStatus.complete}
@@ -332,7 +358,7 @@
                         type="checkbox"
                         aria-label={`Toggle ${item.displayName || item.fieldKey}`}
                         checked={toggleValues[ctrlKey(item)] ?? false}
-                        disabled={isApplying(item) || !item.readWriteState.startsWith('Writable')}
+                        disabled={!isControlEnabled(item)}
                         onchange={(e) => applyToggle(item, (e.target as HTMLInputElement).checked)}
                       />
                       <span class="toggle-slider"></span>
@@ -345,7 +371,7 @@
                         min={item.min ?? 0}
                         max={item.max ?? 100}
                         value={sliderValues[ctrlKey(item)] ?? item.min ?? 50}
-                        disabled={isApplying(item) || !item.readWriteState.startsWith('Writable')}
+                        disabled={!isControlEnabled(item)}
                         onchange={(e) => applySlider(item, Number((e.target as HTMLInputElement).value))}
                         oninput={(e) => { sliderValues[ctrlKey(item)] = Number((e.target as HTMLInputElement).value); }}
                       />
@@ -356,7 +382,7 @@
                       <select
                         aria-label={item.displayName || item.fieldKey}
                         value={enumValues[ctrlKey(item)] ?? item.allowedValues[0]}
-                        disabled={isApplying(item) || !item.readWriteState.startsWith('Writable')}
+                        disabled={!isControlEnabled(item)}
                         onchange={(e) => applyEnum(item, (e.target as HTMLSelectElement).value)}
                       >
                         {#each item.allowedValues as val}
@@ -415,7 +441,7 @@
                           type="checkbox"
                           aria-label={`Apply ${item.displayName || item.fieldKey} with expert override`}
                           checked={toggleValues[ctrlKey(item)] ?? false}
-                          disabled={isApplying(item) || !expertOverrides[ctrlKey(item)]}
+                          disabled={isApplying(item) || (!forceApply && !expertOverrides[ctrlKey(item)])}
                           onchange={(e) => applyToggle(item, (e.target as HTMLInputElement).checked)}
                         />
                         <span class="toggle-slider"></span>
@@ -428,7 +454,7 @@
                           min={item.min ?? 0}
                           max={item.max ?? 100}
                           value={sliderValues[ctrlKey(item)] ?? item.min ?? 50}
-                          disabled={isApplying(item) || !expertOverrides[ctrlKey(item)]}
+                          disabled={isApplying(item) || (!forceApply && !expertOverrides[ctrlKey(item)])}
                           onchange={(e) => applySlider(item, Number((e.target as HTMLInputElement).value))}
                           oninput={(e) => { sliderValues[ctrlKey(item)] = Number((e.target as HTMLInputElement).value); }}
                         />
@@ -438,7 +464,7 @@
                       <select
                         aria-label={`${item.displayName || item.fieldKey} expert`}
                         value={enumValues[ctrlKey(item)] ?? item.allowedValues[0]}
-                        disabled={isApplying(item) || !expertOverrides[ctrlKey(item)]}
+                        disabled={isApplying(item) || (!forceApply && !expertOverrides[ctrlKey(item)])}
                         onchange={(e) => applyEnum(item, (e.target as HTMLSelectElement).value)}
                       >
                         {#each item.allowedValues as val}
@@ -726,6 +752,22 @@
   }
   .probe-hint:hover {
     border-color: #cf9e3e;
+  }
+
+  /* ── Force apply mode ──────────────────────────────── */
+  .force-apply input { accent-color: var(--accent); }
+  .force-apply {
+    font-weight: 700;
+    color: #ffb06a;
+  }
+  .force-apply-banner {
+    background: #3a1a0a;
+    border: 1px solid #ff8f3e88;
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-bottom: 12px;
+    color: #ffd2c6;
+    font-size: .85rem;
   }
 
   .applying-spinner {
