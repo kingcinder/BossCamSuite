@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=BOSSCAMSUITE UPDATE
+GenericName=Rebuild and reinstall BossCamSuite
+Comment=Rebuilds the installed BossCamSuite service and GUI from the repo (pulls latest work, keeps the previous build for rollback), then restarts them.
+Exec=/home/cody/Documents/BossCamSuite-main/scripts/update-bosscam.sh
+Icon=bosscam-update
+Terminal=true
+Path=/home/cody/Documents/BossCamSuite-main
+Categories=Utility;AudioVideo;
+Keywords=camera;cctv;update;rebuild;install;
+StartupNotify=true

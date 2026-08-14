@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=BOSSCAMSUITE ROLLBACK
+GenericName=Roll back BossCamSuite to the previous build
+Comment=Restores the previously-installed BossCamSuite build (kept by the last UPDATE), then restarts the service and GUI.
+Exec=/home/cody/Documents/BossCamSuite-main/scripts/rollback-bosscam.sh
+Icon=bosscam-rollback
+Terminal=true
+Path=/home/cody/Documents/BossCamSuite-main
+Categories=Utility;AudioVideo;
+Keywords=camera;cctv;rollback;revert;restore;
+StartupNotify=true
