@@ -21,11 +21,23 @@
 
       <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center"
                   VerticalAlignment="Center">
+        <!-- Persistent connection indicator: colored dot + label, refreshed by periodic /api/health checks. -->
+        <Ellipse Width="10" Height="10" VerticalAlignment="Center"
+                 Fill="{Binding ConnectionStatus, Converter={x:Static c:ServiceConnectionBrushConverter.Instance}}"
+                 c:InfoExplainer.Title="BossCamService connection"
+                 c:InfoExplainer.Explanation="Green = service online, amber = starting/checking, red = service offline. The GUI re-probes /api/health every 10s and can bring the service up itself (systemd or a direct spawn) when it is down." />
+        <TextBlock Text="{Binding ConnectionStatusText}" VerticalAlignment="Center" Foreground="#9a9ab0"
+                   FontSize="12"
+                   c:InfoExplainer.Title="BossCamService connection"
+                   c:InfoExplainer.Explanation="Current connection state: Service online / Starting… / Service offline." />
+        <Button Command="{Binding RetryConnectionCommand}" Content="↻ Retry"
+                c:InfoExplainer.Title="Retry connection"
+                c:InfoExplainer.Explanation="Re-checks BossCamService health, starts it automatically if it is down (systemd or direct spawn), and reloads the camera list." />
         <Button Command="{Binding LoadDevicesCommand}" Content="📡 Load Devices"
                 c:InfoExplainer.Title="Load Devices"
                 c:InfoExplainer.Explanation="Fetches the list of registered cameras from the BossCamService. Press this after the service starts or after adding cameras." />
         <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" Foreground="#9a9ab0"
-                   FontSize="13" MaxWidth="520" TextTrimming="CharacterEllipsis"
+                   FontSize="13" MaxWidth="360" TextTrimming="CharacterEllipsis"
                    c:InfoExplainer.Explanation="Status bar — the latest result of your last action (device loads, registrations, applies, recordings)." />
       </StackPanel>
     </Grid>
@@ -105,7 +117,12 @@
     <Border Grid.Row="2" Background="#23233f" CornerRadius="6" Padding="8,5"
             c:InfoExplainer.Title="Status"
             c:InfoExplainer.Explanation="Bottom status strip — shows connection state and the outcome of the last action.">
-      <TextBlock Text="{Binding StatusText}" FontSize="12" Foreground="#a0a0c0" TextTrimming="CharacterEllipsis" />
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Ellipse Width="8" Height="8" VerticalAlignment="Center"
+                 Fill="{Binding ConnectionStatus, Converter={x:Static c:ServiceConnectionBrushConverter.Instance}}" />
+        <TextBlock Text="{Binding ConnectionStatusText}" FontSize="12" Foreground="#a0a0c0" VerticalAlignment="Center" />
+        <TextBlock Text="{Binding StatusText}" FontSize="12" Foreground="#a0a0c0" TextTrimming="CharacterEllipsis" />
+      </StackPanel>
     </Border>
 
     <!-- ── Explainer overlay host (popup is hosted here, above content) ── -->

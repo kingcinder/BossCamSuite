@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Text.Json;
 using Avalonia.Threading;
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -20,10 +21,18 @@ public sealed partial class MainWindowViewModel : ObservableObject, ISectionView
 {
     private readonly IBossCamApiClient _api;
     private readonly ILogger<MainWindowViewModel> _logger;
+    private readonly IBossCamServiceStarter _serviceStarter;
     private Timer? _liveTimer;
+    private Timer? _healthPollTimer;
     private CancellationTokenSource? _liveVideoCts;
     private Task? _liveVideoTask;
     private Process? _liveVideoProcess;
+    private readonly CancellationTokenSource _startupCts = new();
+    private int _handshakeInProgress;
+    private bool _disposed;
+
+    /// <summary>How often the connection indicator re-checks /api/health.</summary>
+    internal static readonly TimeSpan HealthPollInterval = TimeSpan.FromSeconds(10);
 
     /// <summary>Default constructor — real HTTP client at http://127.0.0.1:5317.</summary>
     public MainWindowViewModel()
@@ -32,11 +41,15 @@ public sealed partial class MainWindowViewModel : ObservableObject, ISectionView
     }
 
     /// <summary>DI-friendly constructor for production wiring and tests.</summary>
-    public MainWindowViewModel(IBossCamApiClient apiClient, ILogger<MainWindowViewModel>? logger = null)
+    public MainWindowViewModel(
+        IBossCamApiClient apiClient,
+        ILogger<MainWindowViewModel>? logger = null,
+        IBossCamServiceStarter? serviceStarter = null)
     {
         ArgumentNullException.ThrowIfNull(apiClient);
         _api = apiClient;
         _logger = logger ?? NullLogger<MainWindowViewModel>.Instance;
+        _serviceStarter = serviceStarter ?? new BossCamServiceStarter(_logger);
 
         DashboardSection = new DashboardViewModel(apiClient, this);
         DevicesSection = new DevicesViewModel(apiClient, this);
@@ -53,6 +66,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, ISectionView
                     HighlightsSection, PlaybackSection, DiagnosticsSection, FirmwareSection,
                     ConnectivitySection, StorageSection];
         _selectedSection = this;
+
+        // Persistent connection indicator: re-probe /api/health periodically so the
+        // color-coded status (and the status text) reflect the live service state even
+        // when the service stops or starts while the window is open. Best-effort: the
+        // poll never throws and never starts the service itself — Retry does that.
+        _healthPollTimer = new Timer(async _ => await PollHealthAsync(), null, HealthPollInterval, HealthPollInterval);
     }
 
     // ── Navigation ───────────────────────────────────────────────
@@ -117,6 +136,126 @@ public sealed partial class MainWindowViewModel : ObservableObject, ISectionView
         }
     }
 
+    /// <summary>
+    /// Startup handshake, called once from App.axaml.cs when the window is created.
+    /// Verifies the local BossCamService is reachable and healthy, then preloads the
+    /// camera list so the status bar reflects real connection state instead of the
+    /// static hint shown before first contact. When the service is down, the startup
+    /// handshake first asks <see cref="_serviceStarter"/> to bring it up (systemd unit,
+    /// then a direct spawn), waits for health, and only then loads devices. All failures
+    /// collapse into a clear offline status; the user can retry with the Retry button
+    /// or Load Devices.
+    /// </summary>
+    public async Task InitializeAsync() => await RunConnectionHandshakeAsync();
+
+    /// <summary>
+    /// Re-runs the full connection handshake (health probe → auto-start if needed →
+    /// device load) from the Retry button, so the indicator and camera list recover
+    /// when the service comes back or needs a manual kick.
+    /// </summary>
+    [RelayCommand]
+    private async Task RetryConnectionAsync() => await RunConnectionHandshakeAsync();
+
+    private async Task RunConnectionHandshakeAsync()
+    {
+        // Non-reentrant: startup (InitializeAsync) and the Retry button share this
+        // handshake, and it can run for 25-45s in the systemd/spawn path. If another
+        // handshake is already in flight (double-click Retry, or Retry during startup),
+        // skip instead of running two concurrent start attempts that could spawn a
+        // duplicate service instance or let a poll clobber the indicator mid-handshake.
+        // Deliberately no StatusText write here: the in-flight handshake writes its
+        // final status inside its try before the flag is cleared in finally, so a hint
+        // written now could land after that final write and linger.
+        if (Interlocked.CompareExchange(ref _handshakeInProgress, 1, 0) != 0)
+        {
+            return;
+        }
+
+        // Capture the token before the first await: a CancellationToken is an immutable
+        // struct that stays valid after its source is disposed. Reading .Token later
+        // (on the post-await continuation) could throw ObjectDisposedException if the
+        // window closed while the health probe was in flight.
+        var startupToken = _startupCts.Token;
+        try
+        {
+            if (!IsHealthy(await _api.GetHealthAsync()))
+            {
+                ConnectionStatus = ServiceConnectionStatus.Starting;
+                StatusText = "BossCamService offline at http://127.0.0.1:5317 \u2014 starting it\u2026";
+                var started = await _serviceStarter.TryStartAsync(
+                    async () => IsHealthy(await _api.GetHealthAsync()),
+                    startupToken);
+                if (!started)
+                {
+                    ConnectionStatus = ServiceConnectionStatus.Offline;
+                    StatusText =
+                        "BossCamService offline at http://127.0.0.1:5317 \u2014 could not be started " +
+                        "automatically. Start it manually (systemctl start bosscam) or retry.";
+                    return;
+                }
+            }
+
+            ConnectionStatus = ServiceConnectionStatus.Online;
+            if (await TryLoadDevicesAsync())
+            {
+                StatusText = $"Connected to BossCamService \u2014 {Devices.Count} camera(s)";
+            }
+            // On failure TryLoadDevicesAsync already surfaced "Failed to load devices: …"
+            // and the handshake leaves that visible rather than masking it.
+        }
+        catch (OperationCanceledException) when (startupToken.IsCancellationRequested)
+        {
+            // App is shutting down — the window is closing, do not overwrite the status.
+        }
+        catch (Exception ex)
+        {
+            ConnectionStatus = ServiceConnectionStatus.Offline;
+            StatusText = $"BossCamService offline at http://127.0.0.1:5317 \u2014 {ex.Message}";
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _handshakeInProgress, 0);
+        }
+    }
+
+    /// <summary>
+    /// Periodic /api/health probe backing the connection indicator. Reflects the live
+    /// state but never auto-starts the service (that is the Retry button's job) and
+    /// never clobbers an in-flight handshake (its own status updates win). Best-effort:
+    /// probe failures just mark the service offline.
+    /// </summary>
+    internal async Task PollHealthAsync()
+    {
+        // Read the flag once: a handshake running concurrently owns the indicator.
+        var handshakeInProgress = Volatile.Read(ref _handshakeInProgress) != 0;
+        try
+        {
+            var healthy = IsHealthy(await _api.GetHealthAsync());
+            if (!handshakeInProgress)
+            {
+                ConnectionStatus = healthy
+                    ? ServiceConnectionStatus.Online
+                    : ServiceConnectionStatus.Offline;
+            }
+        }
+        catch (Exception ex)
+        {
+            if (!handshakeInProgress)
+            {
+                ConnectionStatus = ServiceConnectionStatus.Offline;
+            }
+            _logger.LogDebug(ex, "Health poll failed");
+        }
+    }
+
+    /// <summary>True when /api/health reported status "ok".</summary>
+    internal static bool IsHealthy(JsonElement? health)
+        => health is { } h
+           && h.ValueKind == JsonValueKind.Object
+           && h.TryGetProperty("status", out var status)
+           && status.ValueKind == JsonValueKind.String
+           && string.Equals(status.GetString(), "ok", StringComparison.OrdinalIgnoreCase);
+
     // ── Shared device list / selection ────────────────────────────
 
     [ObservableProperty]
@@ -126,7 +265,25 @@ public sealed partial class MainWindowViewModel : ObservableObject, ISectionView
     private DeviceIdentity? _selectedDevice;
 
     [ObservableProperty]
-    private string _statusText = "Connect to BossCamService at http://127.0.0.1:5317";
+    private string _statusText = "Connecting to BossCamService at http://127.0.0.1:5317\u2026";
+
+    // ── Persistent connection indicator ────────────────────────────
+
+    [ObservableProperty]
+    private ServiceConnectionStatus _connectionStatus = ServiceConnectionStatus.Starting;
+
+    [ObservableProperty]
+    private string _connectionStatusText = "Starting\u2026";
+
+    partial void OnConnectionStatusChanged(ServiceConnectionStatus value)
+    {
+        ConnectionStatusText = value switch
+        {
+            ServiceConnectionStatus.Online => "Service online",
+            ServiceConnectionStatus.Starting => "Starting\u2026",
+            _ => "Service offline"
+        };
+    }
 
     [ObservableProperty]
     private string _deviceInfoText = string.Empty;
@@ -155,17 +312,26 @@ public sealed partial class MainWindowViewModel : ObservableObject, ISectionView
     }
 
     [RelayCommand]
-    private async Task LoadDevicesAsync()
+    private async Task LoadDevicesAsync() => await TryLoadDevicesAsync();
+
+    /// <summary>
+    /// Fetches the camera list into <see cref="Devices"/> and updates the status bar.
+    /// Returns true on success so the startup handshake can distinguish "connected but
+    /// camera list failed" from a healthy load without parsing status strings.
+    /// </summary>
+    private async Task<bool> TryLoadDevicesAsync()
     {
         try
         {
             var devices = await _api.GetDevicesAsync();
             Devices = new ObservableCollection<DeviceIdentity>(devices);
             StatusText = $"Loaded {devices.Count} device(s)";
+            return true;
         }
         catch (Exception ex)
         {
             StatusText = $"Failed to load devices: {ex.Message}";
+            return false;
         }
     }
 
@@ -498,6 +664,22 @@ public sealed partial class MainWindowViewModel : ObservableObject, ISectionView
 
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+        _disposed = true;
+
+        // Cancel any in-flight startup handshake so a spawned service is torn down
+        // promptly when the window closes instead of waiting out its health poll.
+        // The CTS stays non-nullable: cancellation must always reach the starter's
+        // ThrowIfCancellationRequested, and reading IsCancellationRequested remains
+        // safe after Dispose.
+        _startupCts.Cancel();
+        _serviceStarter.Dispose();
+        _startupCts.Dispose();
+
+        _healthPollTimer?.Dispose();
         _liveTimer?.Dispose();
 
         // Do not synchronously join the decoder task here: it can be waiting for the

@@ -71,6 +71,7 @@ public sealed class TestBossCamApiClient : IBossCamApiClient
     public DeviceIdentity? RegisterResult { get; set; }
     public List<DeviceIdentity>? RegisterAegonResult { get; set; }
     public JsonElement? HealthResult { get; set; }
+    public bool ThrowOnHealth { get; set; }
 
     public Task<List<DeviceIdentity>> GetDevicesAsync()
     {
@@ -237,7 +238,14 @@ public sealed class TestBossCamApiClient : IBossCamApiClient
     public Task<List<DeviceIdentity>> RegisterManyAsync(IEnumerable<(string IpAddress, int Port, string? LoginName, string? Password, string? HardwareModel)> requests)
         => Task.FromResult(DiscoverResult ?? []);
 
-    public Task<JsonElement?> GetHealthAsync() => Task.FromResult(HealthResult);
+    public Task<JsonElement?> GetHealthAsync()
+    {
+        if (ThrowOnHealth)
+        {
+            return Task.FromException<JsonElement?>(new HttpRequestException("Simulated health failure"));
+        }
+        return Task.FromResult(HealthResult);
+    }
 
     // ── Unused by the GUI tests (kept for interface completeness) ──
 

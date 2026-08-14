@@ -38,6 +38,16 @@ public partial class App : Application
                     apiClient,
                     _loggerFactory.CreateLogger<MainWindowViewModel>()),
             };
+
+            // Startup handshake: verify the local BossCamService is reachable and
+            // healthy, then preload the camera list so the status bar shows real
+            // connection state instead of the static "connect to service" hint.
+            // Fire-and-forget is safe: InitializeAsync swallows all failures into
+            // a clear offline status message.
+            if (desktop.MainWindow.DataContext is MainWindowViewModel viewModel)
+            {
+                _ = viewModel.InitializeAsync();
+            }
         }
 
         base.OnFrameworkInitializationCompleted();

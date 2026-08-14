@@ -16,10 +16,13 @@ namespace BossCam.Desktop.Avalonia.Tests;
 /// </summary>
 public sealed class MainWindowViewModelTests
 {
-    private static MainWindowViewModel CreateVm(TestBossCamApiClient? api = null)
+    private static MainWindowViewModel CreateVm(
+        TestBossCamApiClient? api = null,
+        FakeServiceStarter? starter = null)
     {
         api ??= new TestBossCamApiClient();
-        return new MainWindowViewModel(api);
+        starter ??= new FakeServiceStarter();
+        return new MainWindowViewModel(api, serviceStarter: starter);
     }
 
     // ── Initial state ────────────────────────────────────────────
@@ -28,13 +31,292 @@ public sealed class MainWindowViewModelTests
     public void Constructor_Sets_Default_StatusText()
     {
         var vm = CreateVm();
-        Assert.Contains("Connect to BossCamService", vm.StatusText);
+        Assert.Contains("Connecting to BossCamService", vm.StatusText);
         Assert.Empty(vm.Devices);
         Assert.Null(vm.SelectedDevice);
         Assert.False(vm.IsLive);
         Assert.Null(vm.LiveFrame);
         Assert.Empty(vm.DeviceInfoText);
     }
+
+    // ── Persistent connection indicator ───────────────────────────
+
+    [Fact]
+    public void Constructor_ConnectionIndicator_Defaults_To_Starting()
+    {
+        var vm = CreateVm();
+        Assert.Equal(ServiceConnectionStatus.Starting, vm.ConnectionStatus);
+        Assert.Equal("Starting\u2026", vm.ConnectionStatusText);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_Healthy_Sets_Connection_Online()
+    {
+        var api = new TestBossCamApiClient
+        {
+            HealthResult = JsonSerializer.Deserialize<JsonElement>("""{"status":"ok"}"""),
+            DevicesResult = []
+        };
+        var vm = CreateVm(api);
+
+        await vm.InitializeAsync();
+
+        Assert.Equal(ServiceConnectionStatus.Online, vm.ConnectionStatus);
+        Assert.Equal("Service online", vm.ConnectionStatusText);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_Offline_Starter_Fails_Sets_Connection_Offline()
+    {
+        var api = new TestBossCamApiClient();
+        var starter = new FakeServiceStarter { StartResult = false };
+        var vm = CreateVm(api, starter);
+
+        await vm.InitializeAsync();
+
+        Assert.Equal(ServiceConnectionStatus.Offline, vm.ConnectionStatus);
+        Assert.Equal("Service offline", vm.ConnectionStatusText);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_Offline_Starter_Starts_Sets_Connection_Online()
+    {
+        var api = new TestBossCamApiClient
+        {
+            DevicesResult = []
+        };
+        var starter = new FakeServiceStarter { StartResult = true };
+        var vm = CreateVm(api, starter);
+
+        await vm.InitializeAsync();
+
+        Assert.Equal(ServiceConnectionStatus.Online, vm.ConnectionStatus);
+        Assert.Equal("Service online", vm.ConnectionStatusText);
+    }
+
+    [Fact]
+    public async Task RetryConnection_After_Service_Comes_Back_Reconnects()
+    {
+        var api = new TestBossCamApiClient(); // health null => offline first
+        var starter = new FakeServiceStarter { StartResult = false };
+        var vm = CreateVm(api, starter);
+
+        await vm.InitializeAsync();
+        Assert.Equal(ServiceConnectionStatus.Offline, vm.ConnectionStatus);
+
+        // Service comes back; Retry should now connect without needing the starter.
+        api.HealthResult = JsonSerializer.Deserialize<JsonElement>("""{"status":"ok"}""");
+        api.DevicesResult = [new() { Id = Guid.NewGuid(), Name = "Cam1" }];
+
+        await vm.RetryConnectionCommand.ExecuteAsync(null);
+
+        Assert.Equal(ServiceConnectionStatus.Online, vm.ConnectionStatus);
+        Assert.Equal("Service online", vm.ConnectionStatusText);
+        Assert.Contains("Connected to BossCamService", vm.StatusText);
+        Assert.Single(vm.Devices);
+    }
+
+    [Fact]
+    public async Task RetryConnection_Starts_Service_When_Still_Down()
+    {
+        var api = new TestBossCamApiClient();
+        var starter = new FakeServiceStarter { StartResult = false };
+        var vm = CreateVm(api, starter);
+
+        // First handshake: service down and the starter cannot start it -> offline.
+        await vm.InitializeAsync();
+        Assert.Equal(ServiceConnectionStatus.Offline, vm.ConnectionStatus);
+
+        // Still offline, but the starter can now bring it up on Retry.
+        starter.StartResult = true;
+        api.DevicesResult = [];
+
+        await vm.RetryConnectionCommand.ExecuteAsync(null);
+
+        Assert.Equal(ServiceConnectionStatus.Online, vm.ConnectionStatus);
+        Assert.Equal(2, starter.StartCallCount);
+    }
+
+    [Fact]
+    public async Task PollHealth_Reflects_Service_Going_Offline_Then_Online()
+    {
+        var api = new TestBossCamApiClient
+        {
+            HealthResult = JsonSerializer.Deserialize<JsonElement>("""{"status":"ok"}"""),
+            DevicesResult = []
+        };
+        var vm = CreateVm(api);
+        await vm.InitializeAsync();
+        Assert.Equal(ServiceConnectionStatus.Online, vm.ConnectionStatus);
+
+        // Service dies -> the periodic poll flips the indicator red.
+        api.HealthResult = null;
+        await vm.PollHealthAsync();
+        Assert.Equal(ServiceConnectionStatus.Offline, vm.ConnectionStatus);
+
+        // Service recovers -> the poll flips it back green without a Retry.
+        api.HealthResult = JsonSerializer.Deserialize<JsonElement>("""{"status":"ok"}""");
+        await vm.PollHealthAsync();
+        Assert.Equal(ServiceConnectionStatus.Online, vm.ConnectionStatus);
+    }
+
+    [Fact]
+    public async Task PollHealth_Throwing_Probe_Marks_Offline()
+    {
+        var api = new TestBossCamApiClient
+        {
+            HealthResult = JsonSerializer.Deserialize<JsonElement>("""{"status":"ok"}"""),
+            DevicesResult = []
+        };
+        var vm = CreateVm(api);
+        await vm.InitializeAsync();
+
+        api.ThrowOnHealth = true;
+        await vm.PollHealthAsync();
+
+        Assert.Equal(ServiceConnectionStatus.Offline, vm.ConnectionStatus);
+    }
+
+    [Fact]
+    public async Task PollHealth_Does_Not_Clobber_InFlight_Handshake_State()
+    {
+        var api = new TestBossCamApiClient();
+        // The handshake suspends on this pending start task, keeping it genuinely
+        // in-flight (the plain StartResult path would complete synchronously).
+        var pendingStart = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var starter = new FakeServiceStarter { PendingTask = pendingStart.Task };
+        var vm = CreateVm(api, starter);
+
+        var handshake = vm.InitializeAsync();
+        // The handshake has set Starting and is now awaiting the pending start task.
+        Assert.Equal(ServiceConnectionStatus.Starting, vm.ConnectionStatus);
+
+        // A poll racing the handshake must not overwrite the amber Starting state.
+        await vm.PollHealthAsync();
+        Assert.Equal(ServiceConnectionStatus.Starting, vm.ConnectionStatus);
+
+        pendingStart.SetResult(false);
+        await handshake;
+        Assert.Equal(ServiceConnectionStatus.Offline, vm.ConnectionStatus);
+    }
+
+    // ── Startup handshake (InitializeAsync) ───────────────────────
+
+    [Fact]
+    public async Task InitializeAsync_Healthy_Loads_Devices_And_Shows_Connected()
+    {
+        var api = new TestBossCamApiClient
+        {
+            HealthResult = JsonSerializer.Deserialize<JsonElement>("""{"status":"ok"}"""),
+            DevicesResult =
+            [
+                new() { Id = Guid.NewGuid(), Name = "Cam1" },
+                new() { Id = Guid.NewGuid(), Name = "Cam2" }
+            ]
+        };
+        var vm = CreateVm(api);
+
+        await vm.InitializeAsync();
+
+        Assert.Equal(2, vm.Devices.Count);
+        Assert.Contains("Connected to BossCamService", vm.StatusText);
+        Assert.Contains("2", vm.StatusText);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_Unhealthy_Health_Shows_Offline()
+    {
+        // HealthResult is null by default => treated as unreachable. The fake
+        // starter fails, so the handshake must surface a clear offline state.
+        var api = new TestBossCamApiClient();
+        var starter = new FakeServiceStarter { StartResult = false };
+        var vm = CreateVm(api, starter);
+
+        await vm.InitializeAsync();
+
+        Assert.Equal(1, starter.StartCallCount);
+        Assert.Empty(vm.Devices);
+        Assert.Contains("BossCamService offline", vm.StatusText);
+        Assert.Contains("could not be started automatically", vm.StatusText);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_Health_Throws_Shows_Offline()
+    {
+        var api = new TestBossCamApiClient { ThrowOnHealth = true };
+        var vm = CreateVm(api);
+
+        await vm.InitializeAsync();
+
+        Assert.Empty(vm.Devices);
+        Assert.Contains("BossCamService offline", vm.StatusText);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_Offline_Starts_Service_Then_Loads_Devices()
+    {
+        var api = new TestBossCamApiClient
+        {
+            DevicesResult =
+            [
+                new() { Id = Guid.NewGuid(), Name = "Cam1" },
+                new() { Id = Guid.NewGuid(), Name = "Cam2" }
+            ]
+        };
+        var starter = new FakeServiceStarter { StartResult = true };
+        var vm = CreateVm(api, starter);
+
+        await vm.InitializeAsync();
+
+        Assert.Equal(1, starter.StartCallCount);
+        Assert.Equal(2, vm.Devices.Count);
+        Assert.Contains("Connected to BossCamService", vm.StatusText);
+        Assert.Contains("2", vm.StatusText);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_Healthy_Does_Not_Attempt_Service_Start()
+    {
+        var api = new TestBossCamApiClient
+        {
+            HealthResult = JsonSerializer.Deserialize<JsonElement>("""{"status":"ok"}"""),
+            DevicesResult = []
+        };
+        var starter = new FakeServiceStarter { StartResult = true };
+        var vm = CreateVm(api, starter);
+
+        await vm.InitializeAsync();
+
+        Assert.Equal(0, starter.StartCallCount);
+        Assert.Contains("Connected to BossCamService", vm.StatusText);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_Health_Ok_But_Devices_Fail_Shows_Failed_To_Load()
+    {
+        var api = new TestBossCamApiClient
+        {
+            HealthResult = JsonSerializer.Deserialize<JsonElement>("""{"status":"ok"}"""),
+            // DevicesResult null => GetDevicesAsync throws inside LoadDevicesAsync.
+        };
+        var vm = CreateVm(api);
+
+        await vm.InitializeAsync();
+
+        Assert.Empty(vm.Devices);
+        Assert.Contains("Failed to load", vm.StatusText);
+    }
+
+    [Fact]
+    public void IsHealthy_Returns_True_Only_For_Status_Ok()
+    {
+        Assert.True(MainWindowViewModel.IsHealthy(
+            JsonSerializer.Deserialize<JsonElement>("""{"status":"ok"}""")));
+        Assert.False(MainWindowViewModel.IsHealthy(
+            JsonSerializer.Deserialize<JsonElement>("""{"status":"degraded"}""")));
+        Assert.False(MainWindowViewModel.IsHealthy(null));
+    }
+
 
     [Fact]
     public void Constructor_Sets_Empty_Devices_Collection()
