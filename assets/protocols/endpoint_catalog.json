@@ -3249,7 +3249,13 @@
       "operation_ids_inferred": true,
       "request_response_schema_links_partly_inferred": true
     },
-    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md",
+    "settled_verdict": {
+      "date": "2026-08-11",
+      "status": "SETTLED LIVE — GET-gated on 5523-W 3.6.60",
+      "summary": "GET returns HTTP 500 {statusCode:2, 'Device Error'} in every form tried (bare, ?id=0, /0). Handler symbol exists in the binary (RESTful_NetSDKSystemLedPwm_OnPut) but this model does not serve it over GET — likely write-only or capability-gated. Do not treat $[n] field descriptors as a live schema for this unit.",
+      "evidence": "Live GET/PUT probes 10.0.0.29/.169/.227 blank admin 2026-08-11 (scripts/5523w-surface-verify.py); GET 200 + PUT statusCode 0 = round-trip confirmed."
+    }
   },
   {
     "title": "System LED PWM Channel Info",
@@ -3272,7 +3278,13 @@
       "operation_ids_inferred": true,
       "request_response_schema_links_partly_inferred": true
     },
-    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md",
+    "settled_verdict": {
+      "date": "2026-08-11",
+      "status": "SETTLED LIVE — GET-gated on 5523-W 3.6.60",
+      "summary": "GET returns HTTP 500 {statusCode:2, 'Device Error'} (bare and ?id=0). Same gate as ledpwm.",
+      "evidence": "Live GET/PUT probes 10.0.0.29/.169/.227 blank admin 2026-08-11 (scripts/5523w-surface-verify.py); GET 200 + PUT statusCode 0 = round-trip confirmed."
+    }
   },
   {
     "title": "System Alarm Schedule",
@@ -3303,7 +3315,13 @@
       "operation_ids_inferred": true,
       "request_response_schema_links_partly_inferred": true
     },
-    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md",
+    "settled_verdict": {
+      "date": "2026-08-11",
+      "status": "SETTLED LIVE — GET-gated on 5523-W 3.6.60",
+      "summary": "GET returns HTTP 500 {statusCode:2, 'Device Error'} (bare, ?id=0, /0). The $.AlarmSchedule[n] descriptor exists in the binary but is not served live on this model.",
+      "evidence": "Live GET/PUT probes 10.0.0.29/.169/.227 blank admin 2026-08-11 (scripts/5523w-surface-verify.py); GET 200 + PUT statusCode 0 = round-trip confirmed."
+    }
   },
   {
     "title": "System Alarm Schedule V2",
@@ -3334,7 +3352,13 @@
       "operation_ids_inferred": true,
       "request_response_schema_links_partly_inferred": true
     },
-    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md",
+    "settled_verdict": {
+      "date": "2026-08-11",
+      "status": "SETTLED LIVE — GET-gated on 5523-W 3.6.60",
+      "summary": "GET returns HTTP 500 {statusCode:2, 'Device Error'} (bare, ?id=0). Same gate as AlarmSchedule.",
+      "evidence": "Live GET/PUT probes 10.0.0.29/.169/.227 blank admin 2026-08-11 (scripts/5523w-surface-verify.py); GET 200 + PUT statusCode 0 = round-trip confirmed."
+    }
   },
   {
     "title": "System Alarm Tone",
@@ -3365,7 +3389,13 @@
       "operation_ids_inferred": true,
       "request_response_schema_links_partly_inferred": true
     },
-    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md",
+    "settled_verdict": {
+      "date": "2026-08-11",
+      "status": "SETTLED LIVE — device reports Not Support",
+      "summary": "GET returns HTTP 200 but envelope {statusCode:3, 'Device Not Support'}. Endpoint exists in the binary; this 5523-W model does not implement it. Do not surface as a writable control for this unit.",
+      "evidence": "Live GET/PUT probes 10.0.0.29/.169/.227 blank admin 2026-08-11 (scripts/5523w-surface-verify.py); GET 200 + PUT statusCode 0 = round-trip confirmed."
+    }
   },
   {
     "title": "System Record Schedule",
@@ -3396,7 +3426,13 @@
       "operation_ids_inferred": true,
       "request_response_schema_links_partly_inferred": true
     },
-    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md",
+    "settled_verdict": {
+      "date": "2026-08-11",
+      "status": "SETTLED LIVE — GET-gated on 5523-W 3.6.60",
+      "summary": "GET returns HTTP 500 {statusCode:2, 'Device Error'} (bare, ?id=0, /0 is 404). The $.RecordSchedule[n] descriptor exists in the binary but is not served live on this model.",
+      "evidence": "Live GET/PUT probes 10.0.0.29/.169/.227 blank admin 2026-08-11 (scripts/5523w-surface-verify.py); GET 200 + PUT statusCode 0 = round-trip confirmed."
+    }
   },
   {
     "title": "System Time Calendar Style",
@@ -3427,7 +3463,16 @@
       "operation_ids_inferred": true,
       "request_response_schema_links_partly_inferred": true
     },
-    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md",
+    "settled_verdict": {
+      "date": "2026-08-11",
+      "status": "SETTLED LIVE — round-trip confirmed",
+      "canonical_keys": [
+        "calendarStyle"
+      ],
+      "summary": "GET returns bare string \"general\". PUT {\"calendarStyle\":\"general\"} -> statusCode 0 OK. The live value is 'general' — the earlier inferred 'Gregorian'/'Lunar' labels do NOT match the wire value (lunar variant likely 'lunar', unverified).",
+      "evidence": "Live GET/PUT probes 10.0.0.29/.169/.227 blank admin 2026-08-11 (scripts/5523w-surface-verify.py); GET 200 + PUT statusCode 0 = round-trip confirmed."
+    }
   },
   {
     "title": "System Time Zone",
@@ -3458,7 +3503,16 @@
       "operation_ids_inferred": true,
       "request_response_schema_links_partly_inferred": true
     },
-    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md",
+    "settled_verdict": {
+      "date": "2026-08-11",
+      "status": "SETTLED LIVE — round-trip confirmed; bare-string document",
+      "canonical_keys": [
+        "timeZone"
+      ],
+      "summary": "GET returns a bare JSON string \"GMT+08:00\". PUT accepts ONLY a bare string document (PUT \"GMT+08:00\" -> statusCode 0 OK); object forms are rejected statusCode 6 'Invalid Document'. SourcePath $.timeZone as an object key is WRONG — the wire document is the bare string.",
+      "evidence": "Live GET/PUT probes 10.0.0.29/.169/.227 blank admin 2026-08-11 (scripts/5523w-surface-verify.py); GET 200 + PUT statusCode 0 = round-trip confirmed."
+    }
   },
   {
     "title": "System RTC",
@@ -3489,7 +3543,16 @@
       "operation_ids_inferred": true,
       "request_response_schema_links_partly_inferred": true
     },
-    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md",
+    "settled_verdict": {
+      "date": "2026-08-11",
+      "status": "SETTLED LIVE — round-trip confirmed; bare-scalar document",
+      "canonical_keys": [
+        "rtc"
+      ],
+      "summary": "GET returns a bare unix-seconds int (e.g. 1786493574). PUT accepts ONLY a bare scalar document (PUT 1786493609 -> statusCode 0 OK); object forms {\"rtc\":…}, {\"time\":…} are rejected statusCode 6 'Invalid Document'. SourcePath $.rtc as an object key is WRONG — the wire document is the bare number.",
+      "evidence": "Live GET/PUT probes 10.0.0.29/.169/.227 blank admin 2026-08-11 (scripts/5523w-surface-verify.py); GET 200 + PUT statusCode 0 = round-trip confirmed."
+    }
   },
   {
     "title": "System Device Name",
@@ -3520,7 +3583,16 @@
       "operation_ids_inferred": true,
       "request_response_schema_links_partly_inferred": true
     },
-    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md",
+    "settled_verdict": {
+      "date": "2026-08-11",
+      "status": "SETTLED LIVE — bare string; subpath is GET-only",
+      "canonical_keys": [
+        "deviceName"
+      ],
+      "summary": "GET returns bare string \"5523-W\". PUT of {\"deviceName\":…} or a bare string on the subpath returns HTTP 500 Device Error — the subpath is read-only; the writable path is the full /NetSDK/System/deviceInfo document (deviceName lives inside deviceInfo).",
+      "evidence": "Live GET/PUT probes 10.0.0.29/.169/.227 blank admin 2026-08-11 (scripts/5523w-surface-verify.py); GET 200 + PUT statusCode 0 = round-trip confirmed."
+    }
   },
   {
     "title": "System Device Address",
@@ -3551,7 +3623,16 @@
       "operation_ids_inferred": true,
       "request_response_schema_links_partly_inferred": true
     },
-    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md",
+    "settled_verdict": {
+      "date": "2026-08-11",
+      "status": "SETTLED LIVE — bare int; read-only",
+      "canonical_keys": [
+        "deviceAddress"
+      ],
+      "summary": "GET returns a bare int (1) on 5523-W 3.6.60 — an index/location code, not a text address. Read-only via subpath.",
+      "evidence": "Live GET/PUT probes 10.0.0.29/.169/.227 blank admin 2026-08-11 (scripts/5523w-surface-verify.py); GET 200 + PUT statusCode 0 = round-trip confirmed."
+    }
   },
   {
     "title": "System Capabilities",
@@ -3605,7 +3686,22 @@
       "operation_ids_inferred": true,
       "request_response_schema_links_partly_inferred": true
     },
-    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md",
+    "settled_verdict": {
+      "date": "2026-08-11",
+      "status": "SETTLED LIVE — payload shape confirmed",
+      "canonical_keys": [
+        "enabled",
+        "type",
+        "sensitivityLevel",
+        "line",
+        "grid",
+        "width",
+        "height"
+      ],
+      "summary": "GET returns {\"id\":0,\"enabled\":false,\"type\":\"region\",\"sensitivityLevel\":80,\"maxLines\":1,\"line\":[{\"beginX\":0,\"beginY\":0,\"endX\":0,\"endY\":0}],\"maxcolumns\":32,\"maxrows\":24,\"width\":2560,\"height\":1920,\"grid\":[…]}. Writable lever is $.enabled. $.bEnableCordon / $.enCordonType / $.stCordonLinelist are WRONG names — real keys are enabled/type/sensitivityLevel/line/grid.",
+      "evidence": "Live GET/PUT probes 10.0.0.29/.169/.227 blank admin 2026-08-11 (scripts/5523w-surface-verify.py); GET 200 + PUT statusCode 0 = round-trip confirmed."
+    }
   },
   {
     "title": "Video Face Detection",
@@ -3636,7 +3732,13 @@
       "operation_ids_inferred": true,
       "request_response_schema_links_partly_inferred": true
     },
-    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md",
+    "settled_verdict": {
+      "date": "2026-08-11",
+      "status": "SETTLED LIVE — GET-gated on 5523-W 3.6.60",
+      "summary": "GET returns HTTP 500 {statusCode:2, 'Device Error'} (bare, ?id=0; /0 is 404). Handler symbol exists in the binary but this model does not serve it live.",
+      "evidence": "Live GET/PUT probes 10.0.0.29/.169/.227 blank admin 2026-08-11 (scripts/5523w-surface-verify.py); GET 200 + PUT statusCode 0 = round-trip confirmed."
+    }
   },
   {
     "title": "Video Human Detection",
@@ -3667,7 +3769,18 @@
       "operation_ids_inferred": true,
       "request_response_schema_links_partly_inferred": true
     },
-    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md",
+    "settled_verdict": {
+      "date": "2026-08-11",
+      "status": "SETTLED LIVE — payload shape confirmed",
+      "canonical_keys": [
+        "enabled",
+        "drawRegion",
+        "sensitivityStep"
+      ],
+      "summary": "GET returns {\"enabled\":false,\"drawRegion\":false,\"sensitivityStep\":\"normal\"}. The writable lever is $.enabled (confirmed). $.SupportHumanDetect / $.MaxHumanDetectNum are NOT in the payload — those were capability-flag guesses, not schema.",
+      "evidence": "Live GET/PUT probes 10.0.0.29/.169/.227 blank admin 2026-08-11 (scripts/5523w-surface-verify.py); GET 200 + PUT statusCode 0 = round-trip confirmed."
+    }
   },
   {
     "title": "Network Wireless Station Signal",
@@ -3690,7 +3803,16 @@
       "operation_ids_inferred": true,
       "request_response_schema_links_partly_inferred": true
     },
-    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md",
+    "settled_verdict": {
+      "date": "2026-08-11",
+      "status": "SETTLED LIVE — bare dBm int",
+      "canonical_keys": [
+        "signal"
+      ],
+      "summary": "GET returns a bare int RSSI in dBm (e.g. -48). $.SignalStrength / $.stationsignal object keys are WRONG — the wire document is the bare number (read-only).",
+      "evidence": "Live GET/PUT probes 10.0.0.29/.169/.227 blank admin 2026-08-11 (scripts/5523w-surface-verify.py); GET 200 + PUT statusCode 0 = round-trip confirmed."
+    }
   },
   {
     "title": "Network Wireless Station Info",
@@ -3713,7 +3835,13 @@
       "operation_ids_inferred": true,
       "request_response_schema_links_partly_inferred": true
     },
-    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md",
+    "settled_verdict": {
+      "date": "2026-08-11",
+      "status": "SETTLED LIVE — empty body on this model",
+      "summary": "GET returns HTTP 200 with an EMPTY body on 5523-W 3.6.60 (may be populated only in AP-hotspot mode or on other models). Treat as read-only.",
+      "evidence": "Live GET/PUT probes 10.0.0.29/.169/.227 blank admin 2026-08-11 (scripts/5523w-surface-verify.py); GET 200 + PUT statusCode 0 = round-trip confirmed."
+    }
   },
   {
     "title": "Wireless Scan AP List",
@@ -3798,7 +3926,18 @@
       "operation_ids_inferred": true,
       "request_response_schema_links_partly_inferred": true
     },
-    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md",
+    "settled_verdict": {
+      "date": "2026-08-11",
+      "status": "SETTLED LIVE — round-trip confirmed; array document",
+      "canonical_keys": [
+        "id",
+        "portname",
+        "value"
+      ],
+      "summary": "GET returns [{\"id\":1,\"portname\":\"unisual\",\"value\":80}]; PUT of the same array round-trips (HTTP 200, GET unchanged). The document is an ARRAY of {id, portname, value} — $.httpPort/$.rtspPort/$.onvifPort are WRONG; the real key is 'value' per named port entry.",
+      "evidence": "Live GET/PUT probes 10.0.0.29/.169/.227 blank admin 2026-08-11 (scripts/5523w-surface-verify.py); GET 200 + PUT statusCode 0 = round-trip confirmed."
+    }
   },
   {
     "title": "FTP Upload Config",
@@ -3829,7 +3968,13 @@
       "operation_ids_inferred": true,
       "request_response_schema_links_partly_inferred": true
     },
-    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md",
+    "settled_verdict": {
+      "date": "2026-08-11",
+      "status": "SETTLED LIVE — GET-gated on 5523-W 3.6.60",
+      "summary": "GET returns HTTP 500 {statusCode:2, 'Device Error'} (bare; /0 is 404). Handler exists in the binary but is not served live on this model.",
+      "evidence": "Live GET/PUT probes 10.0.0.29/.169/.227 blank admin 2026-08-11 (scripts/5523w-surface-verify.py); GET 200 + PUT statusCode 0 = round-trip confirmed."
+    }
   },
   {
     "title": "RTMP Push Config",
@@ -3860,7 +4005,13 @@
       "operation_ids_inferred": true,
       "request_response_schema_links_partly_inferred": true
     },
-    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md",
+    "settled_verdict": {
+      "date": "2026-08-11",
+      "status": "SETTLED LIVE — GET-gated on 5523-W 3.6.60",
+      "summary": "GET returns HTTP 500 {statusCode:2, 'Device Error'} (bare; /0 is 404). Handler exists in the binary but is not served live on this model.",
+      "evidence": "Live GET/PUT probes 10.0.0.29/.169/.227 blank admin 2026-08-11 (scripts/5523w-surface-verify.py); GET 200 + PUT statusCode 0 = round-trip confirmed."
+    }
   },
   {
     "title": "System GB28181 (PSIA gateway)",
@@ -3891,7 +4042,22 @@
       "operation_ids_inferred": true,
       "request_response_schema_links_partly_inferred": true
     },
-    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md",
+    "settled_verdict": {
+      "date": "2026-08-11",
+      "status": "SETTLED LIVE — payload shape confirmed",
+      "canonical_keys": [
+        "sipPort",
+        "sipServerport",
+        "sipUsername",
+        "sipUserpass",
+        "sipServeraddr",
+        "registerInterval",
+        "heartbeatCycle"
+      ],
+      "summary": "GET returns {sipPort:5060, sipServerport:5060, regisExpiredate, heartbeatCycle, maxTimeoutTimes, streamId, registerInterval, transType, sipServerid, sipServerdomain, sipServeraddr, sipUsername:'IPCAM', sipUserauthid, sipUserpass, videoId, alarmId, audioId}. $.sipServerport confirmed; $.bGB28181 / $.GB28181_Server / $.ServerPort are WRONG (not in payload). No enable toggle in the live doc.",
+      "evidence": "Live GET/PUT probes 10.0.0.29/.169/.227 blank admin 2026-08-11 (scripts/5523w-surface-verify.py); GET 200 + PUT statusCode 0 = round-trip confirmed."
+    }
   },
   {
     "title": "System GAT1400",
@@ -3922,7 +4088,13 @@
       "operation_ids_inferred": true,
       "request_response_schema_links_partly_inferred": true
     },
-    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+    "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md",
+    "settled_verdict": {
+      "date": "2026-08-11",
+      "status": "SETTLED LIVE — device reports Not Support",
+      "summary": "GET returns HTTP 200 but envelope {statusCode:3, 'Device Not Support'}. Do not surface as a writable control for this unit.",
+      "evidence": "Live GET/PUT probes 10.0.0.29/.169/.227 blank admin 2026-08-11 (scripts/5523w-surface-verify.py); GET 200 + PUT statusCode 0 = round-trip confirmed."
+    }
   },
   {
     "title": "Video Motion Detection Channel",
@@ -4016,5 +4188,1032 @@
       "request_response_schema_links_partly_inferred": true
     },
     "provenance": "Mined from 5523-W firmware binary anyka_ipc (IPCAKV3C_20211221_3_6_60_572010, also IPG5322_W 3.6.58) /NetSDK/* route strings + $[n].<group>.<field>[Property] JSON schema descriptors. Report: docs/reports/2026-08-11-5523w-feature-surface-inventory.md"
+  },
+  {
+    "title": "System Factory — firmware-revealed (NVR cross-ref 2026-08-13)",
+    "tag": "System",
+    "endpoint": "/NetSDK/Factory",
+    "methods": [
+      "GET",
+      "POST"
+    ],
+    "details": {
+      "GET": {
+        "description": "GET /NetSDK/Factory",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "Factory reset / factory-test entry (CGI OnFactory)"
+      },
+      "POST": {
+        "description": "POST /NetSDK/Factory",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "Factory reset / factory-test entry (CGI OnFactory)"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined verbatim from anyka_ipc route strings (IPCAKV3C_20211221_3_6_60_572010, IPG5322_W_20211210_3_6_58_572011) cross-referenced with the FWHI102 NVR app.out BCAM/N1 control plane (2026-08-13). Not yet live-verified on 5523-W; see docs/reports/2026-08-13-nvr-firmware-bcam-surface-revelation.md"
+  },
+  {
+    "title": "Image Image — firmware-revealed (NVR cross-ref 2026-08-13)",
+    "tag": "Image",
+    "endpoint": "/NetSDK/Image",
+    "methods": [
+      "GET"
+    ],
+    "details": {
+      "GET": {
+        "description": "GET /NetSDK/Image",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "Image control root"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined verbatim from anyka_ipc route strings (IPCAKV3C_20211221_3_6_60_572010, IPG5322_W_20211210_3_6_58_572011) cross-referenced with the FWHI102 NVR app.out BCAM/N1 control plane (2026-08-13). Not yet live-verified on 5523-W; see docs/reports/2026-08-13-nvr-firmware-bcam-surface-revelation.md"
+  },
+  {
+    "title": "Image denoise3d — firmware-revealed (NVR cross-ref 2026-08-13)",
+    "tag": "Image",
+    "endpoint": "/NetSDK/Image/denoise3d",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "GET /NetSDK/Image/denoise3d",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "$.denoise3d.{enabled,denoise3dStrength}"
+      },
+      "PUT": {
+        "description": "PUT /NetSDK/Image/denoise3d",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "$.denoise3d.{enabled,denoise3dStrength}"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined verbatim from anyka_ipc route strings (IPCAKV3C_20211221_3_6_60_572010, IPG5322_W_20211210_3_6_58_572011) cross-referenced with the FWHI102 NVR app.out BCAM/N1 control plane (2026-08-13). Not yet live-verified on 5523-W; see docs/reports/2026-08-13-nvr-firmware-bcam-surface-revelation.md"
+  },
+  {
+    "title": "Image irCutFilter — firmware-revealed (NVR cross-ref 2026-08-13)",
+    "tag": "Image",
+    "endpoint": "/NetSDK/Image/irCutFilter",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "GET /NetSDK/Image/irCutFilter",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "$.irCutFilter.{irCutControlMode,irCutMode,softwareIrOption.{dayToNightLevel,nightToDayLevel}}"
+      },
+      "PUT": {
+        "description": "PUT /NetSDK/Image/irCutFilter",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "$.irCutFilter.{irCutControlMode,irCutMode,softwareIrOption.{dayToNightLevel,nightToDayLevel}}"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined verbatim from anyka_ipc route strings (IPCAKV3C_20211221_3_6_60_572010, IPG5322_W_20211210_3_6_58_572011) cross-referenced with the FWHI102 NVR app.out BCAM/N1 control plane (2026-08-13). Not yet live-verified on 5523-W; see docs/reports/2026-08-13-nvr-firmware-bcam-surface-revelation.md"
+  },
+  {
+    "title": "Image manualSharpness — firmware-revealed (NVR cross-ref 2026-08-13)",
+    "tag": "Image",
+    "endpoint": "/NetSDK/Image/manualSharpness",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "GET /NetSDK/Image/manualSharpness",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "$.manualSharpness.{enabled,sharpnessLevel}"
+      },
+      "PUT": {
+        "description": "PUT /NetSDK/Image/manualSharpness",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "$.manualSharpness.{enabled,sharpnessLevel}"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined verbatim from anyka_ipc route strings (IPCAKV3C_20211221_3_6_60_572010, IPG5322_W_20211210_3_6_58_572011) cross-referenced with the FWHI102 NVR app.out BCAM/N1 control plane (2026-08-13). Not yet live-verified on 5523-W; see docs/reports/2026-08-13-nvr-firmware-bcam-surface-revelation.md"
+  },
+  {
+    "title": "Image videoMode — firmware-revealed (NVR cross-ref 2026-08-13)",
+    "tag": "Image",
+    "endpoint": "/NetSDK/Image/videoMode",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "GET /NetSDK/Image/videoMode",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "$.videoMode.{cellMode,fixMode,tableMode,wallMode,FixParam[%d].{id,AngleX,AngleY,AngleZ,CenterCoordinateX,CenterCoordinateY,Radius}}"
+      },
+      "PUT": {
+        "description": "PUT /NetSDK/Image/videoMode",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "$.videoMode.{cellMode,fixMode,tableMode,wallMode,FixParam[%d].{id,AngleX,AngleY,AngleZ,CenterCoordinateX,CenterCoordinateY,Radius}}"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined verbatim from anyka_ipc route strings (IPCAKV3C_20211221_3_6_60_572010, IPG5322_W_20211210_3_6_58_572011) cross-referenced with the FWHI102 NVR app.out BCAM/N1 control plane (2026-08-13). Not yet live-verified on 5523-W; see docs/reports/2026-08-13-nvr-firmware-bcam-surface-revelation.md"
+  },
+  {
+    "title": "Image wdr — firmware-revealed (NVR cross-ref 2026-08-13)",
+    "tag": "Image",
+    "endpoint": "/NetSDK/Image/wdr",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "GET /NetSDK/Image/wdr",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "$.WDR.{enabled,WDRStrength}"
+      },
+      "PUT": {
+        "description": "PUT /NetSDK/Image/wdr",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "$.WDR.{enabled,WDRStrength}"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined verbatim from anyka_ipc route strings (IPCAKV3C_20211221_3_6_60_572010, IPG5322_W_20211210_3_6_58_572011) cross-referenced with the FWHI102 NVR app.out BCAM/N1 control plane (2026-08-13). Not yet live-verified on 5523-W; see docs/reports/2026-08-13-nvr-firmware-bcam-surface-revelation.md"
+  },
+  {
+    "title": "Network DNS — firmware-revealed (NVR cross-ref 2026-08-13)",
+    "tag": "Network",
+    "endpoint": "/NetSDK/Network/DNS",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "GET /NetSDK/Network/DNS",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "$.Primary_DNS/$.Secondary_DNS (dialog strings); $.Dns"
+      },
+      "PUT": {
+        "description": "PUT /NetSDK/Network/DNS",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "$.Primary_DNS/$.Secondary_DNS (dialog strings); $.Dns"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined verbatim from anyka_ipc route strings (IPCAKV3C_20211221_3_6_60_572010, IPG5322_W_20211210_3_6_58_572011) cross-referenced with the FWHI102 NVR app.out BCAM/N1 control plane (2026-08-13). Not yet live-verified on 5523-W; see docs/reports/2026-08-13-nvr-firmware-bcam-surface-revelation.md"
+  },
+  {
+    "title": "Network ESee — firmware-revealed (NVR cross-ref 2026-08-13)",
+    "tag": "Network",
+    "endpoint": "/NetSDK/Network/ESee",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "GET /NetSDK/Network/ESee",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "$.eseeID, $.Esee, $.Stat.Network.P2P*"
+      },
+      "PUT": {
+        "description": "PUT /NetSDK/Network/ESee",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "$.eseeID, $.Esee, $.Stat.Network.P2P*"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined verbatim from anyka_ipc route strings (IPCAKV3C_20211221_3_6_60_572010, IPG5322_W_20211210_3_6_58_572011) cross-referenced with the FWHI102 NVR app.out BCAM/N1 control plane (2026-08-13). Not yet live-verified on 5523-W; see docs/reports/2026-08-13-nvr-firmware-bcam-surface-revelation.md"
+  },
+  {
+    "title": "System SetEncryptionChip — firmware-revealed (NVR cross-ref 2026-08-13)",
+    "tag": "System",
+    "endpoint": "/NetSDK/Production/SetEncryptionChip",
+    "methods": [
+      "POST"
+    ],
+    "details": {
+      "POST": {
+        "description": "POST /NetSDK/Production/SetEncryptionChip",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "Production-only: set encryption chip"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined verbatim from anyka_ipc route strings (IPCAKV3C_20211221_3_6_60_572010, IPG5322_W_20211210_3_6_58_572011) cross-referenced with the FWHI102 NVR app.out BCAM/N1 control plane (2026-08-13). Not yet live-verified on 5523-W; see docs/reports/2026-08-13-nvr-firmware-bcam-surface-revelation.md"
+  },
+  {
+    "title": "System ProductionResult — firmware-revealed (NVR cross-ref 2026-08-13)",
+    "tag": "System",
+    "endpoint": "/NetSDK/ProductionResult",
+    "methods": [
+      "GET"
+    ],
+    "details": {
+      "GET": {
+        "description": "GET /NetSDK/ProductionResult",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "Production result root (CGI ProductionResult)"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined verbatim from anyka_ipc route strings (IPCAKV3C_20211221_3_6_60_572010, IPG5322_W_20211210_3_6_58_572011) cross-referenced with the FWHI102 NVR app.out BCAM/N1 control plane (2026-08-13). Not yet live-verified on 5523-W; see docs/reports/2026-08-13-nvr-firmware-bcam-surface-revelation.md"
+  },
+  {
+    "title": "System FinishedOldTest — firmware-revealed (NVR cross-ref 2026-08-13)",
+    "tag": "System",
+    "endpoint": "/NetSDK/ProductionResult/FinishedOldTest",
+    "methods": [
+      "POST"
+    ],
+    "details": {
+      "POST": {
+        "description": "POST /NetSDK/ProductionResult/FinishedOldTest",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "Production: finish old test"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined verbatim from anyka_ipc route strings (IPCAKV3C_20211221_3_6_60_572010, IPG5322_W_20211210_3_6_58_572011) cross-referenced with the FWHI102 NVR app.out BCAM/N1 control plane (2026-08-13). Not yet live-verified on 5523-W; see docs/reports/2026-08-13-nvr-firmware-bcam-surface-revelation.md"
+  },
+  {
+    "title": "System FinishedTest — firmware-revealed (NVR cross-ref 2026-08-13)",
+    "tag": "System",
+    "endpoint": "/NetSDK/ProductionResult/FinishedTest",
+    "methods": [
+      "POST"
+    ],
+    "details": {
+      "POST": {
+        "description": "POST /NetSDK/ProductionResult/FinishedTest",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "Production: finish test"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined verbatim from anyka_ipc route strings (IPCAKV3C_20211221_3_6_60_572010, IPG5322_W_20211210_3_6_58_572011) cross-referenced with the FWHI102 NVR app.out BCAM/N1 control plane (2026-08-13). Not yet live-verified on 5523-W; see docs/reports/2026-08-13-nvr-firmware-bcam-surface-revelation.md"
+  },
+  {
+    "title": "System ImageTest — firmware-revealed (NVR cross-ref 2026-08-13)",
+    "tag": "System",
+    "endpoint": "/NetSDK/ProductionResult/ImageTest",
+    "methods": [
+      "POST"
+    ],
+    "details": {
+      "POST": {
+        "description": "POST /NetSDK/ProductionResult/ImageTest",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "Production: image test"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined verbatim from anyka_ipc route strings (IPCAKV3C_20211221_3_6_60_572010, IPG5322_W_20211210_3_6_58_572011) cross-referenced with the FWHI102 NVR app.out BCAM/N1 control plane (2026-08-13). Not yet live-verified on 5523-W; see docs/reports/2026-08-13-nvr-firmware-bcam-surface-revelation.md"
+  },
+  {
+    "title": "System SFPTest — firmware-revealed (NVR cross-ref 2026-08-13)",
+    "tag": "System",
+    "endpoint": "/NetSDK/ProductionResult/SFPTest",
+    "methods": [
+      "POST"
+    ],
+    "details": {
+      "POST": {
+        "description": "POST /NetSDK/ProductionResult/SFPTest",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "Production: SFP test"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined verbatim from anyka_ipc route strings (IPCAKV3C_20211221_3_6_60_572010, IPG5322_W_20211210_3_6_58_572011) cross-referenced with the FWHI102 NVR app.out BCAM/N1 control plane (2026-08-13). Not yet live-verified on 5523-W; see docs/reports/2026-08-13-nvr-firmware-bcam-surface-revelation.md"
+  },
+  {
+    "title": "System WIFITest — firmware-revealed (NVR cross-ref 2026-08-13)",
+    "tag": "System",
+    "endpoint": "/NetSDK/ProductionResult/WIFITest",
+    "methods": [
+      "POST"
+    ],
+    "details": {
+      "POST": {
+        "description": "POST /NetSDK/ProductionResult/WIFITest",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "Production: WiFi test"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined verbatim from anyka_ipc route strings (IPCAKV3C_20211221_3_6_60_572010, IPG5322_W_20211210_3_6_58_572011) cross-referenced with the FWHI102 NVR app.out BCAM/N1 control plane (2026-08-13). Not yet live-verified on 5523-W; see docs/reports/2026-08-13-nvr-firmware-bcam-surface-revelation.md"
+  },
+  {
+    "title": "System Firmware — firmware-revealed (NVR cross-ref 2026-08-13)",
+    "tag": "System",
+    "endpoint": "/NetSDK/RangeUpload/Firmware",
+    "methods": [
+      "POST"
+    ],
+    "details": {
+      "POST": {
+        "description": "POST /NetSDK/RangeUpload/Firmware",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "Range/fleet firmware upload (OTA)"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined verbatim from anyka_ipc route strings (IPCAKV3C_20211221_3_6_60_572010, IPG5322_W_20211210_3_6_58_572011) cross-referenced with the FWHI102 NVR app.out BCAM/N1 control plane (2026-08-13). Not yet live-verified on 5523-W; see docs/reports/2026-08-13-nvr-firmware-bcam-surface-revelation.md"
+  },
+  {
+    "title": "System UploadPT — firmware-revealed (NVR cross-ref 2026-08-13)",
+    "tag": "System",
+    "endpoint": "/NetSDK/RangeUpload/UploadPT",
+    "methods": [
+      "POST"
+    ],
+    "details": {
+      "POST": {
+        "description": "POST /NetSDK/RangeUpload/UploadPT",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "Range upload: PT (PTZ?) data"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined verbatim from anyka_ipc route strings (IPCAKV3C_20211221_3_6_60_572010, IPG5322_W_20211210_3_6_58_572011) cross-referenced with the FWHI102 NVR app.out BCAM/N1 control plane (2026-08-13). Not yet live-verified on 5523-W; see docs/reports/2026-08-13-nvr-firmware-bcam-surface-revelation.md"
+  },
+  {
+    "title": "System motionWarningTone — firmware-revealed (NVR cross-ref 2026-08-13)",
+    "tag": "System",
+    "endpoint": "/NetSDK/System/mdAlarm/motionWarningTone",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "GET /NetSDK/System/mdAlarm/motionWarningTone",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "$.MotionWarningTone / $.AlarmSetting.MotionDetection.MotionWarningTone"
+      },
+      "PUT": {
+        "description": "PUT /NetSDK/System/mdAlarm/motionWarningTone",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "$.MotionWarningTone / $.AlarmSetting.MotionDetection.MotionWarningTone"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined verbatim from anyka_ipc route strings (IPCAKV3C_20211221_3_6_60_572010, IPG5322_W_20211210_3_6_58_572011) cross-referenced with the FWHI102 NVR app.out BCAM/N1 control plane (2026-08-13). Not yet live-verified on 5523-W; see docs/reports/2026-08-13-nvr-firmware-bcam-surface-revelation.md"
+  },
+  {
+    "title": "System bluetooth — firmware-revealed (NVR cross-ref 2026-08-13)",
+    "tag": "System",
+    "endpoint": "/NetSDK/System/module/bluetooth",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "GET /NetSDK/System/module/bluetooth",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "N1Device_Bluetooth; bluetooth module state"
+      },
+      "PUT": {
+        "description": "PUT /NetSDK/System/module/bluetooth",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "N1Device_Bluetooth; bluetooth module state"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined verbatim from anyka_ipc route strings (IPCAKV3C_20211221_3_6_60_572010, IPG5322_W_20211210_3_6_58_572011) cross-referenced with the FWHI102 NVR app.out BCAM/N1 control plane (2026-08-13). Not yet live-verified on 5523-W; see docs/reports/2026-08-13-nvr-firmware-bcam-surface-revelation.md"
+  },
+  {
+    "title": "System gsensor — firmware-revealed (NVR cross-ref 2026-08-13)",
+    "tag": "System",
+    "endpoint": "/NetSDK/System/module/gsensor",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "GET /NetSDK/System/module/gsensor",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "N1Device_EvtVRCamGetGensorCalibration / SetGensorEnabled"
+      },
+      "PUT": {
+        "description": "PUT /NetSDK/System/module/gsensor",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "N1Device_EvtVRCamGetGensorCalibration / SetGensorEnabled"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined verbatim from anyka_ipc route strings (IPCAKV3C_20211221_3_6_60_572010, IPG5322_W_20211210_3_6_58_572011) cross-referenced with the FWHI102 NVR app.out BCAM/N1 control plane (2026-08-13). Not yet live-verified on 5523-W; see docs/reports/2026-08-13-nvr-firmware-bcam-surface-revelation.md"
+  },
+  {
+    "title": "System calibration — firmware-revealed (NVR cross-ref 2026-08-13)",
+    "tag": "System",
+    "endpoint": "/NetSDK/System/module/gsensor/calibration",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "GET /NetSDK/System/module/gsensor/calibration",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "$.calibration.{enabled}; gsensor calibration"
+      },
+      "PUT": {
+        "description": "PUT /NetSDK/System/module/gsensor/calibration",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "$.calibration.{enabled}; gsensor calibration"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined verbatim from anyka_ipc route strings (IPCAKV3C_20211221_3_6_60_572010, IPG5322_W_20211210_3_6_58_572011) cross-referenced with the FWHI102 NVR app.out BCAM/N1 control plane (2026-08-13). Not yet live-verified on 5523-W; see docs/reports/2026-08-13-nvr-firmware-bcam-surface-revelation.md"
+  },
+  {
+    "title": "System operation — firmware-revealed (NVR cross-ref 2026-08-13)",
+    "tag": "System",
+    "endpoint": "/NetSDK/System/operation",
+    "methods": [
+      "GET"
+    ],
+    "details": {
+      "GET": {
+        "description": "GET /NetSDK/System/operation",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "Operation root"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined verbatim from anyka_ipc route strings (IPCAKV3C_20211221_3_6_60_572010, IPG5322_W_20211210_3_6_58_572011) cross-referenced with the FWHI102 NVR app.out BCAM/N1 control plane (2026-08-13). Not yet live-verified on 5523-W; see docs/reports/2026-08-13-nvr-firmware-bcam-surface-revelation.md"
+  },
+  {
+    "title": "System default — firmware-revealed (NVR cross-ref 2026-08-13)",
+    "tag": "System",
+    "endpoint": "/NetSDK/System/operation/default",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "GET /NetSDK/System/operation/default",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "Factory-default operation"
+      },
+      "PUT": {
+        "description": "PUT /NetSDK/System/operation/default",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "Factory-default operation"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined verbatim from anyka_ipc route strings (IPCAKV3C_20211221_3_6_60_572010, IPG5322_W_20211210_3_6_58_572011) cross-referenced with the FWHI102 NVR app.out BCAM/N1 control plane (2026-08-13). Not yet live-verified on 5523-W; see docs/reports/2026-08-13-nvr-firmware-bcam-surface-revelation.md"
+  },
+  {
+    "title": "System reboot — firmware-revealed (NVR cross-ref 2026-08-13)",
+    "tag": "System",
+    "endpoint": "/NetSDK/System/operation/reboot",
+    "methods": [
+      "POST"
+    ],
+    "details": {
+      "POST": {
+        "description": "POST /NetSDK/System/operation/reboot",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "Reboot device"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined verbatim from anyka_ipc route strings (IPCAKV3C_20211221_3_6_60_572010, IPG5322_W_20211210_3_6_58_572011) cross-referenced with the FWHI102 NVR app.out BCAM/N1 control plane (2026-08-13). Not yet live-verified on 5523-W; see docs/reports/2026-08-13-nvr-firmware-bcam-surface-revelation.md"
+  },
+  {
+    "title": "System remoteUpgrade — firmware-revealed (NVR cross-ref 2026-08-13)",
+    "tag": "System",
+    "endpoint": "/NetSDK/System/operation/remoteUpgrade",
+    "methods": [
+      "POST"
+    ],
+    "details": {
+      "POST": {
+        "description": "POST /NetSDK/System/operation/remoteUpgrade",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "Remote firmware upgrade"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined verbatim from anyka_ipc route strings (IPCAKV3C_20211221_3_6_60_572010, IPG5322_W_20211210_3_6_58_572011) cross-referenced with the FWHI102 NVR app.out BCAM/N1 control plane (2026-08-13). Not yet live-verified on 5523-W; see docs/reports/2026-08-13-nvr-firmware-bcam-surface-revelation.md"
+  },
+  {
+    "title": "System time — firmware-revealed (NVR cross-ref 2026-08-13)",
+    "tag": "System",
+    "endpoint": "/NetSDK/System/time",
+    "methods": [
+      "GET"
+    ],
+    "details": {
+      "GET": {
+        "description": "GET /NetSDK/System/time",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "Time root"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined verbatim from anyka_ipc route strings (IPCAKV3C_20211221_3_6_60_572010, IPG5322_W_20211210_3_6_58_572011) cross-referenced with the FWHI102 NVR app.out BCAM/N1 control plane (2026-08-13). Not yet live-verified on 5523-W; see docs/reports/2026-08-13-nvr-firmware-bcam-surface-revelation.md"
+  },
+  {
+    "title": "System ntp — firmware-revealed (NVR cross-ref 2026-08-13)",
+    "tag": "System",
+    "endpoint": "/NetSDK/System/time/ntp",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "GET /NetSDK/System/time/ntp",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "$.ntp.{ntpEnabled,ntpServerDomain}"
+      },
+      "PUT": {
+        "description": "PUT /NetSDK/System/time/ntp",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "$.ntp.{ntpEnabled,ntpServerDomain}"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined verbatim from anyka_ipc route strings (IPCAKV3C_20211221_3_6_60_572010, IPG5322_W_20211210_3_6_58_572011) cross-referenced with the FWHI102 NVR app.out BCAM/N1 control plane (2026-08-13). Not yet live-verified on 5523-W; see docs/reports/2026-08-13-nvr-firmware-bcam-surface-revelation.md"
+  },
+  {
+    "title": "Video snapshot — firmware-revealed (NVR cross-ref 2026-08-13)",
+    "tag": "Video",
+    "endpoint": "/NetSDK/Video/encode/channel/101/snapshot",
+    "methods": [
+      "GET"
+    ],
+    "details": {
+      "GET": {
+        "description": "GET /NetSDK/Video/encode/channel/101/snapshot",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "Main-stream snapshot (JPEG)"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined verbatim from anyka_ipc route strings (IPCAKV3C_20211221_3_6_60_572010, IPG5322_W_20211210_3_6_58_572011) cross-referenced with the FWHI102 NVR app.out BCAM/N1 control plane (2026-08-13). Not yet live-verified on 5523-W; see docs/reports/2026-08-13-nvr-firmware-bcam-surface-revelation.md"
+  },
+  {
+    "title": "Video snapshot — firmware-revealed (NVR cross-ref 2026-08-13)",
+    "tag": "Video",
+    "endpoint": "/NetSDK/Video/encode/channel/102/snapshot",
+    "methods": [
+      "GET"
+    ],
+    "details": {
+      "GET": {
+        "description": "GET /NetSDK/Video/encode/channel/102/snapshot",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "Sub-stream snapshot (JPEG)"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined verbatim from anyka_ipc route strings (IPCAKV3C_20211221_3_6_60_572010, IPG5322_W_20211210_3_6_58_572011) cross-referenced with the FWHI102 NVR app.out BCAM/N1 control plane (2026-08-13). Not yet live-verified on 5523-W; see docs/reports/2026-08-13-nvr-firmware-bcam-surface-revelation.md"
+  },
+  {
+    "title": "Audio channel — firmware-revealed (NVR cross-ref 2026-08-13)",
+    "tag": "Audio",
+    "endpoint": "/NetSDK/Audio/encode/channel/",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "GET /NetSDK/Audio/encode/channel/",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "$.audioEncodeChannel[%d].{id,codecType}"
+      },
+      "PUT": {
+        "description": "PUT /NetSDK/Audio/encode/channel/",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "$.audioEncodeChannel[%d].{id,codecType}"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined verbatim from anyka_ipc route strings (IPCAKV3C_20211221_3_6_60_572010, IPG5322_W_20211210_3_6_58_572011) cross-referenced with the FWHI102 NVR app.out BCAM/N1 control plane (2026-08-13). Not yet live-verified on 5523-W; see docs/reports/2026-08-13-nvr-firmware-bcam-surface-revelation.md"
+  },
+  {
+    "title": "Audio channel — firmware-revealed (NVR cross-ref 2026-08-13)",
+    "tag": "Audio",
+    "endpoint": "/NetSDK/Audio/input/channel/",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "GET /NetSDK/Audio/input/channel/",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "$.audioId; sp* audio IO surface (audioEncodeChannel, AudioInCodec/AudioOutCodec)"
+      },
+      "PUT": {
+        "description": "PUT /NetSDK/Audio/input/channel/",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "$.audioId; sp* audio IO surface (audioEncodeChannel, AudioInCodec/AudioOutCodec)"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined verbatim from anyka_ipc route strings (IPCAKV3C_20211221_3_6_60_572010, IPG5322_W_20211210_3_6_58_572011) cross-referenced with the FWHI102 NVR app.out BCAM/N1 control plane (2026-08-13). Not yet live-verified on 5523-W; see docs/reports/2026-08-13-nvr-firmware-bcam-surface-revelation.md"
+  },
+  {
+    "title": "Network interface — firmware-revealed (NVR cross-ref 2026-08-13)",
+    "tag": "Network",
+    "endpoint": "/NetSDK/Network/interface/",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "GET /NetSDK/Network/interface/",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "$.Interface.{dhcp,macAddress,ipAddress,netmask,gateway} (lan/pppoe/wireless variants)"
+      },
+      "PUT": {
+        "description": "PUT /NetSDK/Network/interface/",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "$.Interface.{dhcp,macAddress,ipAddress,netmask,gateway} (lan/pppoe/wireless variants)"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined verbatim from anyka_ipc route strings (IPCAKV3C_20211221_3_6_60_572010, IPG5322_W_20211210_3_6_58_572011) cross-referenced with the FWHI102 NVR app.out BCAM/N1 control plane (2026-08-13). Not yet live-verified on 5523-W; see docs/reports/2026-08-13-nvr-firmware-bcam-surface-revelation.md"
+  },
+  {
+    "title": "PTZ channel — firmware-revealed (NVR cross-ref 2026-08-13)",
+    "tag": "PTZ",
+    "endpoint": "/NetSDK/PTZ/channel/",
+    "methods": [
+      "GET",
+      "PUT",
+      "POST"
+    ],
+    "details": {
+      "GET": {
+        "description": "GET /NetSDK/PTZ/channel/",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "$.angles.{anglesX,anglesY,anglesZ}; spPtz{Horizontal,Vertical}*; RESTful_NetSDKPTZChannelIDSetup_OnGET/PUT"
+      },
+      "PUT": {
+        "description": "PUT /NetSDK/PTZ/channel/",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "$.angles.{anglesX,anglesY,anglesZ}; spPtz{Horizontal,Vertical}*; RESTful_NetSDKPTZChannelIDSetup_OnGET/PUT"
+      },
+      "POST": {
+        "description": "POST /NetSDK/PTZ/channel/",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "$.angles.{anglesX,anglesY,anglesZ}; spPtz{Horizontal,Vertical}*; RESTful_NetSDKPTZChannelIDSetup_OnGET/PUT"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined verbatim from anyka_ipc route strings (IPCAKV3C_20211221_3_6_60_572010, IPG5322_W_20211210_3_6_58_572011) cross-referenced with the FWHI102 NVR app.out BCAM/N1 control plane (2026-08-13). Not yet live-verified on 5523-W; see docs/reports/2026-08-13-nvr-firmware-bcam-surface-revelation.md"
+  },
+  {
+    "title": "Video channel — firmware-revealed (NVR cross-ref 2026-08-13)",
+    "tag": "Video",
+    "endpoint": "/NetSDK/Video/encode/channel/",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "GET /NetSDK/Video/encode/channel/",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "$.videoEncodeChannel[%d].{id,resolution}; channel 101/102"
+      },
+      "PUT": {
+        "description": "PUT /NetSDK/Video/encode/channel/",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "$.videoEncodeChannel[%d].{id,resolution}; channel 101/102"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined verbatim from anyka_ipc route strings (IPCAKV3C_20211221_3_6_60_572010, IPG5322_W_20211210_3_6_58_572011) cross-referenced with the FWHI102 NVR app.out BCAM/N1 control plane (2026-08-13). Not yet live-verified on 5523-W; see docs/reports/2026-08-13-nvr-firmware-bcam-surface-revelation.md"
+  },
+  {
+    "title": "Video channel — firmware-revealed (NVR cross-ref 2026-08-13)",
+    "tag": "Video",
+    "endpoint": "/NetSDK/Video/input/channel/",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "GET /NetSDK/Video/input/channel/",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "Image-plane root per channel (properties, privacyMasks, brightnessLevel, ...)"
+      },
+      "PUT": {
+        "description": "PUT /NetSDK/Video/input/channel/",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "Image-plane root per channel (properties, privacyMasks, brightnessLevel, ...)"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined verbatim from anyka_ipc route strings (IPCAKV3C_20211221_3_6_60_572010, IPG5322_W_20211210_3_6_58_572011) cross-referenced with the FWHI102 NVR app.out BCAM/N1 control plane (2026-08-13). Not yet live-verified on 5523-W; see docs/reports/2026-08-13-nvr-firmware-bcam-surface-revelation.md"
+  },
+  {
+    "title": "Video channel — firmware-revealed (NVR cross-ref 2026-08-13)",
+    "tag": "Video",
+    "endpoint": "/NetSDK/Video/motionDetection/channel/",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "details": {
+      "GET": {
+        "description": "GET /NetSDK/Video/motionDetection/channel/",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "Motion detection config per channel (sensitivity grid, regions, schedules)"
+      },
+      "PUT": {
+        "description": "PUT /NetSDK/Video/motionDetection/channel/",
+        "query": "None.",
+        "content": "None.",
+        "success_return": "See $.schema descriptors in assets/protocols/firmware-surface/5523w_schema_descriptors.txt",
+        "notes": "Motion detection config per channel (sensitivity grid, regions, schedules)"
+      }
+    },
+    "inference_flags": {
+      "tag_inferred": true,
+      "operation_ids_inferred": true,
+      "request_response_schema_links_partly_inferred": true
+    },
+    "provenance": "Mined verbatim from anyka_ipc route strings (IPCAKV3C_20211221_3_6_60_572010, IPG5322_W_20211210_3_6_58_572011) cross-referenced with the FWHI102 NVR app.out BCAM/N1 control plane (2026-08-13). Not yet live-verified on 5523-W; see docs/reports/2026-08-13-nvr-firmware-bcam-surface-revelation.md"
   }
 ]
