@@ -37,21 +37,21 @@ ENDPOINTS = [
     ("/NetSDK/System/AlarmScheduleV2", ["$.ScheduleEnabled", "$.ScheduleScheme"]),
     ("/NetSDK/System/AlarmTone", ["$.AlarmTone[0].Enabled", "$.AlarmTone[0].tone"]),
     ("/NetSDK/System/RecordSchedule", ["$.RecordSchedule[0].Enabled", "$.RecordSchedule[0].RecType", "$.RecordSchedule[0].Weekday", "$.RecordSchedule[0].BeginTime", "$.RecordSchedule[0].EndTime"]),
-    ("/NetSDK/System/time/rtc", ["$.rtc"]),
-    ("/NetSDK/System/time/timeZone", ["$.timeZone"]),
-    ("/NetSDK/System/time/calendarStyle", ["$.calendarStyle"]),
-    ("/NetSDK/Video/FaceDetection", ["$.SupportFaceDetect", "$.MaxFaceDetectNum", "$.enabled"]),
-    ("/NetSDK/Video/HumanDetect", ["$.SupportHumanDetect", "$.MaxHumanDetectNum", "$.enabled"]),
-    ("/NetSDK/Video/cordon", ["$.bEnableCordon", "$.enCordonType", "$.stCordonLinelist", "$.stCordonArealist"]),
-    ("/NetSDK/System/gb28181", ["$.bGB28181", "$.GB28181_Server", "$.sipServerport", "$.ServerPort"]),
+    ("/NetSDK/System/time/rtc", ["$"]),
+    ("/NetSDK/System/time/timeZone", ["$"]),
+    ("/NetSDK/System/time/calendarStyle", ["$"]),
+    ("/NetSDK/Video/FaceDetection", ["$.enabled"]),
+    ("/NetSDK/Video/HumanDetect", ["$.enabled", "$.drawRegion", "$.sensitivityStep"]),
+    ("/NetSDK/Video/cordon", ["$.enabled", "$.type", "$.sensitivityLevel", "$.line", "$.grid"]),
+    ("/NetSDK/System/gb28181", ["$.sipPort", "$.sipServerport", "$.sipUsername", "$.sipUserpass", "$.sipServeraddr"]),
     ("/NetSDK/System/gat1400", ["$.bGAT1400"]),
     ("/NetSDK/FTP", ["$.ScheduleEnabled", "$.schedule"]),
     ("/NetSDK/RTMP", ["$.rtmpUrl"]),
-    ("/NetSDK/Network/port", ["$.httpPort", "$.rtspPort", "$.onvifPort"]),
-    ("/NetSDK/Network/wireless/stationSignal", ["$.SignalStrength", "$.stationsignal"]),
+    ("/NetSDK/Network/port", ["$[0].id", "$[0].portname", "$[0].value"]),
+    ("/NetSDK/Network/wireless/stationSignal", ["$"]),
     ("/NetSDK/Network/wireless/allStaInfo", ["$"]),
-    ("/NetSDK/System/deviceInfo/deviceName", ["$.deviceName"]),
-    ("/NetSDK/System/deviceInfo/deviceAddress", ["$.deviceAddress"]),
+    ("/NetSDK/System/deviceInfo/deviceName", ["$"]),
+    ("/NetSDK/System/deviceInfo/deviceAddress", ["$"]),
 ]
 
 
@@ -127,7 +127,19 @@ def probe(ip, path, fields):
             rec["present_fields"] = ["$array"]
             rec["verdict"] = "confirmed"
             return rec
-    if not isinstance(data, dict) or not data:
+    if not isinstance(data, (dict, list)):
+        # BARE SCALAR payload (deviceName="5523-W", rtc=1786493574, stationSignal=-48,
+        # timeZone="GMT+08:00", calendarStyle="general", deviceAddress=1): the wire document
+        # IS the value, so any "$"-rooted expectation is satisfied by the bare scalar itself.
+        if fields == ["$"] or any(f in ("$", "$.deviceName", "$.rtc", "$.timeZone",
+                                        "$.calendarStyle", "$.deviceAddress", "$.SignalStrength",
+                                        "$.stationsignal") for f in fields):
+            rec["present_fields"] = ["$bare-scalar"]
+            rec["verdict"] = "confirmed"
+        else:
+            rec["verdict"] = "empty"
+        return rec
+    if not data:
         rec["verdict"] = "empty"
         return rec
     for f in fields:

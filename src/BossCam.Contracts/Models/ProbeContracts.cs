@@ -86,6 +86,12 @@ public sealed record PersistenceVerificationRequest
     public JsonNode? IntendedValue { get; init; }
     public bool RebootForVerification { get; init; }
     public int RebootWaitSeconds { get; init; } = 35;
+    /// <summary>Post-reboot reread attempts spaced by <see cref="RebootRereadIntervalSeconds"/>
+    /// after the initial <see cref="RebootWaitSeconds"/> settle. A 5523-W takes 60-90s to
+    /// fully boot after a firmware reboot, so a single one-shot reread would false-negative
+    /// against a camera that is still booting.</summary>
+    public int RebootRereadAttempts { get; init; } = 8;
+    public int RebootRereadIntervalSeconds { get; init; } = 10;
 }
 
 public sealed record PersistenceVerificationResult

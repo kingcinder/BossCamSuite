@@ -1299,7 +1299,7 @@ public sealed class EndpointContractCatalogService(
                         {
                             TruthState = ContractTruthState.Inferred,
                             Source = "firmware-string",
-                            Notes = "[%s:%d]ledPwm.switch: %d — RESTful_NetSDKSystemLedPwm_OnPut."
+                            Notes = "[%s:%d]ledPwm.switch: %d — RESTful_NetSDKSystemLedPwm_OnPut. LIVE 2026-08-11: GET returns HTTP 500 {statusCode:2 'Device Error'} on 5523-W 3.6.60 — gated/write-only on this model."
                         }
                     },
                     new ContractField
@@ -1376,7 +1376,7 @@ public sealed class EndpointContractCatalogService(
                         {
                             TruthState = ContractTruthState.Inferred,
                             Source = "firmware-string",
-                            Notes = "RESTful_NetSDKSystemLedPwmChannelInfo_OnGet."
+                            Notes = "RESTful_NetSDKSystemLedPwmChannelInfo_OnGet. LIVE 2026-08-11: GET returns HTTP 500 {statusCode:2 'Device Error'} — gated on this model."
                         }
                     }
                 ]
@@ -1407,7 +1407,7 @@ public sealed class EndpointContractCatalogService(
                         {
                             TruthState = ContractTruthState.Inferred,
                             Source = "firmware-string",
-                            Notes = "$.AlarmSchedule[%d].Enabled — RESTful_NetSDKSystemAlarmSchedule handler."
+                            Notes = "$.AlarmSchedule[%d].Enabled — RESTful_NetSDKSystemAlarmSchedule handler. LIVE 2026-08-11: GET returns HTTP 500 {statusCode:2 'Device Error'} (bare, ?id=0, /0) — not served live on 5523-W 3.6.60."
                         }
                     },
                     NumericField("alarmScheduleWeekday", "Alarm Schedule Weekday", "$.AlarmSchedule[0].Weekday", 0, 127),
@@ -1441,7 +1441,7 @@ public sealed class EndpointContractCatalogService(
                         {
                             TruthState = ContractTruthState.Inferred,
                             Source = "firmware-string",
-                            Notes = "$.RecordSchedule[%d].Enabled — RESTful_NetSDKSystemRecordSchedule handler."
+                            Notes = "$.RecordSchedule[%d].Enabled — RESTful_NetSDKSystemRecordSchedule handler. LIVE 2026-08-11: GET returns HTTP 500 {statusCode:2 'Device Error'} — not served live on 5523-W 3.6.60."
                         }
                     },
                     EnumField("recordScheduleType", "Record Type", "$.RecordSchedule[0].RecType", ["manual", "schedule", "alarm", "alarmAndSchedule"]) with
@@ -1484,7 +1484,7 @@ public sealed class EndpointContractCatalogService(
                         {
                             TruthState = ContractTruthState.Inferred,
                             Source = "firmware-string",
-                            Notes = "$.SupportFaceDetect / $.Capabilities.SupportFaceDetect — RESTful_NetSDKVideoFaceDetect_OnGet."
+                            Notes = "$.SupportFaceDetect / $.Capabilities.SupportFaceDetect — RESTful_NetSDKVideoFaceDetect_OnGet. LIVE 2026-08-11: GET returns HTTP 500 {statusCode:2 'Device Error'} — FaceDetection not served live on this model."
                         }
                     },
                     NumericField("faceDetectionMaxNum", "Face Detection Max", "$.MaxFaceDetectNum", 0, 32) with { Writable = false },
@@ -1516,29 +1516,27 @@ public sealed class EndpointContractCatalogService(
                 [
                     new ContractField
                     {
-                        Key = "humanDetectSupported",
-                        DisplayName = "Human Detect Supported",
-                        SourcePath = "$.SupportHumanDetect",
-                        Kind = ContractFieldKind.Boolean,
-                        Writable = false,
-                        DisruptionClass = DisruptionClass.Safe,
-                        Evidence = new ContractEvidence
-                        {
-                            TruthState = ContractTruthState.Inferred,
-                            Source = "firmware-string",
-                            Notes = "$.SupportHumanDetect / $.Capabilities.SupportHumanDetect — RESTful_NetSDKVideoHumanDetect_OnGet."
-                        }
-                    },
-                    NumericField("humanDetectMaxNum", "Human Detect Max", "$.MaxHumanDetectNum", 0, 32) with { Writable = false },
-                    new ContractField
-                    {
                         Key = "humanDetectEnabled",
                         DisplayName = "Human Detection",
                         SourcePath = "$.enabled",
                         Kind = ContractFieldKind.Boolean,
                         Writable = true,
                         DisruptionClass = DisruptionClass.ServiceImpacting,
-                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "firmware-string", Notes = "OemVideoHumanDetect config; enable flag is the writable lever." }
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Proven, Source = "live-2026-08-11", Notes = "SETTLED LIVE: payload {enabled, drawRegion, sensitivityStep}; $.enabled is the writable lever." }
+                    },
+                    new ContractField
+                    {
+                        Key = "humanDetectDrawRegion",
+                        DisplayName = "Draw Region",
+                        SourcePath = "$.drawRegion",
+                        Kind = ContractFieldKind.Boolean,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.Safe,
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Proven, Source = "live-2026-08-11", Notes = "SETTLED LIVE: drawRegion=false observed. SupportHumanDetect/MaxHumanDetectNum are NOT in the payload (capability-flag guesses)." }
+                    },
+                    EnumField("humanDetectSensitivity", "Sensitivity Step", "$.sensitivityStep", ["normal"]) with
+                    {
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Proven, Source = "live-2026-08-11", Notes = "SETTLED LIVE: observed value 'normal'." }
                     }
                 ]
             },
@@ -1560,37 +1558,45 @@ public sealed class EndpointContractCatalogService(
                     {
                         Key = "cordonEnabled",
                         DisplayName = "Cordon Enabled",
-                        SourcePath = "$.bEnableCordon",
+                        SourcePath = "$.enabled",
                         Kind = ContractFieldKind.Boolean,
                         Writable = true,
                         DisruptionClass = DisruptionClass.ServiceImpacting,
                         Evidence = new ContractEvidence
                         {
-                            TruthState = ContractTruthState.Inferred,
-                            Source = "firmware-string",
-                            Notes = "[%s:%d]bEnableCordon=%d enCordonType=%d — CFG_MakeJsonVCordon."
+                            TruthState = ContractTruthState.Proven,
+                            Source = "live-2026-08-11",
+                            Notes = "SETTLED LIVE: GET returns {id, enabled, type, sensitivityLevel, maxLines, line[], maxcolumns, maxrows, width, height, grid[]}. $.enabled is the writable lever; bEnableCordon/enCordonType/stCordonLinelist are WRONG names."
                         }
                     },
-                    NumericField("cordonType", "Cordon Type", "$.enCordonType", 0, 3),
+                    EnumField("cordonType", "Cordon Type", "$.type", ["region", "line"]) with
+                    {
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Proven, Source = "live-2026-08-11", Notes = "SETTLED LIVE: type='region' observed; 'line' likely sibling." }
+                    },
+                    NumericField("cordonSensitivity", "Cordon Sensitivity", "$.sensitivityLevel", 0, 100) with
+                    {
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Proven, Source = "live-2026-08-11", Notes = "SETTLED LIVE: sensitivityLevel=80 observed." }
+                    },
                     new ContractField
                     {
                         Key = "cordonLines",
                         DisplayName = "Cordon Lines",
-                        SourcePath = "$.stCordonLinelist",
+                        SourcePath = "$.line",
                         Kind = ContractFieldKind.Array,
                         Writable = true,
                         DisruptionClass = DisruptionClass.ServiceImpacting,
-                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "firmware-string", Notes = "CFG_ParseJsonCordonLine list." }
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Proven, Source = "live-2026-08-11", Notes = "SETTLED LIVE: line[] of {beginX,beginY,endX,endY}; maxLines observed. stCordonLinelist WRONG." }
                     },
                     new ContractField
                     {
-                        Key = "cordonAreas",
-                        DisplayName = "Cordon Areas",
-                        SourcePath = "$.stCordonArealist",
+                        Key = "cordonGrid",
+                        DisplayName = "Cordon Grid",
+                        SourcePath = "$.grid",
                         Kind = ContractFieldKind.Array,
                         Writable = true,
+                        ExpertOnly = true,
                         DisruptionClass = DisruptionClass.ServiceImpacting,
-                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "firmware-string", Notes = "Cordon area list." }
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Proven, Source = "live-2026-08-11", Notes = "SETTLED LIVE: grid[] of 32x24 cells (maxcolumns/maxrows); stCordonArealist WRONG." }
                     }
                 ]
             },
@@ -1612,11 +1618,11 @@ public sealed class EndpointContractCatalogService(
                     {
                         Key = "rtc",
                         DisplayName = "RTC",
-                        SourcePath = "$.rtc",
-                        Kind = ContractFieldKind.String,
+                        SourcePath = "$",
+                        Kind = ContractFieldKind.Integer,
                         Writable = true,
                         DisruptionClass = DisruptionClass.Safe,
-                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "firmware-string", Notes = "$.rtc + bRtc — APIS_RTC_Read/Write." }
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Proven, Source = "live-2026-08-11", Notes = "SETTLED LIVE: GET returns a bare unix-seconds int (1786493574); PUT accepts ONLY the bare scalar (object forms -> statusCode 6 Invalid Document). The $.rtc object key is WRONG on this firmware." }
                     }
                 ]
             },
@@ -1634,13 +1640,13 @@ public sealed class EndpointContractCatalogService(
                 ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
                 Fields =
                 [
-                    EnumField("timeZone", "Time Zone", "$.timeZone", ["GMT-11:00", "GMT-10:00", "GMT-09:00", "GMT-08:00", "GMT-07:00", "GMT-06:00", "GMT-05:00", "GMT-04:30", "GMT-04:00", "GMT-03:30", "GMT-03:00", "GMT-02:00", "GMT-01:00", "GMT+01:00", "GMT+02:00", "GMT+03:00", "GMT+03:30", "GMT+04:00", "GMT+04:30", "GMT+05:00", "GMT+05:30", "GMT+05:45", "GMT+06:00", "GMT+06:30", "GMT+07:00", "GMT+08:00", "GMT+09:00", "GMT+09:30", "GMT+10:00", "GMT+11:00", "GMT+12:00", "GMT+13:00"]) with
+                    EnumField("timeZone", "Time Zone", "$", ["GMT-11:00", "GMT-10:00", "GMT-09:00", "GMT-08:00", "GMT-07:00", "GMT-06:00", "GMT-05:00", "GMT-04:30", "GMT-04:00", "GMT-03:30", "GMT-03:00", "GMT-02:00", "GMT-01:00", "GMT+01:00", "GMT+02:00", "GMT+03:00", "GMT+03:30", "GMT+04:00", "GMT+04:30", "GMT+05:00", "GMT+05:30", "GMT+05:45", "GMT+06:00", "GMT+06:30", "GMT+07:00", "GMT+08:00", "GMT+09:00", "GMT+09:30", "GMT+10:00", "GMT+11:00", "GMT+12:00", "GMT+13:00"]) with
                     {
                         Evidence = new ContractEvidence
                         {
-                            TruthState = ContractTruthState.Inferred,
-                            Source = "firmware-string",
-                            Notes = "$.timeZoneProperty.opt[%d] — GMT offset enum extracted verbatim from firmware (observed set; no GMT±00:00 or GMT-12:00 in binary)."
+                            TruthState = ContractTruthState.Proven,
+                            Source = "live-2026-08-11",
+                            Notes = "SETTLED LIVE: GET returns a bare string \"GMT+08:00\"; PUT accepts ONLY the bare string (object forms -> statusCode 6 Invalid Document). GMT offset values extracted from firmware; live unit sits at GMT+08:00."
                         }
                     }
                 ]
@@ -1659,13 +1665,13 @@ public sealed class EndpointContractCatalogService(
                 ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
                 Fields =
                 [
-                    EnumField("calendarStyle", "Calendar Style", "$.calendarStyle", ["Gregorian", "Lunar"]) with
+                    EnumField("calendarStyle", "Calendar Style", "$.calendarStyle", ["general", "lunar"]) with
                     {
                         Evidence = new ContractEvidence
                         {
-                            TruthState = ContractTruthState.Inferred,
-                            Source = "firmware-string",
-                            Notes = "$.calendarStyleProperty.opt[0..1]."
+                            TruthState = ContractTruthState.Proven,
+                            Source = "live-2026-08-11",
+                            Notes = "SETTLED LIVE: GET returns bare string \"general\" (no object wrapper) but the only VERIFIED write is the object form {\"calendarStyle\":\"general\"} -> statusCode 0 OK — so keep the $.calendarStyle object key (unlike rtc/timeZone where bare writes were proven). The earlier inferred 'Gregorian'/'Lunar' labels do NOT match the wire value; 'lunar' is the likely sibling but unverified."
                         }
                     }
                 ]
@@ -1688,22 +1694,39 @@ public sealed class EndpointContractCatalogService(
                 [
                     new ContractField
                     {
-                        Key = "gb28181Enabled",
-                        DisplayName = "GB28181 Enabled",
-                        SourcePath = "$.bGB28181",
-                        Kind = ContractFieldKind.Boolean,
+                        Key = "gb28181SipPort",
+                        DisplayName = "GB28181 SIP Port",
+                        SourcePath = "$.sipPort",
+                        Kind = ContractFieldKind.Port,
                         Writable = true,
                         DisruptionClass = DisruptionClass.ServiceImpacting,
-                        Evidence = new ContractEvidence
-                        {
-                            TruthState = ContractTruthState.Inferred,
-                            Source = "firmware-string",
-                            Notes = "bGB28181 — N1Device_EvtSetGb28181Config / GB28181_Server."
-                        }
+                        Validation = new ContractValidationRule { Min = 1, Max = 65535 },
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Proven, Source = "live-2026-08-11", Notes = "SETTLED LIVE: sipPort=5060 observed." }
                     },
-                    StringField("gb28181Server", "GB28181 Server", "$.GB28181_Server"),
-                    NumericField("gb28181SipPort", "GB28181 SIP Port", "$.sipServerport", 1, 65535),
-                    NumericField("gb28181ServerPort", "GB28181 Server Port", "$.ServerPort", 1, 65535)
+                    NumericField("gb28181SipServerport", "GB28181 SIP Server Port", "$.sipServerport", 1, 65535) with
+                    {
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Proven, Source = "live-2026-08-11", Notes = "SETTLED LIVE: sipServerport=5060 observed — the one key that matched the original contract." }
+                    },
+                    StringField("gb28181ServerAddr", "GB28181 Server Address", "$.sipServeraddr"),
+                    StringField("gb28181Username", "GB28181 Username", "$.sipUsername"),
+                    new ContractField
+                    {
+                        Key = "gb28181Password",
+                        DisplayName = "GB28181 Password",
+                        SourcePath = "$.sipUserpass",
+                        Kind = ContractFieldKind.Password,
+                        Writable = true,
+                        DisruptionClass = DisruptionClass.ServiceImpacting,
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Proven, Source = "live-2026-08-11", Notes = "SETTLED LIVE: sipUserpass observed; Password kind so audit redaction treats it as a secret." }
+                    },
+                    NumericField("gb28181RegisterInterval", "Register Interval", "$.registerInterval", 1, 86400) with
+                    {
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Proven, Source = "live-2026-08-11", Notes = "SETTLED LIVE: registerInterval=60 observed." }
+                    },
+                    NumericField("gb28181Heartbeat", "Heartbeat Cycle", "$.heartbeatCycle", 1, 3600) with
+                    {
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Proven, Source = "live-2026-08-11", Notes = "SETTLED LIVE: heartbeatCycle=20 observed. No enable toggle in the live doc — bGB28181/GB28181_Server/ServerPort are WRONG." }
+                    }
                 ]
             },
             new EndpointContract
@@ -1732,9 +1755,9 @@ public sealed class EndpointContractCatalogService(
                         DisruptionClass = DisruptionClass.ServiceImpacting,
                         Evidence = new ContractEvidence
                         {
-                            TruthState = ContractTruthState.Inferred,
-                            Source = "firmware-string",
-                            Notes = "Inferred toggle mirroring the bGB28181 convention (N1Device_EvtSetGat1400Config); not a verbatim string — verify against live device."
+                            TruthState = ContractTruthState.Proven,
+                            Source = "live-2026-08-11",
+                            Notes = "SETTLED LIVE: GET returns {statusCode:3, 'Device Not Support'} — this 5523-W model does not implement GAT1400. bGAT1400 was an inferred toggle mirroring bGB28181; do not surface as a writable control."
                         }
                     }
                 ]
@@ -1765,7 +1788,7 @@ public sealed class EndpointContractCatalogService(
                         {
                             TruthState = ContractTruthState.Inferred,
                             Source = "firmware-string",
-                            Notes = "$.ScheduleEnabled / $.ScheduleScheme[%d] — FTP schedule form."
+                            Notes = "$.ScheduleEnabled / $.ScheduleScheme[%d] — FTP schedule form. LIVE 2026-08-11: GET returns HTTP 500 {statusCode:2 'Device Error'} — FTP not served live on this model."
                         }
                     },
                     new ContractField
@@ -1794,7 +1817,10 @@ public sealed class EndpointContractCatalogService(
                 ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
                 Fields =
                 [
-                    StringField("rtmpUrl", "RTMP URL", "$.rtmpUrl")
+                    StringField("rtmpUrl", "RTMP URL", "$.rtmpUrl") with
+                    {
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Proven, Source = "live-2026-08-11", Notes = "LIVE 2026-08-11: GET returns HTTP 500 {statusCode:2 'Device Error'} — RTMP not served live on 5523-W 3.6.60." }
+                    }
                 ]
             },
             new EndpointContract
@@ -1811,8 +1837,16 @@ public sealed class EndpointContractCatalogService(
                 ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = false, PartialWriteAllowed = false },
                 Fields =
                 [
-                    StringField("stationSignal", "Station Signal", "$.SignalStrength", writable: false),
-                    StringField("stationSignalRaw", "Station Signal Raw", "$.stationsignal", writable: false)
+                    new ContractField
+                    {
+                        Key = "stationSignal",
+                        DisplayName = "Station Signal (dBm)",
+                        SourcePath = "$",
+                        Kind = ContractFieldKind.Integer,
+                        Writable = false,
+                        DisruptionClass = DisruptionClass.Safe,
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Proven, Source = "live-2026-08-11", Notes = "SETTLED LIVE: GET returns a BARE int RSSI in dBm (e.g. -48). $.SignalStrength / $.stationsignal object keys are WRONG — the wire document is the bare number (read-only)." }
+                    }
                 ]
             },
             new EndpointContract
@@ -1833,36 +1867,28 @@ public sealed class EndpointContractCatalogService(
                 [
                     new ContractField
                     {
-                        Key = "httpPort",
-                        DisplayName = "HTTP Port",
-                        SourcePath = "$.httpPort",
-                        Kind = ContractFieldKind.Port,
-                        Writable = true,
-                        DisruptionClass = DisruptionClass.NetworkChanging,
-                        Validation = new ContractValidationRule { Min = 1, Max = 65535 },
-                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "firmware-string", Notes = "Port JSON form (RESTful_NetSDKNetworkPort handler); verify field keys live." }
+                        Key = "portId",
+                        DisplayName = "Port ID",
+                        SourcePath = "$[0].id",
+                        Kind = ContractFieldKind.Integer,
+                        Writable = false,
+                        DisruptionClass = DisruptionClass.Safe,
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Proven, Source = "live-2026-08-11", Notes = "SETTLED LIVE: GET returns ARRAY [{id:1, portname:'unisual', value:80}]; PUT of the same array round-trips (HTTP 200)." }
+                    },
+                    StringField("portName", "Port Name", "$[0].portname") with
+                    {
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Proven, Source = "live-2026-08-11", Notes = "SETTLED LIVE: portname='unisual' (web/data port id 1)." }
                     },
                     new ContractField
                     {
-                        Key = "rtspPort",
-                        DisplayName = "RTSP Port",
-                        SourcePath = "$.rtspPort",
+                        Key = "portValue",
+                        DisplayName = "Port Value",
+                        SourcePath = "$[0].value",
                         Kind = ContractFieldKind.Port,
                         Writable = true,
                         DisruptionClass = DisruptionClass.NetworkChanging,
                         Validation = new ContractValidationRule { Min = 1, Max = 65535 },
-                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "firmware-string", Notes = "Port JSON form; verify field keys live." }
-                    },
-                    new ContractField
-                    {
-                        Key = "onvifPort",
-                        DisplayName = "ONVIF Port",
-                        SourcePath = "$.onvifPort",
-                        Kind = ContractFieldKind.Port,
-                        Writable = true,
-                        DisruptionClass = DisruptionClass.NetworkChanging,
-                        Validation = new ContractValidationRule { Min = 1, Max = 65535 },
-                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Inferred, Source = "firmware-string", Notes = "Port JSON form; verify field keys live." }
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Proven, Source = "live-2026-08-11", Notes = "SETTLED LIVE: value=80 observed; $.httpPort/$.rtspPort/$.onvifPort are WRONG — the real key is 'value' per named port entry." }
                     }
                 ]
             },
@@ -1880,7 +1906,11 @@ public sealed class EndpointContractCatalogService(
                 ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
                 Fields =
                 [
-                    StringField("deviceName", "Device Name", "$.deviceName")
+                    StringField("deviceName", "Device Name", "$") with
+                    {
+                        Writable = false,
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Proven, Source = "live-2026-08-11", Notes = "SETTLED LIVE: GET returns BARE string \"5523-W\"; PUT on this subpath (object or bare) returns HTTP 500 Device Error — read-only subpath; write goes through the full /NetSDK/System/deviceInfo document (deviceName lives inside deviceInfo)." }
+                    }
                 ]
             },
             new EndpointContract
@@ -1897,7 +1927,16 @@ public sealed class EndpointContractCatalogService(
                 ObjectShape = new ContractObjectShape { RootPath = "$", FullObjectWriteRequired = true, PartialWriteAllowed = false },
                 Fields =
                 [
-                    StringField("deviceAddress", "Device Address", "$.deviceAddress")
+                    new ContractField
+                    {
+                        Key = "deviceAddress",
+                        DisplayName = "Device Address",
+                        SourcePath = "$",
+                        Kind = ContractFieldKind.Integer,
+                        Writable = false,
+                        DisruptionClass = DisruptionClass.Safe,
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Proven, Source = "live-2026-08-11", Notes = "SETTLED LIVE: GET returns BARE int (1) — an index/location code, not a text address. Read-only via subpath." }
+                    }
                 ]
             },
             new EndpointContract
@@ -1924,12 +1963,15 @@ public sealed class EndpointContractCatalogService(
                         DisruptionClass = DisruptionClass.ServiceImpacting,
                         Evidence = new ContractEvidence
                         {
-                            TruthState = ContractTruthState.Inferred,
-                            Source = "firmware-string",
-                            Notes = "$.AlarmTone[%d] per-id (0..2) config form."
+                            TruthState = ContractTruthState.Proven,
+                            Source = "live-2026-08-11",
+                            Notes = "SETTLED LIVE: GET returns {statusCode:3, 'Device Not Support'} — this 5523-W model does not implement AlarmTone. Do not surface as a writable control."
                         }
                     },
-                    StringField("alarmTone", "Alarm Tone", "$.AlarmTone[0].tone")
+                    StringField("alarmTone", "Alarm Tone", "$.AlarmTone[0].tone") with
+                    {
+                        Evidence = new ContractEvidence { TruthState = ContractTruthState.Proven, Source = "live-2026-08-11", Notes = "SETTLED LIVE: endpoint reports Device Not Support." }
+                    }
                 ]
             },
             new EndpointContract
@@ -1958,7 +2000,7 @@ public sealed class EndpointContractCatalogService(
                         {
                             TruthState = ContractTruthState.Inferred,
                             Source = "firmware-string",
-                            Notes = "V2 payload uses the ScheduleEnabled/ScheduleScheme family (mirrors FTP schedule form)."
+                            Notes = "V2 payload uses the ScheduleEnabled/ScheduleScheme family (mirrors FTP schedule form). LIVE 2026-08-11: GET returns HTTP 500 {statusCode:2 'Device Error'} — gated on this model."
                         }
                     },
                     new ContractField

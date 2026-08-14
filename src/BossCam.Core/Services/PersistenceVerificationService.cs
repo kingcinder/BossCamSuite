@@ -76,21 +76,55 @@ public sealed class PersistenceVerificationService(
             var reboot = await adapter.ExecuteMaintenanceAsync(device, MaintenanceOperation.Reboot, null, cancellationToken);
             if (reboot.Success)
             {
+                // A 5523-W takes 60-90s to fully boot after a firmware reboot; a single
+                // one-shot reread at RebootWaitSeconds would false-negative against a camera
+                // that is still booting. Poll: settle RebootWaitSeconds, then reread up to
+                // RebootRereadAttempts times spaced by RebootRereadIntervalSeconds until the
+                // device answers or the attempt budget is exhausted.
                 await Task.Delay(TimeSpan.FromSeconds(Math.Max(5, request.RebootWaitSeconds)), cancellationToken);
-                var reread = await adapter.ApplyAsync(device, new WritePlan
+                var attempts = Math.Max(1, request.RebootRereadAttempts);
+                var interval = TimeSpan.FromSeconds(Math.Max(3, request.RebootRereadIntervalSeconds));
+                for (var attempt = 0; attempt < attempts; attempt++)
                 {
-                    AdapterName = adapter.Name,
-                    GroupName = "PersistenceVerification",
-                    Endpoint = request.Endpoint,
-                    Method = "GET",
-                    SnapshotBeforeWrite = false,
-                    RequireWriteVerification = false
-                }, cancellationToken);
-                rebootPassed = reread.Success;
-                postRebootValue = reread.Response?.DeepClone();
-                if (!string.IsNullOrWhiteSpace(request.FieldSourcePath))
-                {
-                    rebootField = TryGetPathValue(postRebootValue, request.FieldSourcePath);
+                    if (attempt > 0)
+                    {
+                        await Task.Delay(interval, cancellationToken);
+                    }
+
+                    WriteResult reread;
+                    try
+                    {
+                        reread = await adapter.ApplyAsync(device, new WritePlan
+                        {
+                            AdapterName = adapter.Name,
+                            GroupName = "PersistenceVerification",
+                            Endpoint = request.Endpoint,
+                            Method = "GET",
+                            SnapshotBeforeWrite = false,
+                            RequireWriteVerification = false
+                        }, cancellationToken);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        // Camera still booting — connection refused/transport errors are the
+                        // expected transient; log at Debug and keep polling until the budget ends.
+                        logger.LogDebug(ex, "Post-reboot reread attempt {Attempt}/{Attempts} failed for {Device} (still booting?)", attempt + 1, attempts, device.DisplayName);
+                        continue;
+                    }
+
+                    if (!reread.Success)
+                    {
+                        logger.LogDebug("Post-reboot reread attempt {Attempt}/{Attempts} not ready for {Device}", attempt + 1, attempts, device.DisplayName);
+                        continue;
+                    }
+
+                    rebootPassed = true;
+                    postRebootValue = reread.Response?.DeepClone();
+                    if (!string.IsNullOrWhiteSpace(request.FieldSourcePath))
+                    {
+                        rebootField = TryGetPathValue(postRebootValue, request.FieldSourcePath);
+                    }
+                    break;
                 }
             }
             else

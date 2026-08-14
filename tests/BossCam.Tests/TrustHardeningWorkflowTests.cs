@@ -102,6 +102,105 @@ public sealed class TrustHardeningWorkflowTests : IDisposable
         Assert.Equal(SemanticWriteStatus.PersistedAfterDelay, result.PersistenceStatus);
     }
 
+    [Fact]
+    public async Task PersistenceVerification_Reboot_Reread_Polls_Until_Device_Answers()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync(CancellationToken.None);
+        var device = new DeviceIdentity
+        {
+            Name = "5523-W",
+            DeviceType = "IPC",
+            IpAddress = "10.0.0.4",
+            LoginName = "admin",
+            Password = "pw"
+        };
+        await store.UpsertDevicesAsync([device], CancellationToken.None);
+
+        // Sequence: pre GET (brightness=40), write (ret ok), post GET (brightness=50), then the
+        // post-reboot rereads. The first reread fails — a 5523-W takes 60-90s to boot after a
+        // firmware reboot, so the one-shot 35s reread would have false-negatived. The second
+        // reread (camera back) must win the classification as PersistedAfterReboot.
+        var adapter = new SequenceAdapter(
+            new WriteResult { Success = true, AdapterName = "Seq", Response = new JsonObject { ["brightness"] = 40 } }, // pre GET
+            new WriteResult { Success = true, AdapterName = "Seq", Response = new JsonObject { ["ret"] = "ok" } },      // write
+            new WriteResult { Success = true, AdapterName = "Seq", Response = new JsonObject { ["brightness"] = 50 } }, // post GET
+            new WriteResult { Success = false, AdapterName = "Seq", Message = "camera still booting" },                 // reread #1 (fails)
+            new WriteResult { Success = true, AdapterName = "Seq", Response = new JsonObject { ["brightness"] = 50 } }  // reread #2 (back)
+        );
+        var service = new PersistenceVerificationService([adapter], store, NullLogger<PersistenceVerificationService>.Instance);
+
+        var result = await service.VerifyAsync(new PersistenceVerificationRequest
+        {
+            DeviceId = device.Id,
+            AdapterName = "Seq",
+            Endpoint = "/NetSDK/Video/input/channel/0",
+            Method = "PUT",
+            Payload = new JsonObject { ["brightness"] = 50 },
+            FieldKey = "brightness",
+            FieldSourcePath = "$.brightness",
+            IntendedValue = JsonValue.Create(50),
+            RebootForVerification = true,
+            RebootWaitSeconds = 1,
+            RebootRereadAttempts = 3,
+            RebootRereadIntervalSeconds = 1
+        }, CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.True(result!.RebootRequested);
+        Assert.True(result.RebootVerifyPassed);
+        Assert.Equal(SemanticWriteStatus.PersistedAfterReboot, result.PersistenceStatus);
+        Assert.Equal(50, result.PostRebootValue?["brightness"]?.GetValue<int>());
+    }
+
+    [Fact]
+    public async Task PersistenceVerification_Reboot_Reread_Exhausted_Reports_Unverified()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync(CancellationToken.None);
+        var device = new DeviceIdentity
+        {
+            Name = "5523-W",
+            DeviceType = "IPC",
+            IpAddress = "10.0.0.4",
+            LoginName = "admin",
+            Password = "pw"
+        };
+        await store.UpsertDevicesAsync([device], CancellationToken.None);
+
+        // Every post-reboot reread fails — the camera never comes back within the attempt budget.
+        var adapter = new SequenceAdapter(
+            new WriteResult { Success = true, AdapterName = "Seq", Response = new JsonObject { ["brightness"] = 40 } },
+            new WriteResult { Success = true, AdapterName = "Seq", Response = new JsonObject { ["ret"] = "ok" } },
+            new WriteResult { Success = true, AdapterName = "Seq", Response = new JsonObject { ["brightness"] = 50 } },
+            new WriteResult { Success = false, AdapterName = "Seq", Message = "still booting" },
+            new WriteResult { Success = false, AdapterName = "Seq", Message = "still booting" },
+            new WriteResult { Success = false, AdapterName = "Seq", Message = "still booting" }
+        );
+        var service = new PersistenceVerificationService([adapter], store, NullLogger<PersistenceVerificationService>.Instance);
+
+        var result = await service.VerifyAsync(new PersistenceVerificationRequest
+        {
+            DeviceId = device.Id,
+            AdapterName = "Seq",
+            Endpoint = "/NetSDK/Video/input/channel/0",
+            Method = "PUT",
+            Payload = new JsonObject { ["brightness"] = 50 },
+            FieldKey = "brightness",
+            FieldSourcePath = "$.brightness",
+            IntendedValue = JsonValue.Create(50),
+            RebootForVerification = true,
+            RebootWaitSeconds = 1,
+            RebootRereadAttempts = 3,
+            RebootRereadIntervalSeconds = 1
+        }, CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.True(result!.RebootRequested);
+        Assert.False(result.RebootVerifyPassed);
+        Assert.Equal(SemanticWriteStatus.Uncertain, result.PersistenceStatus);
+    }
+
     public void Dispose()
     {
         if (!Directory.Exists(_tempDirectory))
