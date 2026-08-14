@@ -44,6 +44,10 @@
   let fallbackObjectUrl: string | undefined;
   let fallbackImageUrl = $state('');
   let fallbackRun = 0;
+  // Client-side staleness watchdog for the MJPEG fallback pipe: if frames stop arriving
+  // while the HTTP connection stays open, abort and let the recovery ladder reconnect.
+  let fallbackLastFrameAt = 0;
+  let fallbackStallWatchdog: ReturnType<typeof setInterval> | undefined;
 
   const lanHeaders = () => ({
     'X-LAN-Token': localStorage.getItem('bosscam.lanToken') || '',
@@ -130,6 +134,7 @@
 
   function clearFallback() {
     fallbackRun += 1;
+    if (fallbackStallWatchdog) { clearInterval(fallbackStallWatchdog); fallbackStallWatchdog = undefined; }
     fallbackAbortController?.abort();
     fallbackAbortController = undefined;
     if (fallbackObjectUrl) URL.revokeObjectURL(fallbackObjectUrl);
@@ -145,6 +150,7 @@
     fallbackImageUrl = nextUrl;
     if (previous) URL.revokeObjectURL(previous);
     isActive = true;
+    fallbackLastFrameAt = Date.now();
     streamStatus = fallbackMode === 'snapshot' ? 'Snapshot fallback active' : 'MJPEG fallback active';
     appState.setStreamStatus(device.id, fallbackMode === 'snapshot' ? 'snapshot' : 'live');
     if (fallbackMode === 'snapshot') scheduleStreamRecovery(15_000);
@@ -199,6 +205,17 @@
     const run = fallbackRun;
     const controller = new AbortController();
     fallbackAbortController = controller;
+    // Silent-stall watchdog: no complete JPEG within 12s while the connection stays open
+    // means the camera/ffmpeg stopped producing frames — abort to force a renegotiation.
+    let stallDetected = false;
+    fallbackLastFrameAt = Date.now();
+    fallbackStallWatchdog = setInterval(() => {
+      if (run !== fallbackRun) return;
+      if (Date.now() - fallbackLastFrameAt > 12000) {
+        stallDetected = true;
+        controller.abort();
+      }
+    }, 3000);
     try {
       const response = await fetch(urlFor('Mjpeg', manifest), {
         signal: controller.signal,
@@ -234,9 +251,12 @@
         if (pending.length > 4 * 1024 * 1024) pending = pending.slice(-2);
       }
     } catch (error) {
-      if (controller.signal.aborted || run !== fallbackRun) return;
+      if (fallbackStallWatchdog) { clearInterval(fallbackStallWatchdog); fallbackStallWatchdog = undefined; }
+      // A deliberate stop aborts with no stall flag and must not schedule a retry; a
+      // stall-abort (or any real failure) falls through to the recovery ladder.
+      if (run !== fallbackRun || (controller.signal.aborted && !stallDetected)) return;
       isActive = false;
-      streamStatus = `MJPEG fallback unavailable: ${String(error)}`;
+      streamStatus = stallDetected ? 'MJPEG fallback stalled — reconnecting…' : `MJPEG fallback unavailable: ${String(error)}`;
       appState.setStreamStatus(device.id, 'retrying');
       scheduleStreamRecovery(1_500);
     }

@@ -364,6 +364,20 @@
     // Listen for keyboard shortcuts globally
     document.addEventListener('keydown', handleKeyboard);
 
+    // Ctrl-gated info bubbles (mirrors the desktop app): while Ctrl is held, add
+    // body.ctrl-info so the [data-tip] tooltip CSS rules become active; releasing
+    // Ctrl (or losing window focus) removes it again. Holding Ctrl then hovering
+    // any element shows its description — plain hover never does.
+    function onCtrlState(e: KeyboardEvent) {
+      document.body.classList.toggle('ctrl-info', e.ctrlKey);
+    }
+    function clearCtrlInfo() {
+      document.body.classList.remove('ctrl-info');
+    }
+    window.addEventListener('keydown', onCtrlState);
+    window.addEventListener('keyup', onCtrlState);
+    window.addEventListener('blur', clearCtrlInfo);
+
     // Track fullscreen changes
     document.addEventListener('fullscreenchange', () => {
       appState.fullscreenEnabled = !!document.fullscreenElement;
@@ -374,6 +388,9 @@
       if (healthPollTimer) clearInterval(healthPollTimer);
       healthPollTimer = undefined;
       document.removeEventListener('keydown', handleKeyboard);
+      window.removeEventListener('keydown', onCtrlState);
+      window.removeEventListener('keyup', onCtrlState);
+      window.removeEventListener('blur', clearCtrlInfo);
     };
   });
 </script>

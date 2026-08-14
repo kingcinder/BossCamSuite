@@ -176,6 +176,7 @@
     {#if appState.offlineMode}
       <span class="badge warn" data-tip="LAN-only mode — cloud paths disabled; cameras keep working.">⚡ LAN-only</span>
     {/if}
+    <span class="ctrl-info-hint" aria-hidden="true">Hold Ctrl + hover for info</span>
   </div>
 </aside>
 

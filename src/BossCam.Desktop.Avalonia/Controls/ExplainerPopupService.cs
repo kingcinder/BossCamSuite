@@ -28,6 +28,13 @@ public sealed class ExplainerPopupService : IDisposable
     private readonly Panel? _hostPanel;
     private Control? _activeTarget;
 
+    /// <summary>
+    /// True while the Ctrl key is held. Info bubbles are intentionally Ctrl-gated:
+    /// they only appear while the operator holds Ctrl and hovers (or focuses) an
+    /// explained control, so the UI stays clean during ordinary mouse movement.
+    /// </summary>
+    private bool _ctrlHeld;
+
     private ExplainerPopupService(Window window, Panel? hostPanel)
     {
         _window = window;
@@ -78,6 +85,9 @@ public sealed class ExplainerPopupService : IDisposable
         // Keyboard focus (Tab navigation / accessibility).
         window.AddHandler(InputElement.GotFocusEvent, OnGotFocus, RoutingStrategies.Bubble);
         window.AddHandler(InputElement.LostFocusEvent, OnLostFocus, RoutingStrategies.Bubble);
+        // Ctrl-gate: track the modifier so both hover and focus only explain while held.
+        window.AddHandler(InputElement.KeyDownEvent, OnKeyDown, RoutingStrategies.Tunnel);
+        window.AddHandler(InputElement.KeyUpEvent, OnKeyUp, RoutingStrategies.Tunnel);
     }
 
     /// <summary>
@@ -113,8 +123,40 @@ public sealed class ExplainerPopupService : IDisposable
 
     private void OnPointerMoved(object? sender, PointerEventArgs e)
     {
+        // Ctrl-gated: no bubble unless the operator holds Ctrl while hovering.
+        if (!e.KeyModifiers.HasFlag(KeyModifiers.Control))
+        {
+            Hide();
+            return;
+        }
+
         var target = _window.InputHitTest(e.GetPosition(_window)) as Control;
         ShowFor(target);
+    }
+
+    private void OnKeyDown(object? sender, KeyEventArgs e)
+    {
+        // Track the modifier explicitly: on some platforms the KeyDown of the modifier
+        // itself (Key.LeftCtrl/Key.RightCtrl) does not carry the Control flag yet, so
+        // gate on the key identity as well as the modifier bitmask.
+        if (e.Key is Key.LeftCtrl or Key.RightCtrl || e.KeyModifiers.HasFlag(KeyModifiers.Control))
+        {
+            _ctrlHeld = true;
+        }
+    }
+
+    private void OnKeyUp(object? sender, KeyEventArgs e)
+    {
+        // Closing the gate: releasing the modifier itself, or any key that no longer
+        // reports Control held (the modifier's own KeyUp may lack the flag).
+        if (e.Key is Key.LeftCtrl or Key.RightCtrl || !e.KeyModifiers.HasFlag(KeyModifiers.Control))
+        {
+            if (_ctrlHeld)
+            {
+                _ctrlHeld = false;
+                Hide();
+            }
+        }
     }
 
     private void ShowFor(Control? target)
@@ -159,6 +201,12 @@ public sealed class ExplainerPopupService : IDisposable
 
     private void OnGotFocus(object? sender, GotFocusEventArgs e)
     {
+        // Same Ctrl gate as hover: keyboard focus explains only while Ctrl is held.
+        if (!_ctrlHeld)
+        {
+            Hide();
+            return;
+        }
         if (e.Source is Control control)
         {
             ShowFor(control);
@@ -191,6 +239,8 @@ public sealed class ExplainerPopupService : IDisposable
         _window.RemoveHandler(InputElement.PointerExitedEvent, OnPointerExited);
         _window.RemoveHandler(InputElement.GotFocusEvent, OnGotFocus);
         _window.RemoveHandler(InputElement.LostFocusEvent, OnLostFocus);
+        _window.RemoveHandler(InputElement.KeyDownEvent, OnKeyDown);
+        _window.RemoveHandler(InputElement.KeyUpEvent, OnKeyUp);
         _popup.IsOpen = false;
     }
 }

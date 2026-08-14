@@ -360,10 +360,15 @@ input[type="datetime-local"], input[type="date"] { color-scheme: dark; }
 
 /* ═══════════════════════════════════════════════════════════════
    Hover tooltips (data-tip / data-tip-pos)
+   ────────────────────────────────────────────────────────────────
+   Info bubbles are Ctrl-gated (mirrors the desktop app): they only
+   appear while the operator holds Ctrl and hovers (or focuses) an
+   element. App.svelte toggles body.ctrl-info on the Ctrl key state;
+   without it the rules below never fire, so the UI stays clean.
    ═══════════════════════════════════════════════════════════════ */
 [data-tip] { position: relative; }
-[data-tip]:not([data-tip=""]):hover::after,
-[data-tip]:not([data-tip=""]):focus::after {
+body.ctrl-info [data-tip]:not([data-tip=""]):hover::after,
+body.ctrl-info [data-tip]:not([data-tip=""]):focus::after {
   content: attr(data-tip);
   position: absolute;
   bottom: calc(100% + 8px);
@@ -386,8 +391,8 @@ input[type="datetime-local"], input[type="date"] { color-scheme: dark; }
   box-shadow: var(--shadow-2);
   animation: tip-in 0.12s ease-out;
 }
-[data-tip]:not([data-tip=""]):hover::before,
-[data-tip]:not([data-tip=""]):focus::before {
+body.ctrl-info [data-tip]:not([data-tip=""]):hover::before,
+body.ctrl-info [data-tip]:not([data-tip=""]):focus::before {
   content: "";
   position: absolute;
   bottom: calc(100% + 3px);
@@ -398,18 +403,26 @@ input[type="datetime-local"], input[type="date"] { color-scheme: dark; }
   z-index: 10000;
   pointer-events: none;
 }
-[data-tip-pos="below"]:not([data-tip=""]):hover::after,
-[data-tip-pos="below"]:not([data-tip=""]):focus::after {
+body.ctrl-info [data-tip-pos="below"]:not([data-tip=""]):hover::after,
+body.ctrl-info [data-tip-pos="below"]:not([data-tip=""]):focus::after {
   top: calc(100% + 8px);
   bottom: auto;
   animation-name: tip-in-below;
 }
-[data-tip-pos="below"]:not([data-tip=""]):hover::before,
-[data-tip-pos="below"]:not([data-tip=""]):focus::before {
+body.ctrl-info [data-tip-pos="below"]:not([data-tip=""]):hover::before,
+body.ctrl-info [data-tip-pos="below"]:not([data-tip=""]):focus::before {
   top: calc(100% + 3px);
   bottom: auto;
   border-top-color: transparent;
   border-bottom-color: var(--border);
+}
+
+/* Ctrl-gate hint shown in the sidebar footer while Ctrl is held */
+body.ctrl-info .ctrl-info-hint { opacity: 1; }
+.ctrl-info-hint {
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  font-size: var(--fs-xs);
 }
 @keyframes tip-in {
   from { opacity: 0; transform: translateX(-50%) translateY(3px); }

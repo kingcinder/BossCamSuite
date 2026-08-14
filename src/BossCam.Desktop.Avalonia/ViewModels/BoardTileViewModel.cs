@@ -38,6 +38,18 @@ public sealed partial class BoardTileViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private Bitmap? _liveFrame;
 
+    /// <summary>Consecutive snapshot failures (drives the offline badge).</summary>
+    private int _snapshotFailures;
+
+    /// <summary>
+    /// Offline badge shown when the camera stopped answering snapshots — the feed
+    /// watchdog (scripts/video-feed-watchdog.sh) monitors the same signal and applies
+    /// its repair tree (probe → reconnect → restart recording → hunt → page).
+    /// Null (not empty) when healthy so the NotNullToBoolConverter keeps the badge
+    /// hidden on tiles that are streaming.
+    /// </summary>
+    public string? TileStateText => _snapshotFailures >= 3 ? "● offline — watchdog active" : null;
+
     public bool IsStarred => _shell.IsStarred(Device.Id);
 
     /// <summary>Hollow ☆ / gold ★ glyph for the tile's star button.</summary>
@@ -74,8 +86,28 @@ public sealed partial class BoardTileViewModel : ObservableObject, IDisposable
         var bytes = await _api.GetSnapshotAsync(Device.Id);
         if (bytes is { Length: > 100 })
         {
+            var wasOffline = TileStateText is not null;
+            _snapshotFailures = 0;
+            if (wasOffline)
+            {
+                // Camera came back: hide the offline badge.
+                OnPropertyChanged(nameof(TileStateText));
+            }
             using var ms = new MemoryStream(bytes);
             LiveFrame = new Bitmap(ms);
+        }
+        else
+        {
+            // Camera not answering: keep counting so the tile shows its offline badge.
+            // The snapshot layer stays dark rather than showing a stale frame.
+            if (_snapshotFailures < int.MaxValue)
+            {
+                _snapshotFailures++;
+            }
+            if (_snapshotFailures == 3)
+            {
+                OnPropertyChanged(nameof(TileStateText));
+            }
         }
     }
 

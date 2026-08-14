@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Input;
+using BossCam.Desktop.Avalonia.Controls;
 using BossCam.Desktop.Avalonia.ViewModels;
 
 namespace BossCam.Desktop.Avalonia.Views;
@@ -25,6 +26,11 @@ public partial class FullscreenCameraWindow : Window
     public FullscreenCameraWindow()
     {
         InitializeComponent();
+        // Same Ctrl-gated info bubbles as the main window: every banner/menu tile in
+        // this window carries an InfoExplainer explanation, and the popup service is
+        // what actually shows them (hold Ctrl and hover). Hosted on the root content
+        // so the popup renders above the fullscreen video.
+        ExplainerPopupService.Attach(this);
         Opened += OnOpened;
         Closed += OnClosed;
     }

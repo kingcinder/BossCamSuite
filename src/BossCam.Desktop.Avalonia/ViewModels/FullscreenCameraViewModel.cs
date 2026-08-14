@@ -333,14 +333,29 @@ public sealed partial class FullscreenCameraViewModel : ObservableObject, IDispo
     [RelayCommand]
     private void OpenSection(string title) => RequestOpenSection?.Invoke(title);
 
+    /// <summary>
+    /// Reads a full rawvideo frame, bounding each read with a stall timeout. A silent RTSP
+    /// stall (5523-W drops media but keeps the socket open) otherwise blocks ReadAsync forever
+    /// and freezes the last frame on screen. A timed-out read returns false so the caller
+    /// advances to the next negotiated representation and reconnects.
+    /// </summary>
     private static async Task<bool> ReadExactAsync(Stream stream, byte[] buffer, CancellationToken cancellationToken)
     {
         var offset = 0;
         while (offset < buffer.Length)
         {
-            var read = await stream.ReadAsync(buffer.AsMemory(offset), cancellationToken);
-            if (read == 0) return false;
-            offset += read;
+            using var readTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            readTimeout.CancelAfter(TimeSpan.FromSeconds(15));
+            try
+            {
+                var read = await stream.ReadAsync(buffer.AsMemory(offset), readTimeout.Token);
+                if (read == 0) return false;
+                offset += read;
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                return false; // stalled — fail over to the next stream representation
+            }
         }
         return true;
     }

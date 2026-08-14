@@ -544,6 +544,10 @@ public sealed class LiveStreamService(
             "-probesize", "2000000",
             "-analyzeduration", "2000000",
             "-max_delay", "500000",
+            // RTSP demuxer socket I/O timeout (µs): a silent media stall (5523-W drops
+            // frames but keeps the TCP socket open) must abort ffmpeg instead of serving
+            // the last frame forever. Mirrors the recording pipeline's verified flag.
+            "-timeout", "10000000",
             "-i", rtspUrl,
             "-an", "-map", "0:v:0",
             "-vf", $"fps={fps},scale={scale}",
@@ -565,6 +569,10 @@ public sealed class LiveStreamService(
             "-probesize", "2000000",
             "-analyzeduration", "2000000",
             "-max_delay", "500000",
+            // RTSP demuxer socket I/O timeout (µs): a silent media stall (5523-W drops
+            // frames but keeps the TCP socket open) must abort ffmpeg instead of serving
+            // the last frame forever. Mirrors the recording pipeline's verified flag.
+            "-timeout", "10000000",
             "-i", rtspUrl,
             "-map", "0:v:0", "-map", "0:a:0?", "-vf", $"scale={scale}",
             "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency",
@@ -587,6 +595,10 @@ public sealed class LiveStreamService(
             "-probesize", "2000000",
             "-analyzeduration", "2000000",
             "-max_delay", "500000",
+            // RTSP demuxer socket I/O timeout (µs): a silent media stall (5523-W drops
+            // frames but keeps the TCP socket open) must abort ffmpeg instead of serving
+            // the last frame forever. Mirrors the recording pipeline's verified flag.
+            "-timeout", "10000000",
             "-i", rtspUrl,
             "-map", "0:v:0", "-map", "0:a:0?", "-c:v", "copy",
             "-c:a", "aac", "-b:a", "128k",
@@ -609,6 +621,10 @@ public sealed class LiveStreamService(
             "-probesize", "2000000",
             "-analyzeduration", "2000000",
             "-max_delay", "500000",
+            // RTSP demuxer socket I/O timeout (µs): a silent media stall (5523-W drops
+            // frames but keeps the TCP socket open) must abort ffmpeg instead of serving
+            // the last frame forever. Mirrors the recording pipeline's verified flag.
+            "-timeout", "10000000",
             "-i", rtspUrl,
             "-map", "0:v:0", "-map", "0:a:0?", "-vf", $"scale={scale}",
             "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency",
@@ -711,6 +727,8 @@ public sealed class LiveStreamService(
         private int _started;
         private int _generation;
         private CancellationTokenSource? _cts;
+        private Task? _stallWatchdogTask;
+        private long _lastChunkUtcTicks;
 
         public async Task WriteToAsync(Stream output, CancellationToken cancellationToken)
         {
@@ -780,10 +798,13 @@ public sealed class LiveStreamService(
             {
                 var cts = new CancellationTokenSource();
                 _cts = cts;
-                var (ffmpeg, args) = await owner.BuildRtspH264Fmp4CommandAsync(deviceId, quality, cancellationToken);
-                logger.LogInformation("Shared H264 fMP4 session start {Ip} q={Q}", device.IpAddress, quality);
-                _process = StartFfmpeg(ffmpeg, args);
-                _pumpTask = Task.Run(() => PumpAsync(cts.Token), CancellationToken.None);
+                var (ffmpeg, args) = await owner.BuildRtspH264Fmp4CommandAsync(deviceId, quality, cancellationToken);                    logger.LogInformation("Shared H264 fMP4 session start {Ip} q={Q}", device.IpAddress, quality);
+                    _process = StartFfmpeg(ffmpeg, args);
+                    _pumpTask = Task.Run(() => PumpAsync(cts.Token), CancellationToken.None);
+                    // Baseline the stall watchdog at the fresh process (first-bytes deadline owns
+                    // the initial window).
+                    Interlocked.Exchange(ref _lastChunkUtcTicks, 0);
+                    _stallWatchdogTask = Task.Run(() => StallWatchdogLoopAsync(cts.Token), CancellationToken.None);
             }
             catch
             {
@@ -791,6 +812,55 @@ public sealed class LiveStreamService(
                 try { _cts?.Cancel(); } catch { /* best effort */ }
                 if (_process is not null) TryKill(_process);
                 throw;
+            }
+        }
+
+        /// <summary>
+        /// Kills the ffmpeg process when no media bytes have been published for a while
+        /// (backup to ffmpeg's -timeout socket abort). Ends the pump, which fails subscribers
+        /// so viewers reconnect on a fresh session instead of freezing on stale video.
+        /// </summary>
+        private async Task StallWatchdogLoopAsync(CancellationToken cancellationToken)
+        {
+            const long thresholdTicks = 15 * TimeSpan.TicksPerSecond;
+            try
+            {
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(3), cancellationToken);
+                    if (_subscribers.IsEmpty)
+                    {
+                        continue; // idle session — the 5s idle-dispose path handles it
+                    }
+
+                    var lastTicks = Interlocked.Read(ref _lastChunkUtcTicks);
+                    if (lastTicks == 0)
+                    {
+                        continue; // no first bytes yet — the 10s first-bytes deadline owns this
+                    }
+
+                    var silent = DateTime.UtcNow.Ticks - lastTicks;
+                    if (silent <= thresholdTicks)
+                    {
+                        continue;
+                    }
+
+                    logger.LogWarning(
+                        "Shared H264 fMP4 session {Key} stalled ({Seconds}s since last chunk) — killing ffmpeg for {Ip} q={Q}",
+                        key, silent / TimeSpan.TicksPerSecond, device.IpAddress, quality);
+                    if (_process is { HasExited: false })
+                    {
+                        TryKill(_process);
+                    }
+                    return; // the pump's finally removes the session and fails subscribers
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                logger.LogDebug(ex, "Shared H264 fMP4 stall watchdog ended for {Ip}", device.IpAddress);
             }
         }
 
@@ -816,6 +886,7 @@ public sealed class LiveStreamService(
                             _subscribers.TryRemove(pair.Key, out _);
                         }
                     }
+                    Interlocked.Exchange(ref _lastChunkUtcTicks, DateTime.UtcNow.Ticks);
                 }
             }
             catch (OperationCanceledException) { }
@@ -826,8 +897,16 @@ public sealed class LiveStreamService(
             finally
             {
                 owner.RemoveFmp4Session(key, this);
-                foreach (var channel in _subscribers.Values) channel.Writer.TryComplete();
+                // Fail subscribers explicitly so browser MSE / desktop viewers run their
+                // reconnect logic instead of treating a dead/stalled session as clean EOF.
+                foreach (var channel in _subscribers.Values)
+                {
+                    channel.Writer.TryComplete(new InvalidOperationException("Shared H.264 fMP4 session ended (stalled or dropped)."));
+                }
                 if (_process is not null) TryKill(_process);
+                // Session is done — stop the stall watchdog immediately instead of letting it
+                // poll until the 5s idle-dispose runs.
+                try { _cts?.Cancel(); } catch { /* best effort */ }
                 Interlocked.Exchange(ref _started, 0);
             }
         }
@@ -879,6 +958,8 @@ public sealed class LiveStreamService(
         private int _started;
         private int _subscriberGeneration;
         private CancellationTokenSource? _cts;
+        private Task? _stallWatchdogTask;
+        private long _lastFrameUtcTicks;
 
         public async Task EnsureStartedAsync(CancellationToken cancellationToken)
         {
@@ -892,6 +973,10 @@ public sealed class LiveStreamService(
                     logger.LogInformation("Shared RTSP session start {Ip} q={Q}", device.IpAddress, quality);
                     _process = StartFfmpeg(ffmpeg, args);
                     _pumpTask = Task.Run(() => PumpAsync(cts.Token), CancellationToken.None);
+                    // Baseline the stall watchdog at the fresh process: no frames yet is the
+                    // first-frame window's job (14s deadline), not a stall.
+                    Interlocked.Exchange(ref _lastFrameUtcTicks, 0);
+                    _stallWatchdogTask = Task.Run(() => StallWatchdogLoopAsync(cts.Token), CancellationToken.None);
                 }
                 catch
                 {
@@ -996,6 +1081,57 @@ public sealed class LiveStreamService(
             }
         }
 
+        /// <summary>
+        /// Kills the ffmpeg process when no complete frame has been published for a while.
+        /// ffmpeg's -timeout aborts socket-level stalls; this watchdog covers the rarer case
+        /// where ffmpeg keeps a session alive but stops producing decodable frames. Killing the
+        /// process ends the pump, which removes the session and fails subscribers, so viewers
+        /// reconnect on a fresh session instead of staring at a frozen frame.
+        /// </summary>
+        private async Task StallWatchdogLoopAsync(CancellationToken cancellationToken)
+        {
+            const long thresholdTicks = 12 * TimeSpan.TicksPerSecond;
+            try
+            {
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(3), cancellationToken);
+                    if (_subscribers.IsEmpty)
+                    {
+                        continue; // idle session — the 5s idle-dispose path handles it
+                    }
+
+                    var lastTicks = Interlocked.Read(ref _lastFrameUtcTicks);
+                    if (lastTicks == 0)
+                    {
+                        continue; // no first frame yet — the 14s first-frame deadline owns this
+                    }
+
+                    var silent = DateTime.UtcNow.Ticks - lastTicks;
+                    if (silent <= thresholdTicks)
+                    {
+                        continue;
+                    }
+
+                    logger.LogWarning(
+                        "Shared RTSP session {Key} stalled ({Seconds}s since last frame) — killing ffmpeg for {Ip} q={Q}",
+                        key, silent / TimeSpan.TicksPerSecond, device.IpAddress, quality);
+                    if (_process is { HasExited: false })
+                    {
+                        TryKill(_process);
+                    }
+                    return; // the pump's finally removes the session and fails subscribers
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                logger.LogDebug(ex, "Shared RTSP stall watchdog ended for {Ip}", device.IpAddress);
+            }
+        }
+
         private async Task PumpAsync(CancellationToken cancellationToken)
         {
             if (_process is null)
@@ -1033,10 +1169,12 @@ public sealed class LiveStreamService(
                 // Remove this exact failed session before completing subscribers. A reconnecting
                 // request must receive a fresh session, never the process that just died.
                 owner.RemoveSession(key, this);
-                // unblock waiters
+                // Fail subscribers explicitly (not a clean end-of-stream) so the shared-session
+                // retry ladder in StreamMjpegAsync reconnects with a fresh process instead of
+                // the HTTP response silently ending and leaving a stale frame on screen.
                 foreach (var ch in _subscribers.Values)
                 {
-                    ch.Writer.TryComplete();
+                    ch.Writer.TryComplete(new InvalidOperationException("Shared RTSP session ended (stalled or dropped)."));
                 }
 
                 if (_process is not null)
@@ -1044,6 +1182,9 @@ public sealed class LiveStreamService(
                     TryKill(_process);
                 }
 
+                // Session is done — stop the stall watchdog immediately instead of letting it
+                // poll until the 5s idle-dispose runs.
+                try { _cts?.Cancel(); } catch { /* best effort */ }
                 Interlocked.Exchange(ref _started, 0);
             }
         }
@@ -1077,6 +1218,7 @@ public sealed class LiveStreamService(
                 {
                     ch.Writer.TryWrite(jpeg);
                 }
+                Interlocked.Exchange(ref _lastFrameUtcTicks, DateTime.UtcNow.Ticks);
 
                 searchFrom = eoi + 2;
             }

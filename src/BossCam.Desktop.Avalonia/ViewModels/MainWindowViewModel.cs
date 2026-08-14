@@ -307,6 +307,28 @@ public sealed partial class MainWindowViewModel : ObservableObject, ISectionView
             ? "No starred cameras yet — click ☆ on a camera below (or in the camera list) to pin it to this landing board."
             : string.Empty);
 
+    /// <summary>
+    /// Equal-size landing-board column count so every starred camera occupies exactly
+    /// the same cell and the whole board fills the available space (no fixed-size tiles,
+    /// no wasted room). Kept deliberately small enough that tiles stay watchable on the
+    /// default 1280px window: 1–3 cameras get one row each, 4 gets 2×2, more wrap in 3–4.
+    /// </summary>
+    public int BoardColumns
+    {
+        get
+        {
+            var count = BoardTiles.Count;
+            return count switch
+            {
+                <= 1 => 1,
+                2 => 2,
+                3 => 3,
+                4 => 2,
+                <= 9 => 3,
+                _ => 4
+            };
+        }
+    }
 
 
     partial void OnStarredDeviceIdsChanged(IReadOnlyCollection<Guid> value)
@@ -329,6 +351,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, ISectionView
         OnPropertyChanged(nameof(StarredBoardHint));
         RebuildBoardAsync();
     }
+
+    partial void OnBoardTilesChanged(ObservableCollection<BoardTileViewModel> value)
+        => OnPropertyChanged(nameof(BoardColumns));
 
     /// <summary>Toggles the landing board between starred-only and every camera.</summary>
     [RelayCommand]
@@ -771,14 +796,29 @@ public sealed partial class MainWindowViewModel : ObservableObject, ISectionView
         }
     }
 
+    /// <summary>
+    /// Reads a full rawvideo frame, bounding each read with a stall timeout. A silent RTSP
+    /// stall (5523-W drops media but keeps the socket open) otherwise blocks ReadAsync forever
+    /// and freezes the last frame on screen for minutes. A timed-out read returns false so the
+    /// caller advances to the next negotiated representation and reconnects.
+    /// </summary>
     private static async Task<bool> ReadExactAsync(Stream stream, byte[] buffer, CancellationToken cancellationToken)
     {
         var offset = 0;
         while (offset < buffer.Length)
         {
-            var read = await stream.ReadAsync(buffer.AsMemory(offset), cancellationToken);
-            if (read == 0) return false;
-            offset += read;
+            using var readTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            readTimeout.CancelAfter(TimeSpan.FromSeconds(15));
+            try
+            {
+                var read = await stream.ReadAsync(buffer.AsMemory(offset), readTimeout.Token);
+                if (read == 0) return false;
+                offset += read;
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                return false; // stalled — fail over to the next stream representation
+            }
         }
         return true;
     }

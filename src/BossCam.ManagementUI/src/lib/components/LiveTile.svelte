@@ -22,6 +22,11 @@
   let isDragging = $state(false);
   let isDragOver = $state(false);
   let snapshotTimer: ReturnType<typeof setTimeout> | undefined;
+  // Client-side staleness watchdog: the server kills stalled RTSP sessions, but if the
+  // connection itself survives while frames stop arriving, this aborts the stream and
+  // forces the reconnect path so the tile never freezes on old imagery.
+  let lastFrameAt = 0;
+  let stallWatchdog: ReturnType<typeof setInterval> | undefined;
 
   const lanHeaders = () => ({
     'X-LAN-Token': localStorage.getItem('bosscam.lanToken') || '',
@@ -46,12 +51,14 @@
     streamImageUrl = nextUrl;
     if (previous) URL.revokeObjectURL(previous);
     streamFailed = false;
+    lastFrameAt = Date.now();
     appState.setStreamStatus(device.id, 'live');
   }
 
   function stopStream() {
     streamRun += 1;
     if (snapshotTimer) { clearTimeout(snapshotTimer); snapshotTimer = undefined; }
+    if (stallWatchdog) { clearInterval(stallWatchdog); stallWatchdog = undefined; }
     streamAbortController?.abort();
     streamAbortController = undefined;
     if (streamObjectUrl) URL.revokeObjectURL(streamObjectUrl);
@@ -97,6 +104,17 @@
     streamAbortController = controller;
     streamFailed = false;
     streamErrorMsg = 'Connecting live stream…';
+    // Watch for a silent stall: no complete frame within 12s while the HTTP connection is
+    // still open means the camera/ffmpeg stopped producing media — abort and reconnect.
+    let stallDetected = false;
+    lastFrameAt = Date.now();
+    stallWatchdog = setInterval(() => {
+      if (run !== streamRun) return;
+      if (Date.now() - lastFrameAt > 12000) {
+        stallDetected = true;
+        controller.abort();
+      }
+    }, 3000);
     try {
       const response = await fetch(streamUrl, {
         signal: controller.signal,
@@ -132,9 +150,12 @@
         if (pending.length > 4 * 1024 * 1024) pending = pending.slice(-2);
       }
     } catch (error) {
-      if (controller.signal.aborted || run !== streamRun) return;
+      if (stallWatchdog) { clearInterval(stallWatchdog); stallWatchdog = undefined; }
+      // A deliberate stop aborts with no stall flag and must not schedule a retry; a
+      // stall-abort (or any real failure) falls through to the snapshot fallback + retry.
+      if (run !== streamRun || (controller.signal.aborted && !stallDetected)) return;
       streamFailed = true;
-      streamErrorMsg = `Stream failed — retrying (${String(error)})`;
+      streamErrorMsg = stallDetected ? 'Live stream stalled — reconnecting…' : `Stream failed — retrying (${String(error)})`;
       appState.setStreamStatus(device.id, 'retrying');
       void attemptSnapshotFallback(run);
       // 5s retry leaves room for the 4s snapshot refresh to fire before the next stream attempt.

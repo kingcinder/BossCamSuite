@@ -20,7 +20,7 @@
          disambiguation, so opening a menu cannot be undone by the debounce. -->
     <!-- Focusable so Space always reaches the window's audio toggle: after a banner/menu
          button is clicked, focus is returned here so the button cannot swallow the key. -->
-    <Grid x:Name="Stage" Focusable="True" PointerPressed="OnStagePointerPressed">
+    <Grid x:Name="Stage" Focusable="True" PointerPressed="OnStagePointerPressed" Background="Transparent">
       <Image Source="{Binding LiveVideoFrame}" Stretch="Uniform" />
 
       <!-- Top overlay: identity + playback/audio status (translucent pill, like the hint) -->

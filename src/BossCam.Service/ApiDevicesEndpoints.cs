@@ -98,6 +98,38 @@ public static class ApiDevicesEndpoints
             return Results.Ok(new { deviceId = id.ToString(), starred = request.Starred });
         });
 
+        // ── Repoint (re-wire a camera that moved IPs) ────────────────
+        // Lets the feed watchdog (scripts/video-feed-watchdog.sh) point a registered
+        // device at the IP it is actually reachable on now (e.g. after a DHCP
+        // re-assignment). UpsertDevicesAsync merges by MAC first, so a renumbered
+        // camera collapses into its existing row and keeps its id, stars, and settings.
+        app.MapPost("/api/devices/{id:guid}/repoint", async (Guid id, RepointDeviceRequest request, IApplicationStore store, CancellationToken ct) =>
+        {
+            var device = await store.GetDeviceAsync(id, ct);
+            if (device is null)
+            {
+                return Results.NotFound();
+            }
+            var ip = request.IpAddress?.Trim();
+            if (string.IsNullOrWhiteSpace(ip) || !System.Net.IPAddress.TryParse(ip, out _))
+            {
+                return Results.BadRequest(new { error = "ipAddress must be a valid IPv4/IPv6 address." });
+            }
+            var updated = device with
+            {
+                IpAddress = ip,
+                Port = request.Port is > 0 ? request.Port.Value : device.Port
+            };
+            await store.UpsertDevicesAsync([updated], ct);
+            return Results.Ok(new
+            {
+                deviceId = id.ToString(),
+                ipAddress = updated.IpAddress,
+                port = updated.Port,
+                message = $"Device re-pointed to {ip}."
+            });
+        });
+
         app.MapGet("/api/devices/{id:guid}/settings", async (Guid id, SettingsService settingsService, CancellationToken ct) =>
         {
             var result = await settingsService.ReadAsync(id, ct);
@@ -162,4 +194,11 @@ public static class ApiDevicesEndpoints
 public sealed record StarDeviceRequest
 {
     public bool Starred { get; init; }
+}
+
+/// <summary>Request body for POST /api/devices/{id}/repoint.</summary>
+public sealed record RepointDeviceRequest
+{
+    public string? IpAddress { get; init; }
+    public int? Port { get; init; }
 }
