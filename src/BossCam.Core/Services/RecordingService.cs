@@ -954,7 +954,18 @@ public sealed class RecordingService(
                     .FirstOrDefault(job => job.IsRunning);
                 if (running is not null)
                 {
-                    continue;
+                    // Re-promotion: a job that degraded to the snapshot pipeline when the main
+                    // RTSP source was briefly unreachable (the 5523-W drops RTSP sessions every
+                    // few minutes) must be promoted back to the full RTSP pipeline once that
+                    // source answers again — otherwise the fleet silently records JPEG snapshots
+                    // (no audio, no video motion) forever. Skipped for operator-forced snapshot
+                    // jobs and whenever RTSP still does not answer, so a still-dead camera keeps
+                    // its working snapshot pipeline during the outage. On success the degraded
+                    // job was stopped; fall through to start a fresh direct job.
+                    if (!await TryRePromoteDegradedSnapshotAsync(device, running, cancellationToken))
+                    {
+                        continue;
+                    }
                 }
 
                 // Also guard on the in-memory map: a job spawned but not yet persisted (persist
@@ -986,6 +997,74 @@ public sealed class RecordingService(
         }
 
         return started;
+    }
+
+    /// <summary>
+    /// Re-promotion path for jobs degraded to the snapshot pipeline: when the main RTSP source
+    /// that was unreachable at job-start answers again, the snapshot job is stopped so the
+    /// caller (continuous-record reconcile) can start a fresh direct-RTSP job. Returns false
+    /// (leaving the snapshot job untouched) for operator-forced snapshot requests and whenever
+    /// RTSP is still unreachable — the snapshot pipeline keeps recording during the outage, so
+    /// a still-dead camera is never churned. The RTSP probe is bounded (2s) so a dead camera
+    /// cannot stall the reconcile loop.
+    /// </summary>
+    private async Task<bool> TryRePromoteDegradedSnapshotAsync(DeviceIdentity device, RecordingJob running, CancellationToken cancellationToken)
+    {
+        var isDegradedFallback = string.Equals(running.Mode, "snapshot", StringComparison.OrdinalIgnoreCase)
+            && running.DegradedReason is { Length: > 0 }
+            && !running.DegradedReason.Contains("forced by request", StringComparison.OrdinalIgnoreCase);
+        if (!isDegradedFallback)
+        {
+            return false;
+        }
+
+        try
+        {
+            var sources = await transportBroker.GetSourcesAsync(device.Id, cancellationToken);
+            var main = SelectHighResMainSource(sources);
+            if (main?.Url is not string url
+                || !url.StartsWith("rtsp://", StringComparison.OrdinalIgnoreCase)
+                || !Uri.TryCreate(url, UriKind.Absolute, out var rtspUri))
+            {
+                return false;
+            }
+
+            var host = rtspUri.Host;
+            var port = rtspUri.Port > 0 ? rtspUri.Port : 554;
+            if (!await RtspProbe.ProbeAsync(host, port, cancellationToken, TimeSpan.FromSeconds(2)))
+            {
+                logger.LogDebug("RTSP still unreachable for {Device}; keeping degraded snapshot job {JobId}", device.DisplayName, running.Id);
+                return false;
+            }
+
+            logger.LogInformation("RTSP recovered for {Device}; re-promoting degraded snapshot job {JobId} to the direct pipeline", device.DisplayName, running.Id);
+            var stopped = await StopAsync(running.Id, cancellationToken);
+            if (stopped is null)
+            {
+                // Persisted-only record (no live process in the supervisor — e.g. the job was
+                // re-attached on boot or the process died while the store still said running).
+                // Mark it stopped so the fresh direct job below is the only running job for the
+                // device, otherwise the stale record would keep re-triggering this path.
+                var stale = running with { IsRunning = false, StoppedAt = DateTimeOffset.UtcNow };
+                try
+                {
+                    await _recordingStore.SaveRecordingJobsAsync([stale], cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Failed to persist re-promoted stopped job {JobId}", running.Id);
+                }
+
+                _ = broadcaster.RecordingJobStoppedAsync(stale, CancellationToken.None);
+            }
+
+            return true;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Re-promotion probe failed for {Device}; keeping degraded snapshot job", device.DisplayName);
+            return false;
+        }
     }
 
     /// <summary>

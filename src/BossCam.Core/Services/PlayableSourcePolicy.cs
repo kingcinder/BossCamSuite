@@ -103,7 +103,7 @@ public static class PlayableSourcePolicy
         }
 
         return url.Contains("ch0_1", StringComparison.OrdinalIgnoreCase)
-            || url.Contains("/12", StringComparison.OrdinalIgnoreCase)
+            || HasPathSegment12(url)
             || url.Contains("subtype=1", StringComparison.OrdinalIgnoreCase)
             || url.Contains("PROFILE_001", StringComparison.OrdinalIgnoreCase)
             // Word-boundary match, never a raw substring: a generic MAIN candidate like
@@ -112,6 +112,26 @@ public static class PlayableSourcePolicy
             // 5523-W at 10.0.0.169 — ffmpeg got fed the Dahua main URL and produced 0 bytes).
             || (source.DisplayName is not null
                 && SubWordRegex.IsMatch(source.DisplayName));
+    }
+
+    /// <summary>
+    /// Dahua-style sub-stream marker: a bare <c>/12</c> path segment (e.g.
+    /// <c>rtsp://camera:554/12</c>). Must match the <em>path</em>, never a raw substring of the
+    /// whole URL: <c>rtsp://12.0.0.5/…</c> contains "/12" inside the authority (<c>//12</c>) and
+    /// was silently misclassifying cameras on a 12.x subnet as sub streams — the same false
+    /// positive that trips on <c>rtsp://127.0.0.1/…</c> (via <c>//127</c>), which surfaced in the
+    /// degraded-snapshot re-promotion unit test.
+    /// </summary>
+    private static bool HasPathSegment12(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            return false;
+        }
+
+        return uri.AbsolutePath
+            .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Any(segment => segment.Equals("12", StringComparison.OrdinalIgnoreCase));
     }
 
     private static readonly Regex SubWordRegex = new(

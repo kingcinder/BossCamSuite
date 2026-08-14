@@ -131,6 +131,46 @@ public sealed class PlayableSourcePolicyTests
     }
 
     [Fact]
+    public void IsSub_Does_Not_False_Match_Slash12_Inside_Authority()
+    {
+        // Regression for the degraded-snapshot re-promotion path: "rtsp://127.0.0.1:port/ch0_0.264"
+        // (and any rtsp://12.x.x.x camera) contains "/12" inside the authority ("//127", "//12")
+        // and was silently misclassified as a sub stream — SelectHighResMainSource then returned
+        // null and the re-promotion probe was skipped. The /12 marker must match the PATH segment
+        // (Dahua bare /12 sub-stream convention), never the host.
+        var loopbackMain = new VideoSourceDescriptor
+        {
+            Kind = TransportKind.Rtsp,
+            Url = "rtsp://127.0.0.1:35029/ch0_0.264",
+            Rank = 10,
+            DisplayName = "stub main"
+        };
+        var subnet12Main = new VideoSourceDescriptor
+        {
+            Kind = TransportKind.Rtsp,
+            Url = "rtsp://12.0.0.5:554/ch0_0.264",
+            Rank = 10,
+            DisplayName = "main"
+        };
+        var bare12Sub = new VideoSourceDescriptor
+        {
+            Kind = TransportKind.Rtsp,
+            Url = "rtsp://10.0.0.5:554/12",
+            Rank = 20,
+            DisplayName = "sub"
+        };
+
+        Assert.False(PlayableSourcePolicy.IsSub(loopbackMain), "//127 must not count as a /12 path marker");
+        Assert.False(PlayableSourcePolicy.IsSub(subnet12Main), "//12 authority must not count as a /12 path marker");
+        Assert.True(PlayableSourcePolicy.IsSub(bare12Sub), "a real /12 path segment is still a sub marker");
+
+        // The loopback main must resolve as Main so the re-promotion probe actually runs.
+        var decision = PlayableSourcePolicy.Resolve([loopbackMain, bare12Sub]);
+        Assert.Equal("rtsp://127.0.0.1:35029/ch0_0.264", decision.Main?.Url);
+        Assert.Equal("rtsp://10.0.0.5:554/12", decision.Sub?.Url);
+    }
+
+    [Fact]
     public void BuildProbeOrder_Puts_Main_Sub_Onvif_Http_And_Snapshot_In_Stable_Order()
     {
         var sources = new[]
