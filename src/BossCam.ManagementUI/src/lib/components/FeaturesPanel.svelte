@@ -279,10 +279,10 @@
   </p>
 
   <div class="row gap wrap" style="margin-bottom: 12px;">
-    <button onclick={quickProbe} type="button" disabled={isProbing || isLoading || !appState.selectedDeviceId}>
+    <button class="btn btn-primary" onclick={quickProbe} type="button" disabled={isProbing || isLoading || !appState.selectedDeviceId}>
       {isProbing ? '⏳ Probing…' : '🔍 Quick Probe'}
     </button>
-    <button onclick={loadControlPoints} type="button" disabled={isLoading || !appState.selectedDeviceId}>
+    <button class="btn" onclick={loadControlPoints} type="button" disabled={isLoading || !appState.selectedDeviceId}>
       {isLoading ? '⏳ Loading…' : '🔄 Reload features'}
     </button>
     <label class="inline-check">
@@ -510,32 +510,51 @@
 <style>
   .card {
     background: var(--panel);
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-soft);
     border-radius: var(--radius);
-    padding: 14px 16px;
-    margin-bottom: 14px;
+    padding: 18px 20px;
+    margin-bottom: 16px;
     min-width: 0;
     overflow: hidden;
+    box-shadow: var(--shadow-1);
   }
-  .card h3 { margin: 0 0 10px; }
-  .muted { color: var(--muted); font-size: .9rem; margin: 0; }
-  .small { font-size: .82rem; }
+  .card h3 { margin: 0 0 8px; color: var(--text-strong); }
+  .muted { color: var(--muted); font-size: var(--fs-md); margin: 0; }
+  .small { font-size: var(--fs-sm); }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .gap { gap: 10px; }
   .wrap { flex-wrap: wrap; }
 
   button {
-    background: #1a1010cc;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: #221618;
     border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    padding: 8px 14px;
     cursor: pointer;
     color: var(--text);
     font: inherit;
-    transition: border-color 0.15s, background 0.15s;
+    font-size: var(--fs-md);
+    font-weight: 600;
+    white-space: nowrap;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
   }
-  button:hover:not(:disabled) { border-color: #ffa33e; background: #331713; }
-  button:disabled { opacity: .45; cursor: not-allowed; }
+  button:hover:not(:disabled) { background: #33201a; border-color: var(--accent-strong); color: var(--text-strong); }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  button.btn-primary {
+    background: linear-gradient(180deg, var(--accent-strong), var(--accent-deep));
+    border-color: #ffb06a99;
+    color: #fff8f2;
+    box-shadow: 0 2px 10px var(--accent-glow);
+  }
+  button.btn-primary:hover:not(:disabled) {
+    background: linear-gradient(180deg, #ff9a4f, #cc4416);
+    border-color: #ffc68f;
+    box-shadow: 0 3px 16px var(--accent-glow);
+  }
 
   .inline-check {
     display: inline-flex;
@@ -548,17 +567,17 @@
   .inline-check input { accent-color: var(--accent); }
 
   .family-card {
-    background: #0e0a0b;
-    border: 1px solid #ff5a1f33;
+    background: var(--panel-2);
+    border: 1px solid var(--border-soft);
     border-radius: 10px;
     padding: 12px;
     margin-bottom: 12px;
   }
   .family-title {
     margin: 0 0 10px;
-    font-size: .95rem;
-    color: #ffe8dd;
-    border-bottom: 1px solid #ff5a1f22;
+    font-size: var(--fs-lg);
+    color: var(--text-strong);
+    border-bottom: 1px solid var(--border-faint);
     padding-bottom: 6px;
   }
   .feature-grid {
@@ -567,11 +586,11 @@
     gap: 8px;
   }
   .feature-item {
-    background: #0a0809;
-    border: 1px solid #ff5a1f33;
+    background: var(--bg-deep);
+    border: 1px solid var(--border-faint);
     border-radius: 8px;
     padding: 10px;
-    transition: border-color 0.15s, opacity 0.15s;
+    transition: border-color 0.15s, opacity 0.15s, box-shadow 0.15s;
   }
   .feature-item:hover { border-color: #ffa33e88; }
   .feature-item.applying { opacity: 0.6; pointer-events: none; }
@@ -587,17 +606,11 @@
     flex-wrap: wrap;
   }
   .feature-icon { font-size: 1rem; flex-shrink: 0; }
-  .feature-name { font-weight: 600; font-size: .85rem; word-break: break-word; flex: 1; min-width: 0; }
-  .feature-state {
-    font-size: .72rem;
-    padding: 2px 6px;
-    border-radius: 4px;
-    white-space: nowrap;
-  }
-  .feature-state.good { background: #1a3a1a; color: #8fdd8f; }
-  .feature-state.info { background: #1a2a3a; color: #8fbfff; }
-  .feature-state.unverified { background: #3a2a1a; color: #ddcf8f; }
-  .feature-state.blocked { background: #3a1a1a; color: #ff8f8f; }
+  .feature-name { font-weight: 600; font-size: .85rem; word-break: break-word; flex: 1; min-width: 0; }  .feature-state { font-size: .72rem; padding: 2px 6px; border-radius: 999px; white-space: nowrap; }
+  .feature-state.good { background: var(--ok-dim); color: var(--ok-text); }
+  .feature-state.info { background: var(--info-dim); color: var(--info-text); }
+  .feature-state.unverified { background: var(--warn-dim); color: var(--warn-text); }
+  .feature-state.blocked { background: var(--bad-dim); color: var(--bad-text); }
   .feature-state.expert { background: #2a1a3a; color: #cf8fff; }
 
   .feature-meta {
@@ -607,11 +620,12 @@
     margin-top: 4px;
   }
   .meta-chip {
-    background: #1a1010;
+    background: #201819;
+    border: 1px solid var(--border-faint);
     border-radius: 4px;
     padding: 1px 6px;
     font-size: .72rem;
-    color: var(--muted);
+    color: var(--faint);
   }
   .meta-chip.warn { color: #ddb86a; }
 
@@ -790,12 +804,17 @@
   .feature-detail .sub { color: var(--muted); }
 
   .empty-state {
-    display: grid;
-    place-items: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
     min-height: 120px;
-    border: 2px dashed #ff5a1f44;
+    border: 2px dashed var(--border-faint);
     border-radius: 10px;
     padding: 24px;
+    text-align: center;
+    color: var(--faint);
   }
 
   code {

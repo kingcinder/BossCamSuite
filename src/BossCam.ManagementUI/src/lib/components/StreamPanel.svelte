@@ -83,8 +83,8 @@
   {/if}
 
   <div class="row" style="margin-top: 12px;">
-    <button onclick={save} type="button" class="accent">Save Stream Settings</button>
-    <button onclick={loadStreamSettings} type="button">Reload</button>
+    <button onclick={save} type="button" class="btn btn-primary">Save Stream Settings</button>
+    <button onclick={loadStreamSettings} type="button" class="btn">Reload</button>
   </div>
   <p class="muted small">{statusText}</p>
 </div>
@@ -92,28 +92,15 @@
 <style>
   .card {
     background: var(--panel);
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-soft);
     border-radius: var(--radius);
-    padding: 14px 16px;
-    margin-bottom: 14px;
+    padding: 18px 20px;
+    margin-bottom: 16px;
     min-width: 0;
+    box-shadow: var(--shadow-1);
   }
-  .card h3 { margin: 0 0 10px; }
-  .muted { color: var(--muted); font-size: .9rem; margin: 0; }
-  .small { font-size: .82rem; }
+  .card h3 { margin: 0 0 8px; color: var(--text-strong); }
+  .muted { color: var(--muted); font-size: var(--fs-md); margin: 0; }
+  .small { font-size: var(--fs-sm); }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-  button {
-    background: #1a1010cc;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 8px 12px;
-    cursor: pointer;
-    color: var(--text);
-    font: inherit;
-  }
-  button:hover { border-color: #ffa33e; background: #331713; }
-  button.accent {
-    background: linear-gradient(180deg, #ff7a2f, #b83a12);
-    border-color: #ffb06a; color: #fff8f2; font-weight: 600;
-  }
 </style>

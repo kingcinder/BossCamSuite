@@ -261,13 +261,13 @@
     {/if}
   </div>
   <div class="view-tile-actions">
-    <button onclick={select} type="button" data-tip="Select this camera for settings">Select</button>
-    <button onclick={snap} type="button" data-tip="Save a snapshot to disk">Snapshot</button>
+    <button class="btn btn-sm" onclick={select} type="button" data-tip="Select this camera for settings">Select</button>
+    <button class="btn btn-sm" onclick={snap} type="button" data-tip="Save a snapshot to disk">📸 Snapshot</button>
     {#if isRecording}
-      <button onclick={stopRec} type="button" class="stop" data-tip="Stop recording this camera">⏹ Stop rec</button>
-      <span class="rec-badge">● REC</span>
+      <button onclick={stopRec} type="button" class="btn btn-sm btn-danger" data-tip="Stop recording this camera">⏹ Stop</button>
+      <span class="badge bad"><span class="rec-dot"></span>REC</span>
     {:else}
-      <button onclick={startRec} type="button" data-tip="Start continuous recording">Record</button>
+      <button onclick={startRec} type="button" class="btn btn-sm btn-primary" data-tip="Start continuous recording">⏺ Record</button>
     {/if}
   </div>
 </div>
@@ -275,65 +275,70 @@
 <style>
   .view-tile {
     position: relative;
-    background: #0a0809;
-    border: 1px solid #ff5a1f55;
-    border-radius: 12px;
+    background: #0b0809;
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius);
     overflow: hidden;
-    min-height: 160px;
+    min-height: 170px;
     display: flex;
     flex-direction: column;
     cursor: grab;
     user-select: none;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
   }
-  .view-tile.dragging { opacity: 0.55; border-color: #ffa33e; }
-  .view-tile.drag-over { outline: 2px dashed var(--accent); }
+  .view-tile:hover { border-color: var(--border); box-shadow: var(--shadow-2); }
+  .view-tile.dragging { opacity: 0.55; border-color: var(--accent-strong); }
+  .view-tile.drag-over { outline: 2px dashed var(--accent); outline-offset: -2px; }
   .view-tile.selected {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 1px #ff6a1f66 inset;
+    border-color: var(--accent-strong);
+    box-shadow: 0 0 0 1px var(--accent-glow) inset, var(--shadow-2);
   }
   .view-tile-bar {
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: 8px;
-    padding: 6px 10px;
-    background: #1a100ecc;
-    font-size: .85rem;
+    padding: 8px 11px;
+    background: linear-gradient(180deg, #1e1315, #171012);
+    font-size: var(--fs-md);
     z-index: 1;
     transition: background 0.3s;
+    border-bottom: 1px solid var(--border-faint);
   }
   .view-tile-bar.recording {
-    background: #1a1a0ecc;
+    background: linear-gradient(180deg, #22170e, #1a1208);
+    border-bottom-color: #ff3e3e44;
   }
   .view-tile-bar > div { min-width: 0; flex: 1; }
-  .view-tile-bar strong { display: flex; align-items: center; gap: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .view-tile-bar strong { display: flex; align-items: center; gap: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
   .view-tile-bar strong.recording { color: #ffb06a; }
-  .view-tile-bar .sub { color: var(--muted); font-size: .78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .view-tile-bar .sub { color: var(--faint); font-size: var(--fs-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tile-status {
     display: inline-flex;
     align-items: center;
-    gap: 3px;
-    font-size: .68rem;
-    font-weight: 700;
-    padding: 2px 7px;
+    gap: 4px;
+    font-size: 0.66rem;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    padding: 2px 8px;
     border-radius: 999px;
-    background: #1a1a1a;
-    color: #999;
-    border: 1px solid #66666655;
+    background: #20181a;
+    color: #9a8f8f;
+    border: 1px solid #ffffff1f;
     white-space: nowrap;
     cursor: help;
     flex-shrink: 0;
   }
-  .tile-status.live { background: #1a3a1a; color: #8fdd8f; border-color: #3ecf8e66; }
-  .tile-status.snap { background: #3a2a1a; color: #ddcf8f; border-color: #cf9e3e66; }
-  .tile-status.rec { background: #3a1a1a; color: #ff8f8f; border-color: #ff3e3e66; }
+  .tile-status.live { background: var(--ok-dim); color: var(--ok-text); border-color: #3ecf8e66; }
+  .tile-status.snap { background: var(--warn-dim); color: var(--warn-text); border-color: #cf9e3e66; }
+  .tile-status.rec { background: var(--bad-dim); color: var(--bad-text); border-color: #ff3e3e66; }
   .rec-dot {
     display: inline-block;
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: #ff3e3e;
-    box-shadow: 0 0 6px #ff3e3e88;
+    background: var(--bad);
+    box-shadow: 0 0 6px rgba(255, 62, 62, 0.8);
     animation: rec-pulse 1.5s infinite;
     flex-shrink: 0;
   }
@@ -344,7 +349,7 @@
   .view-tile-media {
     flex: 1;
     min-height: 120px;
-    background: #000;
+    background: var(--bg-deep);
     display: grid;
     place-items: center;
     position: relative;
@@ -353,7 +358,7 @@
     width: 100%;
     height: 100%;
     object-fit: contain;
-    background: #000;
+    background: var(--bg-deep);
     min-height: 120px;
   }
   .view-tile-media .fail {
@@ -362,45 +367,26 @@
     display: grid;
     place-items: center;
     color: var(--muted);
-    font-size: .85rem;
-    padding: 12px;
+    font-size: var(--fs-md);
+    padding: 14px;
     text-align: center;
   }
   .view-tile-actions {
     display: flex;
     gap: 6px;
-    padding: 6px 10px 10px;
+    padding: 8px 10px 10px;
     flex-wrap: wrap;
+    border-top: 1px solid var(--border-faint);
+    background: #0d0a0b;
   }
-  .view-tile-actions button {
+  .view-tile-actions .btn {
     flex: 1 1 auto;
-    min-width: 76px;
+    min-width: 72px;
     padding: 6px 10px;
-    font-size: .8rem;
+    font-size: var(--fs-sm);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    text-align: center;
-    background: #1a1010cc;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    cursor: pointer;
-    color: var(--text);
-    font: inherit;
   }
-  .view-tile-actions button:hover { border-color: #ffa33e; background: #331713; }
-  .view-tile-actions button.stop { border-color: #cf3e3e66; color: #ff8f8f; }
-  .view-tile-actions button.stop:hover { border-color: #cf3e3e; background: #3a1a1a; }
-  .rec-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    font-size: .72rem;
-    font-weight: 600;
-    color: #ff3e3e;
-    padding: 2px 6px;
-    border: 1px solid #ff3e3e44;
-    border-radius: 4px;
-    background: #3a1a1a66;
-  }
+  .view-tile-actions .badge { margin-left: auto; }
 </style>

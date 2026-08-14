@@ -119,7 +119,7 @@
   {/if}
 
   <div class="row gap wrap" style="margin-bottom: 12px;">
-    <button onclick={scan} type="button" disabled={scanning || runStatus?.running}>
+    <button onclick={scan} type="button" class="btn btn-primary" disabled={scanning || runStatus?.running}>
       {scanning ? '⏳ Scanning…' : '📡 Scan for camera hotspots'}
     </button>
     {#if runStatus?.running}
@@ -142,7 +142,7 @@
           </div>
           <button
             type="button"
-            class="recover-btn"
+            class="btn btn-sm recover-btn"
             onclick={() => recover(ap)}
             disabled={runStatus?.running}
           >
@@ -185,32 +185,51 @@
 <style>
   .card {
     background: var(--panel);
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-soft);
     border-radius: var(--radius);
-    padding: 14px 16px;
-    margin-bottom: 14px;
+    padding: 18px 20px;
+    margin-bottom: 16px;
     min-width: 0;
+    box-shadow: var(--shadow-1);
   }
-  .card h3 { margin: 0 0 10px; }
-  .muted { color: var(--muted); font-size: .9rem; margin: 0; }
-  .small { font-size: .82rem; }
+  .card h3 { margin: 0 0 8px; color: var(--text-strong); }
+  .muted { color: var(--muted); font-size: var(--fs-md); margin: 0; }
+  .small { font-size: var(--fs-sm); }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .gap { gap: 10px; }
   .wrap { flex-wrap: wrap; }
-  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .8rem; }
+  code { font-family: var(--font-mono); font-size: .8rem; color: var(--accent-strong); }
 
   button {
-    background: #1a1010cc;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: #221618;
     border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    padding: 8px 14px;
     cursor: pointer;
     color: var(--text);
     font: inherit;
-    transition: border-color 0.15s, background 0.15s;
+    font-size: var(--fs-md);
+    font-weight: 600;
+    white-space: nowrap;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
   }
-  button:hover:not(:disabled) { border-color: #ffa33e; background: #331713; }
-  button:disabled { opacity: .45; cursor: not-allowed; }
+  button:hover:not(:disabled) { background: #33201a; border-color: var(--accent-strong); color: var(--text-strong); }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  button.btn-primary {
+    background: linear-gradient(180deg, var(--accent-strong), var(--accent-deep));
+    border-color: #ffb06a99;
+    color: #fff8f2;
+    box-shadow: 0 2px 10px var(--accent-glow);
+  }
+  button.btn-primary:hover:not(:disabled) {
+    background: linear-gradient(180deg, #ff9a4f, #cc4416);
+    border-color: #ffc68f;
+    box-shadow: 0 3px 16px var(--accent-glow);
+  }
 
   .recovery-active {
     color: #8fbfff;
@@ -224,14 +243,14 @@
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
-    background: #0e140f;
+    background: var(--ok-dim);
     border: 1px solid #3ecf8e44;
-    border-radius: 10px;
+    border-radius: var(--radius-sm);
     padding: 8px 12px;
     margin-bottom: 12px;
-    font-size: .85rem;
+    font-size: var(--fs-md);
   }
-  .auto-bar:not(.on) { background: #171212; border-color: #ff8f3e33; }
+  .auto-bar:not(.on) { background: var(--panel-3); border-color: #ff8f3e33; }
   .auto-dot {
     width: 9px; height: 9px; border-radius: 50%;
     background: #3ecf8e;
@@ -256,12 +275,14 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    background: #0e0a0b;
-    border: 1px solid #ff5a1f33;
-    border-radius: 10px;
+    background: var(--panel-2);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-sm);
     padding: 10px 12px;
     flex-wrap: wrap;
+    transition: border-color 0.15s;
   }
+  .ap-row:hover { border-color: var(--border); }
   .ap-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
   .ap-info strong { font-size: .95rem; }
   .ap-info .sub { color: var(--muted); font-size: .78rem; }
@@ -270,9 +291,9 @@
 
   .run-card {
     margin-top: 12px;
-    background: #0e0a0b;
+    background: var(--panel-2);
     border: 1px solid #3e8ecf55;
-    border-radius: 10px;
+    border-radius: var(--radius-sm);
     padding: 10px 12px;
   }
   .run-card.done { border-color: #3ecf8e66; }
@@ -286,16 +307,17 @@
   .run-log {
     margin: 8px 0 0;
     padding: 8px;
-    background: #050506;
-    border: 1px solid #ff5a1f22;
-    border-radius: 8px;
+    background: var(--bg-deep);
+    border: 1px solid var(--border-faint);
+    border-radius: var(--radius-sm);
     max-height: 240px;
     overflow: auto;
     font-size: .72rem;
     line-height: 1.45;
-    color: #c9b7ad;
+    color: var(--muted);
     white-space: pre-wrap;
     word-break: break-word;
+    font-family: var(--font-mono);
   }
   .note { margin-top: 12px; }
 </style>

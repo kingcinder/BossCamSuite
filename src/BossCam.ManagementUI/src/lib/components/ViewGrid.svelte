@@ -81,69 +81,82 @@
 </script>
 
 <div class="card view-toolbar">
-  <div class="row gap wrap">
-    <span class="muted">Layout</span>
-    <div class="layout-btns">
-      {#each layouts as n}
-        <button
-          type="button"
-          class:active={appState.layout === n}
-          onclick={() => appState.setLayout(n)}
-          data-tip={n === 0 ? 'Show every camera, all streaming at once' : `Show ${n} cameras`}
-        >{n === 0 ? 'All' : n}</button>
-      {/each}
+  <div class="toolbar-row">
+    <div class="group">
+      <span class="group-label">Layout</span>
+      <div class="layout-btns" role="group" aria-label="Grid layout">
+        {#each layouts as n}
+          <button
+            type="button"
+            class:active={appState.layout === n}
+            onclick={() => appState.setLayout(n)}
+            data-tip={n === 0 ? 'Show every camera, all streaming at once' : `Show ${n} cameras`}
+          >{n === 0 ? 'All' : n}</button>
+        {/each}
+      </div>
     </div>
 
-    <label class="inline-check">
-      Stream mode
-      <select bind:value={appState.streamQuality}>
+    <div class="group">
+      <span class="group-label">Stream mode</span>
+      <select class="select" bind:value={appState.streamQuality} aria-label="Stream mode">
         <option value="sub">Multi-view (recommended)</option>
         <option value="rtsp">Full motion RTSP (1–2 cams)</option>
         <option value="main">HD RTSP main (heavy)</option>
       </select>
-    </label>
+    </div>
 
     <label class="inline-check">
-      <input type="checkbox" bind:checked={appState.liveRefreshEnabled} /> Live refresh
+      <input type="checkbox" bind:checked={appState.liveRefreshEnabled} />
+      Live refresh
     </label>
 
-    <select bind:value={appState.liveInterval}>
+    <select class="select refresh" bind:value={appState.liveInterval} aria-label="Refresh interval">
       <option value={1000}>1s</option>
       <option value={2000}>2s</option>
       <option value={5000}>5s</option>
       <option value={10000}>10s</option>
     </select>
 
-    <button onclick={resetOrder} type="button">Reset order</button>
+    <button class="btn btn-ghost btn-sm" onclick={resetOrder} type="button">Reset order</button>
 
     {#if fullscreenSupported}
-      <button onclick={toggleFullscreen} type="button" class:active={appState.fullscreenEnabled}>
-        {appState.fullscreenEnabled ? 'Exit fullscreen' : 'Fullscreen'}
+      <button class="btn btn-ghost btn-sm" onclick={toggleFullscreen} type="button" class:active={appState.fullscreenEnabled}>
+        {appState.fullscreenEnabled ? 'Exit fullscreen' : '⛶ Fullscreen'}
       </button>
     {/if}
 
-    <button onclick={requestNotify} type="button" class:active={appState.notificationsEnabled}>
+    <button class="btn btn-ghost btn-sm" onclick={requestNotify} type="button" class:active={appState.notificationsEnabled}>
       {'Notification' in window && Notification.permission === 'granted' ? (appState.notificationsEnabled ? '🔔 On' : '🔕 Off') : '🔔 Enable notifications'}
     </button>
   </div>
-  <p class="muted small">
+  <p class="faint small toolbar-hint">
     Continuous live streams (RTSP→MJPEG via ffmpeg). Drag title bar to rearrange. Click a tile to select for settings/record.
   </p>
 </div>
 
-<div class="board-summary">
-  <span class="sum-chip live" data-tip="Cameras with a live video frame currently on screen">● {liveCount} streaming</span>
+<div class="board-summary" role="status">
+  <span class="sum-chip live" data-tip="Cameras with a live video frame currently on screen">
+    <span class="dot ok"></span>{liveCount} streaming
+  </span>
   {#if snapshotCount > 0}
-    <span class="sum-chip snap" data-tip="Video stream unavailable — showing a periodic snapshot still instead">📷 {snapshotCount} still</span>
+    <span class="sum-chip snap" data-tip="Video stream unavailable — showing a periodic snapshot still instead">
+      📷 {snapshotCount} still
+    </span>
   {/if}
-  <span class="sum-chip rec" data-tip="Cameras currently recording">⏺ {recordingCount} recording</span>
+  <span class="sum-chip rec" data-tip="Cameras currently recording">
+    <span class="rec-dot"></span>{recordingCount} recording
+  </span>
   {#if retryingCount > 0}
-    <span class="sum-chip warn" data-tip="Cameras whose stream is unavailable (e.g. locked credentials) — click a tile for details">↻ {retryingCount} retrying</span>
+    <span class="sum-chip warn" data-tip="Cameras whose stream is unavailable — click a tile for details">
+      ↻ {retryingCount} retrying
+    </span>
   {/if}
   {#if offlineCount > 0}
-    <span class="sum-chip dead" data-tip="Cameras unreachable">✕ {offlineCount} offline</span>
+    <span class="sum-chip dead" data-tip="Cameras unreachable">
+      ✕ {offlineCount} offline
+    </span>
   {/if}
-  <span class="sum-note muted small">All cameras auto-stream · click any tile to control it</span>
+  <span class="sum-note faint small">All cameras auto-stream · click any tile to control it</span>
 </div>
 
 <div class="view-grid {layoutClasses[appState.layout] || 'layout-all'}">
@@ -156,79 +169,66 @@
       {/if}
     </div>
   {:else}
-    <div class="empty">Add or register a camera to start viewing.</div>
+    <div class="empty-state">
+      <span class="empty-icon">📹</span>
+      <span class="empty-title">No cameras yet</span>
+      <span class="empty-hint">Add or register a camera to start viewing. Use Quick add in the sidebar, Discover, or Scan subnet.</span>
+    </div>
   {/each}
 </div>
 
 <style>
-  .view-toolbar { margin-bottom: 12px; }
-  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-  .gap { gap: 8px; }
-  .wrap { flex-wrap: wrap; }
-  .muted { color: var(--muted); font-size: .9rem; }
-  .small { font-size: .82rem; }
-  .card {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 14px 16px;
-    margin-bottom: 14px;
-    min-width: 0;
-    overflow: hidden;
+  .view-toolbar { margin-bottom: 12px; padding: 14px 16px; }
+  .toolbar-row {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    align-items: center;
   }
-  .layout-btns { display: flex; gap: 4px; flex-wrap: wrap; }
+  .group { display: flex; align-items: center; gap: 7px; }
+  .group-label { font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--faint); }
+  .toolbar-hint { margin: 10px 0 0; }
+
+  .layout-btns { display: flex; gap: 3px; flex-wrap: wrap; }
   .layout-btns button {
-    min-width: 36px;
+    min-width: 34px;
     font-weight: 700;
-    background: #1a1010cc;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 8px 12px;
+    font-size: var(--fs-sm);
+    background: #1d1315;
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-xs);
+    padding: 6px 10px;
     cursor: pointer;
-    color: var(--text);
+    color: var(--muted);
     font: inherit;
+    transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
   }
-  .layout-btns button:hover { border-color: #ffa33e; background: #331713; }
+  .layout-btns button:hover { border-color: var(--accent-strong); background: #2a1a16; color: var(--text); }
   .layout-btns button.active {
-    background: linear-gradient(180deg, #ff7a2f, #b83a12);
-    border-color: #ffb06a;
+    background: linear-gradient(180deg, var(--accent-strong), var(--accent-deep));
+    border-color: #ffb06a99;
     color: #fff;
+    box-shadow: 0 2px 10px var(--accent-glow);
   }
+
   .inline-check {
     display: inline-flex;
     align-items: center;
     gap: 6px;
     color: var(--muted);
-    font-size: .9rem;
-  }
-  .inline-check select, .inline-check input {
-    background: #0b090bcc;
-    border: 1px solid #ff5a1f55;
-    border-radius: 8px;
-    padding: 6px 8px;
-    color: var(--text);
-    font: inherit;
-  }
-  button {
-    background: #1a1010cc;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 8px 12px;
+    font-size: var(--fs-sm);
     cursor: pointer;
-    color: var(--text);
-    font: inherit;
   }
-  button:hover { border-color: #ffa33e; background: #331713; }
+  .select { width: auto; padding: 6px 10px; font-size: var(--fs-sm); }
+  .select.refresh { min-width: 58px; }
 
   .view-grid {
     display: grid;
-    gap: 10px;
+    gap: 12px;
     min-height: 50vh;
     align-content: start;
   }
-  .view-grid.layout-all {
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  }
+  .view-grid.layout-all { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
   .view-grid.layout-1 { grid-template-columns: 1fr; }
   .view-grid.layout-2 { grid-template-columns: 1fr 1fr; }
   .view-grid.layout-4 { grid-template-columns: 1fr 1fr; }
@@ -237,72 +237,73 @@
 
   .tile-wrapper {
     position: relative;
-    background: #0a0809;
-    border: 1px solid #ff5a1f55;
-    border-radius: 12px;
+    background: var(--bg-deep);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius);
     overflow: hidden;
-    min-height: 160px;
+    min-height: 170px;
+    box-shadow: var(--shadow-1);
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
   }
+  .tile-wrapper:hover { box-shadow: var(--shadow-2); border-color: var(--border); }
+
   /* ── Live board summary bar ─────────────────────────── */
   .board-summary {
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
     align-items: center;
-    padding: 8px 12px;
-    margin-bottom: 10px;
-    background: #0e0a0b;
-    border: 1px solid #ff5a1f33;
-    border-radius: 10px;
+    padding: 9px 12px;
+    margin-bottom: 12px;
+    background: var(--panel-2);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius);
   }
   .sum-chip {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    font-size: .78rem;
-    font-weight: 600;
-    padding: 3px 9px;
+    gap: 6px;
+    font-size: var(--fs-sm);
+    font-weight: 700;
+    padding: 3px 10px;
     border-radius: 999px;
     cursor: help;
+    border: 1px solid transparent;
   }
-  .sum-chip.live { background: #1a3a1a; color: #8fdd8f; border: 1px solid #3ecf8e55; }
-  .sum-chip.snap { background: #3a2a1a; color: #ddcf8f; border: 1px solid #cf9e3e55; }
-  .sum-chip.rec { background: #3a1a1a; color: #ff8f8f; border: 1px solid #ff3e3e55; }
-  .sum-chip.warn { background: #3a2a1a; color: #ddcf8f; border: 1px solid #cf9e3e55; }
-  .sum-chip.dead { background: #1a1a1a; color: #999; border: 1px solid #66666655; }
+  .sum-chip.live { background: var(--ok-dim); color: var(--ok-text); border-color: #3ecf8e55; }
+  .sum-chip.snap { background: var(--warn-dim); color: var(--warn-text); border-color: #cf9e3e55; }
+  .sum-chip.rec { background: var(--bad-dim); color: var(--bad-text); border-color: #ff3e3e55; }
+  .sum-chip.warn { background: var(--warn-dim); color: var(--warn-text); border-color: #cf9e3e55; }
+  .sum-chip.dead { background: #20181a; color: #9a8f8f; border-color: #ffffff1f; }
+  .rec-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--bad);
+    box-shadow: 0 0 6px rgba(255, 62, 62, 0.8);
+    animation: rec-pulse 1.5s infinite;
+  }
   .sum-note { margin-left: auto; }
 
   .mse-switch {
     position: absolute;
-    top: 50px; /* below the two-line tile title bar (~45px) so it never covers the name/sub/status */
+    top: 54px;
     right: 6px;
     z-index: 10;
-    background: rgba(0, 0, 0, 0.65);
-    border: 1px solid #ff5a1f55;
-    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.7);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-xs);
     padding: 3px 8px;
     cursor: pointer;
     color: #ddd;
     font: inherit;
-    font-size: .78rem;
+    font-size: var(--fs-sm);
     backdrop-filter: blur(4px);
     transition: background 0.15s, border-color 0.15s;
   }
   .mse-switch:hover {
-    background: rgba(30, 15, 10, 0.85);
-    border-color: #ffa33e;
-  }
-
-  .empty {
-    grid-column: 1 / -1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 200px;
-    color: var(--muted);
-    font-size: 1.1rem;
-    border: 2px dashed #ff5a1f44;
-    border-radius: 12px;
+    background: rgba(30, 15, 10, 0.9);
+    border-color: var(--accent-strong);
   }
 
   @media (max-width: 1000px) {

@@ -184,7 +184,7 @@ UA: {navigator.userAgent}</pre>
     <p class="muted">Manage user accounts on the selected camera device.</p>
 
     <div class="row gap wrap" style="margin: 8px 0;">
-      <button onclick={loadUsers} type="button" disabled={userLoading || !appState.selectedDeviceId}>
+      <button onclick={loadUsers} type="button" class="btn" disabled={userLoading || !appState.selectedDeviceId}>
         {userLoading ? 'Loading…' : 'Refresh users'}
       </button>
     </div>
@@ -207,9 +207,9 @@ UA: {navigator.userAgent}</pre>
     <div class="pw-change" style="margin-top: 12px;">
       <span class="lab">Change password</span>
       <div class="row">
-        <input type="text" bind:value={changePwUsername} placeholder="username" />
-        <input type="password" bind:value={changePwValue} placeholder="new password" />
-        <button onclick={changePassword} type="button" class="accent" disabled={!changePwUsername.trim() || !changePwValue.trim()}>Set</button>
+        <input class="input" type="text" bind:value={changePwUsername} placeholder="username" />
+        <input class="input" type="password" bind:value={changePwValue} placeholder="new password" />
+        <button onclick={changePassword} type="button" class="btn btn-primary" disabled={!changePwUsername.trim() || !changePwValue.trim()}>Set</button>
       </div>
       {#if changePwStatus}
         <p class="muted small">{changePwStatus}</p>
@@ -230,15 +230,17 @@ UA: {navigator.userAgent}</pre>
   {#if persistExpanded}
     <p class="muted">Verify that a settings change persists across a camera reboot.</p>
 
-    <div class="row gap wrap" style="margin: 8px 0;">        <input
+    <div class="row gap wrap" style="margin: 8px 0;">
+      <input
+        class="input"
         type="text"
         bind:value={persistenceEndpoint}
         placeholder="Field key (e.g. brightness, motionSensitivity)"
       />
-      <button onclick={runPersistenceCheck} type="button" class="accent" disabled={persistenceLoading || !appState.selectedDeviceId || !persistenceEndpoint.trim()}>
+      <button onclick={runPersistenceCheck} type="button" class="btn btn-primary" disabled={persistenceLoading || !appState.selectedDeviceId || !persistenceEndpoint.trim()}>
         {persistenceLoading ? 'Checking…' : 'Verify'}
       </button>
-      <button onclick={loadPersistenceResults} type="button">History</button>
+      <button onclick={loadPersistenceResults} type="button" class="btn">History</button>
     </div>
     {#if persistenceStatus}
       <p class="muted small">{persistenceStatus}</p>
@@ -269,67 +271,87 @@ UA: {navigator.userAgent}</pre>
 <style>
   .card {
     background: var(--panel);
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-soft);
     border-radius: var(--radius);
-    padding: 14px 16px;
-    margin-bottom: 14px;
+    padding: 18px 20px;
+    margin-bottom: 16px;
     min-width: 0;
     overflow: hidden;
+    box-shadow: var(--shadow-1);
   }
-  .card h3 { margin: 0 0 10px; }
-  .muted { color: var(--muted); font-size: .9rem; }
-  .small { font-size: .82rem; }
+  .card h3 { margin: 0 0 8px; color: var(--text-strong); }
+  .muted { color: var(--muted); font-size: var(--fs-md); }
+  .small { font-size: var(--fs-sm); }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .gap { gap: 10px; }
   .wrap { flex-wrap: wrap; }
-  a { color: var(--accent); }
+  a { color: var(--accent-strong); }
   .code {
-    background: #0b0d10;
-    border-radius: 8px;
-    padding: 10px;
+    background: var(--bg-deep);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
     overflow: auto;
     max-height: 400px;
     white-space: pre-wrap;
     word-break: break-word;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: .82rem;
-    border: 1px solid #ffffff12;
+    font-family: var(--font-mono);
+    font-size: var(--fs-sm);
+    border: 1px solid var(--border-cool);
+    color: var(--muted);
   }
   button {
-    background: #1a1010cc;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: #221618;
     border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    padding: 8px 14px;
     cursor: pointer;
     color: var(--text);
     font: inherit;
+    font-size: var(--fs-md);
+    font-weight: 600;
+    white-space: nowrap;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
   }
-  button:hover:not(:disabled) { border-color: #ffa33e; background: #331713; }
-  button:disabled { opacity: .45; cursor: not-allowed; }
-  button.accent {
-    background: linear-gradient(180deg, #ff7a2f, #b83a12);
-    border-color: #ffb06a; color: #fff8f2; font-weight: 600;
+  button:hover:not(:disabled) { background: #33201a; border-color: var(--accent-strong); color: var(--text-strong); }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  button.btn-primary {
+    background: linear-gradient(180deg, var(--accent-strong), var(--accent-deep));
+    border-color: #ffb06a99;
+    color: #fff8f2;
+    box-shadow: 0 2px 10px var(--accent-glow);
+  }
+  button.btn-primary:hover:not(:disabled) {
+    background: linear-gradient(180deg, #ff9a4f, #cc4416);
+    border-color: #ffc68f;
+    box-shadow: 0 3px 16px var(--accent-glow);
   }
   button.toggle {
     width: 100%;
     text-align: left;
+    justify-content: flex-start;
     background: transparent;
-    border: none;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
     font-weight: 600;
-    font-size: .95rem;
-    padding: 4px 0;
+    font-size: var(--fs-lg);
+    padding: 8px 12px;
+    color: var(--text);
   }
-  button.toggle:hover { color: #ffb06a; background: transparent; }
+  button.toggle:hover { color: var(--accent-strong); background: var(--panel-3); border-color: var(--border-faint); }
   .user-table, .persist-table {
     display: grid;
     gap: 4px;
     margin-top: 8px;
   }
   .user-row, .persist-row {
-    border: 1px solid #ff5a1f33;
-    border-radius: 6px;
+    border: 1px solid var(--border-faint);
+    border-radius: var(--radius-xs);
     padding: 6px 10px;
-    background: #0a0809;
+    background: var(--panel-2);
     display: flex;
     align-items: center;
     gap: 8px;
@@ -337,27 +359,20 @@ UA: {navigator.userAgent}</pre>
   }
   .persist-row { flex-direction: column; align-items: stretch; gap: 2px; }
   .persist-main { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .sub { color: var(--muted); font-size: .82rem; }
+  .sub { color: var(--faint); font-size: var(--fs-xs); }
   .chip {
     display: inline-block;
-    background: #2a150f;
-    border-radius: 4px;
-    padding: 2px 6px;
-    font-size: .78rem;
+    background: var(--panel-3);
+    border: 1px solid var(--border-faint);
+    border-radius: 999px;
+    padding: 1px 8px;
+    font-size: var(--fs-xs);
+    color: var(--muted);
   }
-  .chip.active { background: #1a3a1a; color: #8fdd8f; }
-  .chip.pass { background: #1a3a1a; color: #8fdd8f; }
-  .chip.fail { background: #3a1a1a; color: #dd8f8f; }
-  input[type="text"], input[type="password"] {
-    background: #0b090bcc;
-    border: 1px solid #ff5a1f55;
-    border-radius: 8px;
-    padding: 8px;
-    color: var(--text);
-    font: inherit;
-    min-width: 120px;
-    flex: 1;
-  }
-  .lab { color: var(--muted); font-size: .85rem; display: block; margin-bottom: 4px; }
-  .pw-change { border-top: 1px solid #ffffff12; padding-top: 10px; }
+  .chip.active { background: var(--ok-dim); color: var(--ok-text); }
+  .chip.pass { background: var(--ok-dim); color: var(--ok-text); }
+  .chip.fail { background: var(--bad-dim); color: var(--bad-text); }
+  .input { min-width: 120px; flex: 1; }
+  .lab { color: var(--faint); font-size: var(--fs-sm); display: block; margin-bottom: 4px; }
+  .pw-change { border-top: 1px solid var(--border-cool); padding-top: 10px; }
 </style>

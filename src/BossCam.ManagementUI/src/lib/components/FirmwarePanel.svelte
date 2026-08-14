@@ -60,12 +60,13 @@
 
   <div class="upload-row">
     <input
+      class="input"
       type="text"
       bind:value={filePath}
       placeholder="/path/to/firmware.bin on server"
       disabled={uploading}
     />
-    <button onclick={upload} type="button" class="accent" disabled={uploading || !filePath.trim()}>
+    <button onclick={upload} type="button" class="btn btn-primary" disabled={uploading || !filePath.trim()}>
       {uploading ? 'Uploading…' : 'Register firmware'}
     </button>
   </div>
@@ -101,74 +102,55 @@
 <style>
   .card {
     background: var(--panel);
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-soft);
     border-radius: var(--radius);
-    padding: 14px 16px;
-    margin-bottom: 14px;
+    padding: 18px 20px;
+    margin-bottom: 16px;
     min-width: 0;
     overflow: hidden;
+    box-shadow: var(--shadow-1);
   }
-  .card h3 { margin: 0 0 10px; }
-  .card h4 { margin: 0 0 6px; font-size: .95rem; color: var(--muted); }
-  .muted { color: var(--muted); font-size: .9rem; margin: 0; }
-  .small { font-size: .82rem; }
+  .card h3 { margin: 0 0 8px; color: var(--text-strong); }
+  .card h4 { margin: 0 0 6px; font-size: var(--fs-lg); color: var(--muted); }
+  .muted { color: var(--muted); font-size: var(--fs-md); margin: 0; }
+  .small { font-size: var(--fs-sm); }
   .upload-row {
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
     margin-top: 8px;
   }
-  .upload-row input[type="text"] {
-    flex: 1;
-    min-width: 200px;
-    background: #0b090bcc;
-    border: 1px solid #ff5a1f55;
-    border-radius: 8px;
-    padding: 8px;
-    color: var(--text);
-    font: inherit;
-  }
-  button {
-    background: #1a1010cc;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 8px 12px;
-    cursor: pointer;
-    color: var(--text);
-    font: inherit;
-    white-space: nowrap;
-  }
-  button:hover:not(:disabled) { border-color: #ffa33e; background: #331713; }
-  button:disabled { opacity: .45; cursor: not-allowed; }
-  button.accent {
-    background: linear-gradient(180deg, #ff7a2f, #b83a12);
-    border-color: #ffb06a; color: #fff8f2; font-weight: 600;
-  }
+  .upload-row .input { flex: 1; min-width: 200px; }
   .firmware-table {
     display: grid;
     gap: 6px;
     margin-top: 8px;
   }
   .firmware-row {
-    border: 1px solid #ff5a1f33;
-    border-radius: 8px;
+    border: 1px solid var(--border-faint);
+    border-radius: var(--radius-sm);
     padding: 8px 10px;
-    background: #0a0809;
+    background: var(--panel-2);
     display: grid;
     gap: 4px;
+    transition: border-color 0.15s;
   }
+  .firmware-row:hover { border-color: var(--border); }
   .fw-main {
     display: flex;
     flex-direction: column;
     gap: 2px;
   }
-  .sub { color: var(--muted); font-size: .82rem; }
+  .fw-main strong { color: var(--text); word-break: break-word; }
+  .sub { color: var(--faint); font-size: var(--fs-xs); }
   .chip {
     display: inline-block;
-    background: #2a150f;
-    border-radius: 4px;
-    padding: 2px 6px;
-    font-size: .78rem;
+    background: var(--panel-3);
+    border: 1px solid var(--border-faint);
+    border-radius: 999px;
+    padding: 1px 8px;
+    font-size: var(--fs-xs);
     margin: 2px 4px 2px 0;
+    color: var(--muted);
   }
 </style>

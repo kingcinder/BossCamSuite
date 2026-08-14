@@ -70,11 +70,11 @@
 <div class="card">
   <h3>Highlight board <span class="muted small">(SignalR push updates)</span></h3>
   <div class="row gap wrap">
-    <button onclick={prev} type="button">Prev</button>
-    <button onclick={next} type="button" class="accent">Next</button>
-    <button onclick={() => setStream('main')} type="button">Prefer Main</button>
-    <button onclick={() => setStream('sub')} type="button">Prefer Sub</button>
-    <button onclick={record} type="button">Record highlight → highlights folder</button>
+    <button onclick={prev} type="button" class="btn">◀ Prev</button>
+    <button onclick={next} type="button" class="btn btn-primary">Next ▶</button>
+    <button onclick={() => setStream('main')} type="button" class="btn btn-sm">Prefer Main</button>
+    <button onclick={() => setStream('sub')} type="button" class="btn btn-sm">Prefer Sub</button>
+    <button onclick={record} type="button" class="btn btn-sm">⏺ Record highlight</button>
   </div>
 
   {#if hlState}
@@ -109,36 +109,24 @@
 <style>
   .card {
     background: var(--panel);
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-soft);
     border-radius: var(--radius);
-    padding: 14px 16px;
-    margin-bottom: 14px;
+    padding: 18px 20px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow-1);
   }
-  .card h3 { margin: 0 0 10px; }
+  .card h3 { margin: 0 0 8px; color: var(--text-strong); }
   .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
   .gap { gap: 8px; }
   .wrap { flex-wrap: wrap; }
-  button {
-    background: #1a1010cc;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 8px 12px;
-    cursor: pointer;
-    color: var(--text);
-    font: inherit;
-  }
-  button:hover { border-color: #ffa33e; background: #331713; }
-  button.accent {
-    background: linear-gradient(180deg, #ff7a2f, #b83a12);
-    border-color: #ffb06a; color: #fff8f2; font-weight: 600;
-  }
   .banner {
     margin: 12px 0;
     padding: 10px 12px;
-    border-radius: 8px;
-    background: #2a150f;
-    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--panel-3);
+    border: 1px solid var(--border-soft);
     word-break: break-word;
+    font-size: var(--fs-md);
   }
   .tiles {
     display: grid;
@@ -146,15 +134,16 @@
     gap: 10px;
   }
   .tile {
-    border: 1px solid #ff5a1f44;
-    border-radius: 10px;
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-sm);
     padding: 10px;
-    background: #100c0d;
+    background: var(--panel-2);
     cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
   }
-  .tile:hover { border-color: var(--accent); background: #2a130f; }
-  .tile.selected { border-color: var(--accent); }
-  .sub { color: var(--muted); font-size: .82rem; }
-  .muted { color: var(--muted); font-size: .9rem; }
-  .small { font-size: .82rem; }
+  .tile:hover { border-color: var(--accent-strong); background: var(--panel-3); box-shadow: var(--shadow-1); }
+  .tile.selected { border-color: var(--accent-strong); box-shadow: inset 0 0 0 1px var(--accent-glow); }
+  .sub { color: var(--faint); font-size: var(--fs-xs); }
+  .muted { color: var(--muted); font-size: var(--fs-md); }
+  .small { font-size: var(--fs-sm); }
 </style>

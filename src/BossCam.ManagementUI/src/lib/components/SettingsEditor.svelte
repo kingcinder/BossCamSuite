@@ -68,19 +68,26 @@
   .form-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    gap: 12px;
+    gap: 14px;
   }
   .form-item { display: grid; gap: 6px; min-width: 0; }
-  .form-item label { color: var(--muted); font-size: .85rem; word-break: break-word; }
-  .form-item input[type="range"] { width: 100%; }
-  .form-item .val { font-variant-numeric: tabular-nums; color: #ffe8dd; }
+  .form-item label { color: var(--faint); font-size: var(--fs-sm); word-break: break-word; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .form-item input[type="range"] { width: 100%; height: 6px; accent-color: var(--accent-strong); cursor: pointer; }
+  .form-item .val { font-variant-numeric: tabular-nums; color: var(--accent-strong); font-weight: 700; font-size: var(--fs-md); }
   .form-item input[type="text"] {
+    width: 100%;
     background: #0b090bcc;
-    border: 1px solid #ff5a1f55;
-    border-radius: 8px;
-    padding: 8px;
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-sm);
+    padding: 8px 11px;
     color: var(--text);
     font: inherit;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
   }
-  .muted { color: var(--muted); font-size: .9rem; }
+  .form-item input[type="text"]:focus {
+    outline: none;
+    border-color: var(--accent-strong);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+  }
+  .muted { color: var(--muted); font-size: var(--fs-md); }
 </style>

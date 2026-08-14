@@ -9,6 +9,7 @@
   let quickPass = $state('');
   let connected = $state(false);
   let scanEnabled = $state(false);
+  let addOpen = $state(false);
 
   // Poll the SignalR connection state every 2 s for the indicator dot.
   // The singleton BossCamSignalR.connected is a plain boolean set by
@@ -109,6 +110,7 @@
       appState.showToast('Camera added: ' + quickIp.trim());
       quickIp = '';
       quickPass = '';
+      addOpen = false;
     } catch (e: unknown) {
       appState.showToast(String(e), false);
     }
@@ -118,28 +120,30 @@
 <aside class="sidebar">
   <div class="brand">
     <div class="logo">BC</div>
-    <div>
+    <div class="brand-text">
       <h1>BossCamSuite</h1>
-      <p class="muted">Multi-camera operator console</p>
+      <p class="muted">Operator console</p>
     </div>
+    <span class="conn-pill" class:live={connected} class:dead={!connected} data-tip={connected ? 'Live updates active' : 'HTTP-only mode — live updates paused'}>
+      <span class="dot" class:ok={connected} class:bad={!connected}></span>
+      {connected ? 'LIVE' : 'HTTP'}
+    </span>
   </div>
 
-  <div class="toolbar">
-    <button onclick={discover} type="button" disabled={!connected && scanEnabled}>Discover</button>
-    <button onclick={scanSubnet} type="button" disabled={scanEnabled}>
-      {scanEnabled ? 'Scanning…' : 'Scan subnet'}
+  <div class="actions">
+    <button class="btn btn-sm" onclick={discover} type="button" data-tip="Multicast discovery (D)">🔍 Discover</button>
+    <button class="btn btn-sm" onclick={scanSubnet} type="button" disabled={scanEnabled} data-tip="Force a full subnet sweep">
+      {scanEnabled ? 'Scanning…' : '🌐 Scan subnet'}
     </button>
-    <button onclick={refresh} type="button">Refresh</button>
-    <button onclick={registerAegon} type="button" class="accent">Register LAN</button>
+    <button class="btn btn-sm btn-ghost" onclick={refresh} type="button" data-tip="Reload device list">↻</button>
+    <button class="btn btn-sm btn-ghost" onclick={registerAegon} type="button" data-tip="Register Aegon/Lorex LAN cameras">Register LAN</button>
   </div>
 
   <!-- Discovery progress indicator -->
   {#if appState.discoveryStatus && !appState.discoveryStatus.complete}
     <div class="scan-progress">
-      <div class="scan-bar">
-        <div class="scan-fill"></div>
-      </div>
-      <p class="muted small">
+      <div class="scan-bar"><div class="scan-fill"></div></div>
+      <p class="faint small">
         Scanning {appState.discoveryStatus.provider}… {appState.discoveryStatus.devicesFound} found
         {#if appState.discoveryStatus.error}
           · error: {appState.discoveryStatus.error}
@@ -148,99 +152,88 @@
     </div>
   {/if}
 
-  <label class="field">
-    <span>Quick add IP</span>
-    <div class="row">
-      <input bind:value={quickIp} placeholder="10.0.0.170" />
-      <input bind:value={quickPass} placeholder="password" type="password" />
-      <button onclick={addCam} type="button">Add</button>
+  <button class="add-toggle" type="button" onclick={() => addOpen = !addOpen} aria-expanded={addOpen}>
+    <span>{addOpen ? '▾' : '▸'}</span>
+    Quick add camera
+    <span class="kbd">IP</span>
+  </button>
+  {#if addOpen}
+    <div class="quick-add">
+      <input class="input" bind:value={quickIp} placeholder="10.0.0.170" aria-label="Camera IP address" />
+      <input class="input" bind:value={quickPass} placeholder="password" type="password" aria-label="Camera password" />
+      <button class="btn btn-primary" onclick={addCam} type="button">Add</button>
     </div>
-  </label>
+  {/if}
 
   <DeviceList devices={appState.devices} appState={appState} />
 
-  <div class="sidebar-foot muted">
-    <span class="signal-dot" class:live={connected} class:dead={!connected}></span>
-    {connected ? 'Live' : 'HTTP-only'}
-    · {appState.healthInfo}
+  <div class="sidebar-foot faint">
+    <span class="dot" class:ok={connected} class:bad={!connected}></span>
+    <span class="ellipsis">{appState.healthInfo}</span>
     {#if !appState.offlineMode && appState.internetConnectivity !== 'Unknown'}
-      · WAN {appState.internetConnectivity.toLowerCase()}
+      <span class="badge" class:ok={appState.internetConnectivity === 'Online'} class:warn={appState.internetConnectivity === 'Offline'}>WAN {appState.internetConnectivity.toLowerCase()}</span>
+    {/if}
+    {#if appState.offlineMode}
+      <span class="badge warn" data-tip="LAN-only mode — cloud paths disabled; cameras keep working.">⚡ LAN-only</span>
     {/if}
   </div>
 </aside>
 
 <style>
   .sidebar {
-    border-right: 1px solid var(--border);
-    background: var(--panel);
-    padding: 16px;
+    border-right: 1px solid var(--border-soft);
+    background: linear-gradient(180deg, var(--panel-solid), #0e0a0b);
+    padding: 16px 14px;
     display: flex;
     flex-direction: column;
     gap: 12px;
     min-width: 0;
-    overflow: auto;
+    overflow: hidden;
     max-height: 100vh;
   }
-  .brand { display: flex; gap: 12px; align-items: center; }
-  .brand h1 { margin: 0; font-size: 1.15rem; color: #ffe8dd; }
+  .brand { display: flex; gap: 10px; align-items: center; }
+  .brand-text { flex: 1; min-width: 0; }
+  .brand h1 { margin: 0; font-size: 1.12rem; color: var(--text-strong); letter-spacing: 0.02em; line-height: 1.25; }
+  .brand .muted { font-size: var(--fs-xs); }
   .logo {
-    width: 44px; height: 44px; border-radius: 12px;
+    width: 42px; height: 42px; border-radius: 12px;
     display: grid; place-items: center;
-    background: linear-gradient(145deg, #ff6a1f, #5a1408);
+    background: linear-gradient(145deg, var(--accent-strong), var(--accent-deep));
     font-weight: 800;
+    font-size: 1.05rem;
+    color: #fff8f2;
     border: 1px solid #ff9a4a66;
-  }
-  .muted { color: var(--muted); font-size: .9rem; margin: 0; }
-  .toolbar, .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-  .field {
-    display: grid; gap: 6px; font-size: .85rem; color: var(--muted);
-  }
-  .field input {
-    flex: 1;
-    min-width: 0;
-    background: #0b090bcc;
-    border: 1px solid #ff5a1f55;
-    border-radius: 8px;
-    padding: 8px;
-    color: var(--text);
-    font: inherit;
-  }
-  button {
-    background: #1a1010cc;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 8px 12px;
-    cursor: pointer;
-    color: var(--text);
-    font: inherit;
-  }
-  button:hover:not(:disabled) { border-color: #ffa33e; background: #331713; }
-  button.accent {
-    background: linear-gradient(180deg, #ff7a2f, #b83a12);
-    border-color: #ffb06a; color: #fff8f2; font-weight: 600;
-  }
-  .sidebar-foot {
-    margin-top: auto;
-    padding-top: 8px;
-    border-top: 1px solid #ffffff14;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .signal-dot {
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
+    box-shadow: 0 2px 12px var(--accent-glow);
     flex-shrink: 0;
   }
-  .signal-dot.live { background: #3ecf8e; box-shadow: 0 0 6px #3ecf8e88; }
-  .signal-dot.dead { background: #ff6b6b; }
+  .conn-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    padding: 3px 7px;
+    border-radius: 999px;
+    border: 1px solid var(--border-cool);
+    color: var(--faint);
+    cursor: help;
+    flex-shrink: 0;
+  }
+  .conn-pill.live { color: var(--ok-text); border-color: #3ecf8e44; background: #0f2e1a66; }
+  .conn-pill.dead { color: var(--bad-text); border-color: #ff6b6b33; background: #2e161666; }
+
+  .actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto auto;
+    gap: 6px;
+  }
+  .actions .btn { padding: 7px 8px; font-size: var(--fs-sm); }
 
   .scan-progress {
-    background: #0e0a0b;
-    border: 1px solid #ff5a1f33;
-    border-radius: 8px;
+    background: var(--panel-2);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-sm);
     padding: 8px 10px;
   }
   .scan-bar {
@@ -248,12 +241,12 @@
     background: #2a150f;
     border-radius: 2px;
     overflow: hidden;
-    margin-bottom: 4px;
+    margin-bottom: 5px;
   }
   .scan-fill {
     height: 100%;
     width: 100%;
-    background: linear-gradient(90deg, #ff7a2f, #ffb06a, #ff7a2f);
+    background: linear-gradient(90deg, var(--accent-strong), #ffb06a, var(--accent-strong));
     background-size: 200% 100%;
     animation: shimmer 1.5s infinite;
     border-radius: 2px;
@@ -261,5 +254,51 @@
   @keyframes shimmer {
     0% { background-position: -200% 0; }
     100% { background-position: 200% 0; }
+  }
+
+  .add-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: transparent;
+    border: 1px dashed var(--border-soft);
+    border-radius: var(--radius-sm);
+    padding: 7px 10px;
+    color: var(--muted);
+    font-weight: 600;
+    font-size: var(--fs-sm);
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 0.15s, background 0.15s, color 0.15s;
+  }
+  .add-toggle:hover { border-color: var(--accent-strong); color: var(--text); background: var(--panel-3); }
+  .add-toggle .kbd { margin-left: auto; }
+
+  .quick-add {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 6px;
+    padding: 10px;
+    background: var(--panel-2);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-sm);
+    animation: tip-in 0.15s ease-out;
+  }
+  .quick-add .input { padding: 7px 10px; font-size: var(--fs-sm); }
+
+  .sidebar-foot {
+    margin-top: auto;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-cool);
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: var(--fs-xs);
+    flex-wrap: wrap;
+  }
+  .sidebar-foot .ellipsis { max-width: 100%; }
+
+  @media (max-width: 1000px) {
+    .sidebar { max-height: 48vh; }
   }
 </style>

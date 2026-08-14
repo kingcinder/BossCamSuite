@@ -271,8 +271,8 @@
     </div>
   </div>
   <div class="row" style="margin-top:12px">
-    <button onclick={savePaths} type="button" class="accent">Save folders</button>
-    <button onclick={promptAll} type="button">Prompt all three…</button>
+    <button onclick={savePaths} type="button" class="btn btn-primary">Save folders</button>
+    <button onclick={promptAll} type="button" class="btn">Prompt all three…</button>
   </div>
   <p class="muted small">{pathStatus}</p>
 </div>
@@ -287,10 +287,10 @@
   </h3>
   <p class="muted">Continuous record uses the high-res main stream into the continuous folder.</p>
   <div class="row gap wrap" style="margin-bottom:12px">
-    <button onclick={startSelectedRec} type="button" class="accent" disabled={!appState.selectedDevice}>Start selected</button>
-    <button onclick={startAllRec} type="button">Start all cameras</button>
-    <button onclick={stopAllRec} type="button" disabled={runningJobs.length === 0}>Stop all</button>
-    <button onclick={refreshIndex} type="button">Refresh index</button>
+    <button onclick={startSelectedRec} type="button" class="btn btn-primary" disabled={!appState.selectedDevice}>Start selected</button>
+    <button onclick={startAllRec} type="button" class="btn">Start all cameras</button>
+    <button onclick={stopAllRec} type="button" class="btn btn-danger" disabled={runningJobs.length === 0}>Stop all</button>
+    <button onclick={refreshIndex} type="button" class="btn">Refresh index</button>
   </div>
 
   {#if runningJobs.length > 0}
@@ -323,7 +323,7 @@
           <button
             onclick={() => stopJob(job.id)}
             type="button"
-            class="stop-btn"
+            class="btn btn-sm btn-danger"
             disabled={stopLoading === job.id}
           >
             {stopLoading === job.id ? '⏳' : '⏹ Stop'}
@@ -396,7 +396,7 @@
     </div>
   </div>
   <div class="row" style="margin-top:12px">
-    <button onclick={exportClip} type="button" class="accent" disabled={exportLoading}>
+    <button onclick={exportClip} type="button" class="btn btn-primary" disabled={exportLoading}>
       {exportLoading ? '⏳ Exporting…' : '⬇ Export clip'}
     </button>
   </div>
@@ -411,69 +411,52 @@
 <style>
   .card {
     background: var(--panel);
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-soft);
     border-radius: var(--radius);
-    padding: 14px 16px;
-    margin-bottom: 14px;
+    padding: 18px 20px;
+    margin-bottom: 16px;
     min-width: 0;
     overflow: hidden;
+    box-shadow: var(--shadow-1);
   }
-  .card h3, .card h4 { margin: 0 0 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .muted { color: var(--muted); font-size: .9rem; margin: 0; }
-  .small { font-size: .82rem; }
-  .sub { color: var(--muted); font-size: .78rem; }
+  .card h3, .card h4 { margin: 0 0 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .card h3 { color: var(--text-strong); }
+  .muted { color: var(--muted); font-size: var(--fs-md); margin: 0; }
+  .small { font-size: var(--fs-sm); }
+  .sub { color: var(--faint); font-size: var(--fs-xs); }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .gap { gap: 10px; }
   .wrap { flex-wrap: wrap; }
   .form-grid { display: grid; gap: 12px; }
   .paths-grid { grid-template-columns: 1fr; }
   .form-item { display: grid; gap: 6px; min-width: 0; }
-  .form-item label { color: var(--muted); font-size: .85rem; }
-  .form-item input[type="text"] {
-    flex: 1;
-    min-width: 0;
+  .form-item label { color: var(--faint); font-size: var(--fs-sm); }
+  .form-item input[type="text"], .form-item input[type="datetime-local"], select {
     background: #0b090bcc;
-    border: 1px solid #ff5a1f55;
-    border-radius: 8px;
-    padding: 8px;
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-sm);
+    padding: 8px 11px;
     color: var(--text);
     font: inherit;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
   }
-  button {
-    background: #1a1010cc;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 8px 12px;
-    cursor: pointer;
-    color: var(--text);
-    font: inherit;
-  }
-  button:hover:not(:disabled) { border-color: #ffa33e; background: #331713; }
-  button:disabled { opacity: .45; cursor: not-allowed; }
-  button.accent {
-    background: linear-gradient(180deg, #ff7a2f, #b83a12);
-    border-color: #ffb06a; color: #fff8f2; font-weight: 600;
+  .form-item input[type="text"]:focus, .form-item input[type="datetime-local"]:focus, select:focus {
+    outline: none;
+    border-color: var(--accent-strong);
+    box-shadow: 0 0 0 3px var(--accent-glow);
   }
   .code {
-    background: #0b0d10;
-    border-radius: 8px;
-    padding: 10px;
+    background: var(--bg-deep);
+    border: 1px solid var(--border-cool);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
     overflow: auto;
     max-height: 280px;
     white-space: pre-wrap;
     word-break: break-word;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: .82rem;
-    border: 1px solid #ffffff12;
-  }
-  .badge-live {
-    display: inline-block;
-    background: #1a3a1a;
-    color: #3ecf8e;
-    font-size: .75rem;
-    font-weight: 600;
-    padding: 1px 8px;
-    border-radius: 10px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-sm);
+    color: var(--muted);
   }
   .job-list {
     display: grid;
@@ -485,14 +468,16 @@
     align-items: center;
     gap: 8px;
     padding: 10px 12px;
-    border-radius: 8px;
-    border: 1px solid #ff5a1f33;
-    background: #0a0809;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-faint);
+    background: var(--panel-2);
     flex-wrap: wrap;
+    transition: border-color 0.15s ease;
   }
+  .job-row:hover { border-color: var(--border); }
   .job-row.live {
     border-color: #3ecf8e44;
-    background: #0a120a;
+    background: linear-gradient(180deg, #0a120a, #0d1010);
   }
   .job-row.stopped {
     opacity: 0.65;
@@ -526,23 +511,24 @@
     flex-wrap: wrap;
   }
   .chip {
-    background: #1a1010;
-    border-radius: 4px;
-    padding: 2px 6px;
+    background: #201819;
+    border: 1px solid var(--border-faint);
+    border-radius: 5px;
+    padding: 2px 7px;
     font-size: .72rem;
-    color: var(--muted);
+    color: var(--faint);
   }
   .chip.degraded {
-    background: #3a2a1a;
-    color: #ddcf8f;
+    background: var(--warn-dim);
+    color: var(--warn-text);
     border: 1px solid #cf9e3e44;
   }
   .degraded-badge {
-    background: #3a2a1a;
-    color: #ddcf8f;
+    background: var(--warn-dim);
+    color: var(--warn-text);
     font-size: .72rem;
     padding: 2px 8px;
-    border-radius: 10px;
+    border-radius: 999px;
     border: 1px solid #cf9e3e55;
     cursor: help;
   }
@@ -557,63 +543,43 @@
   .download-link {
     display: inline-block;
     margin-top: 8px;
-    color: #3ecf8e;
-    font-size: .85rem;
+    color: var(--ok-text);
+    font-size: var(--fs-md);
     text-decoration: none;
     border: 1px solid #3ecf8e44;
-    border-radius: 6px;
+    border-radius: var(--radius-xs);
     padding: 4px 10px;
+    transition: border-color 0.15s, background 0.15s;
   }
   .download-link:hover {
-    border-color: #3ecf8e;
-    background: #1a3a1a;
+    border-color: var(--ok);
+    background: var(--ok-dim);
   }
   .export-ok {
-    color: #8fdd8f;
+    color: var(--ok-text);
   }
-  select {
-    background: #0b090bcc;
-    border: 1px solid #ff5a1f55;
-    border-radius: 8px;
-    padding: 8px;
-    color: var(--text);
-    font: inherit;
-    min-width: 200px;
-  }
-  .form-item input[type="datetime-local"] {
-    background: #0b090bcc;
-    border: 1px solid #ff5a1f55;
-    border-radius: 8px;
-    padding: 8px;
-    color: var(--text);
-    font: inherit;
-    color-scheme: dark;
-  }
-  .form-item input[type="text"] {
-    flex: 1;
-    min-width: 0;
-    background: #0b090bcc;
-    border: 1px solid #ff5a1f55;
-    border-radius: 8px;
-    padding: 8px;
-    color: var(--text);
-    font: inherit;
-  }
-  .stop-btn {
-    padding: 4px 10px;
-    font-size: .82rem;
-    border-color: #cf3e3e66;
-    color: #ff8f8f;
-  }
-  .stop-btn:hover:not(:disabled) { border-color: #cf3e3e; background: #3a1a1a; }
+  select { min-width: 200px; }
+  .form-item input[type="text"], .form-item input[type="datetime-local"] { color-scheme: dark; }
   .empty-rec {
     display: grid;
     place-items: center;
     min-height: 80px;
-    border: 2px dashed #ff5a1f33;
-    border-radius: 8px;
+    border: 2px dashed var(--border-faint);
+    border-radius: var(--radius-sm);
     margin-bottom: 12px;
     padding: 16px;
+    color: var(--faint);
+  }
+  .empty-rec .muted { color: var(--faint); }
+  .badge-live {
+    display: inline-block;
+    background: var(--ok-dim);
+    color: var(--ok-text);
+    font-size: .75rem;
+    font-weight: 700;
+    padding: 1px 9px;
+    border-radius: 999px;
+    border: 1px solid #3ecf8e44;
   }
   .stopped-section {
     margin: 8px 0;

@@ -107,13 +107,11 @@
       case 'h': case 'H': // H = Highlights
         appState.activeTab = 'highlights';
         break;
+      case 'x': case 'X': // X = Recovery
+        appState.activeTab = 'recovery';
+        break;
       case 'a': case 'A': // A = Advanced
         appState.activeTab = 'advanced';
-        break;
-      case 'x': case 'X': // X = Firmware (only from Advanced tab)
-        if (appState.activeTab === 'advanced') {
-          // firmware section is inside advanced
-        }
         break;
     }
   }
@@ -188,6 +186,44 @@
     document.dispatchEvent(new CustomEvent('bosscam:save-trigger', { detail: { tab: appState.activeTab } }));
   }
 
+  // ── Auto-record on launch ──────────────────────────────────
+  // Open on the Live Wall with every camera streaming, and make sure
+  // the fleet is actually recording: start-all is idempotent
+  // (RecordingService.StartAsync dedups by profile), so this never
+  // double-starts an active job — it only ensures each camera has one.
+  async function ensureFleetRecording() {
+    // 1. Render current recording state instantly (tiles + status strip).
+    try {
+      appState.recordingJobs = await api.recordingJobs();
+    } catch {
+      // Non-fatal: tiles fall back to their per-tile Record button.
+    }
+
+    // 2. Ensure every camera is recording (idempotent; can take tens of
+    //    seconds server-side while unreachable cameras are probed).
+    let startAllOk = false;
+    try {
+      await api.recordingStartAll();
+      startAllOk = true;
+    } catch {
+      // Non-fatal: the operator can start recording from the Record tab.
+    }
+
+    // 3. Refresh so tiles flip to REC once start-all settles.
+    try {
+      appState.recordingJobs = await api.recordingJobs();
+    } catch {
+      // Non-fatal.
+    }
+
+    const active = appState.recordingJobs.filter(j => j.isRunning).length;
+    if (startAllOk && active > 0) {
+      appState.showToast(
+        `${active} camera${active === 1 ? '' : 's'} recording — fleet auto-start on`
+      );
+    }
+  }
+
   onMount(() => {
     // Start async initialization without making onMount itself async
     (async () => {
@@ -221,6 +257,11 @@
       // Connect to SignalR for real-time push events.
       // If connection fails, the SPA degrades gracefully to HTTP-only mode.
       signalR.connect(appState);
+
+      // Open on the Live Wall (all cameras streaming at once) and
+      // guarantee continuous recording across the fleet.
+      appState.activeTab = 'viewall';
+      void ensureFleetRecording();
     })();
 
     document.addEventListener('bosscam:discover', () => {
@@ -268,7 +309,7 @@
   <main class="main">
     <TopBar appState={appState} />
     <Tabs appState={appState} />
-
+    <div class="tab-scroll">
     {#if appState.activeTab === 'viewall'}
       <ViewGrid appState={appState} />
     {/if}
@@ -349,6 +390,7 @@
         <FirmwarePanel {appState} />
       </section>
     {/if}
+    </div>
   </main>
 </div>
 
@@ -357,58 +399,60 @@
 <style>
   #app {
     display: grid;
-    grid-template-columns: minmax(240px, 300px) 1fr;
+    grid-template-columns: minmax(248px, 300px) 1fr;
     min-height: 100vh;
     background:
-      radial-gradient(1000px 600px at 100% 0%, #3a1208aa, transparent 60%),
-      linear-gradient(160deg, #0a0708 0%, #050506 55%, #120a0a 100%);
+      radial-gradient(1100px 640px at 100% -10%, rgba(255, 106, 31, 0.10), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, rgba(255, 106, 31, 0.06), transparent 55%),
+      linear-gradient(160deg, #0d090a 0%, #050506 55%, #110a0b 100%);
+    background-attachment: fixed;
   }
   .main {
     min-width: 0;
     display: flex;
     flex-direction: column;
-    overflow: auto;
-    padding: 16px 18px 28px;
+    overflow: hidden;
+    padding: 18px 20px 28px;
     max-height: 100vh;
   }
-  .panel { display: block; }
-  .card {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 14px 16px;
-    margin-bottom: 14px;
-    min-width: 0;
-    overflow: hidden;
+  .tab-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 2px 4px 24px 2px;
+    scroll-behavior: smooth;
   }
-  .card h3 { margin: 0 0 10px; }
+  .panel { display: block; }
   .grid-2 {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 14px;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 16px;
   }
   .snap-wrap {
-    min-height: 220px;
-    background: #0a0a0a;
-    border-radius: 10px;
+    min-height: 240px;
+    background: var(--bg-deep);
+    border-radius: var(--radius);
     overflow: hidden;
     display: grid;
     place-items: center;
+    border: 1px solid var(--border-faint);
   }
   .snap-wrap img {
     max-width: 100%;
-    max-height: 420px;
+    max-height: 440px;
     object-fit: contain;
   }
-  .kv { display: grid; grid-template-columns: 140px 1fr; gap: 6px 10px; margin: 0 0 14px; }
-  :global(.kv dt) { color: var(--muted); }
-  :global(.kv dd) { margin: 0; word-break: break-word; }
+  .kv { display: grid; grid-template-columns: 150px 1fr; gap: 6px 12px; margin: 0 0 16px; }
+  :global(.kv dt) { color: var(--faint); font-size: var(--fs-sm); }
+  :global(.kv dd) { margin: 0; word-break: break-word; font-size: var(--fs-md); }
   .plain { margin: 0; padding-left: 18px; }
-  :global(.plain li) { margin: 4px 0; word-break: break-all; }
-  .muted { color: var(--muted); font-size: .9rem; margin: 0; }
+  :global(.plain li) { margin: 4px 0; word-break: break-all; color: var(--muted); font-size: var(--fs-sm); }
+  .muted { color: var(--muted); font-size: var(--fs-md); margin: 0; }
 
   @media (max-width: 1000px) {
     #app { grid-template-columns: 1fr; }
-    .main { max-height: 64vh; }
+    .main { max-height: 100vh; }
+    .tab-scroll { max-height: none; }
   }
 </style>

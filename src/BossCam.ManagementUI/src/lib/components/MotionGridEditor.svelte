@@ -155,17 +155,17 @@
   <p class="muted small">Interactive 32×24 motion detection grid (WPF equivalent). Click/toggle cells to define detection regions. Hold and drag to paint.</p>
 
   <div class="toolbar row gap wrap">
-    <button onclick={loadGrid} type="button" disabled={isLoading}>Reload</button>
-    <button onclick={fillAll} type="button" disabled={!gridData || isLoading}>Fill all</button>
-    <button onclick={clearAll} type="button" disabled={!gridData || isLoading}>Clear all</button>
-    <button onclick={invertAll} type="button" disabled={!gridData || isLoading}>Invert</button>
+    <button onclick={loadGrid} type="button" class="btn btn-sm" disabled={isLoading}>Reload</button>
+    <button onclick={fillAll} type="button" class="btn btn-sm" disabled={!gridData || isLoading}>Fill all</button>
+    <button onclick={clearAll} type="button" class="btn btn-sm" disabled={!gridData || isLoading}>Clear all</button>
+    <button onclick={invertAll} type="button" class="btn btn-sm" disabled={!gridData || isLoading}>Invert</button>
 
     <label class="brush-toggle">
       <input type="checkbox" checked={brushMode === 'paint'} onchange={() => brushMode = brushMode === 'paint' ? 'erase' : 'paint'} />
       <span class="chip">{brushMode === 'paint' ? '🖌️ Paint' : '🧹 Erase'}</span>
     </label>
 
-    <button onclick={saveGrid} type="button" class="accent" disabled={!isDirty || isLoading}>
+    <button onclick={saveGrid} type="button" class="btn btn-primary btn-sm" disabled={!isDirty || isLoading}>
       {isLoading ? 'Saving…' : 'Save grid'}
     </button>
   </div>
@@ -203,16 +203,17 @@
 <style>
   .motion-grid-card {
     background: var(--panel);
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-soft);
     border-radius: var(--radius);
-    padding: 14px 16px;
-    margin-bottom: 14px;
+    padding: 18px 20px;
+    margin-bottom: 16px;
     min-width: 0;
     overflow: hidden;
+    box-shadow: var(--shadow-1);
   }
-  .motion-grid-card h3 { margin: 0 0 10px; }
-  .muted { color: var(--muted); font-size: .9rem; margin: 0; }
-  .small { font-size: .82rem; }
+  .motion-grid-card h3 { margin: 0 0 8px; color: var(--text-strong); }
+  .muted { color: var(--muted); font-size: var(--fs-md); margin: 0; }
+  .small { font-size: var(--fs-sm); }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .gap { gap: 10px; }
   .wrap { flex-wrap: wrap; }
@@ -220,46 +221,33 @@
   .toolbar {
     margin-bottom: 10px;
     background: #0b090b99;
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     padding: 8px;
-  }
-  button {
-    background: #1a1010cc;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 6px 10px;
-    cursor: pointer;
-    color: var(--text);
-    font: inherit;
-    font-size: .85rem;
-  }
-  button:hover:not(:disabled) { border-color: #ffa33e; background: #331713; }
-  button:disabled { opacity: .45; cursor: not-allowed; }
-  button.accent {
-    background: linear-gradient(180deg, #ff7a2f, #b83a12);
-    border-color: #ffb06a; color: #fff8f2; font-weight: 600;
   }
   .brush-toggle {
     display: inline-flex;
     align-items: center;
     gap: 4px;
     cursor: pointer;
-    font-size: .85rem;
+    font-size: var(--fs-sm);
+    color: var(--muted);
   }
   .chip {
-    background: #2a150f;
-    border-radius: 4px;
+    background: var(--panel-3);
+    border: 1px solid var(--border-faint);
+    border-radius: 5px;
     padding: 2px 8px;
-    font-size: .82rem;
+    font-size: var(--fs-sm);
+    color: var(--text);
   }
 
   .grid-wrap {
     overflow: auto;
     max-width: 100%;
     max-height: 520px;
-    border: 1px solid #ff5a1f33;
-    border-radius: 8px;
-    background: #050506;
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-sm);
+    background: var(--bg-deep);
     user-select: none;
   }
   .grid {
@@ -278,13 +266,13 @@
     transition: background 50ms, border-color 150ms;
   }
   .cell:hover {
-    border-color: #ffa33e88;
+    border-color: var(--accent-strong);
     background: #2a1a14;
   }
   .cell.active {
-    background: #ff6a1f;
+    background: var(--accent-strong);
     border-color: #ffb06a66;
-    box-shadow: 0 0 4px #ff6a1f44;
+    box-shadow: 0 0 4px var(--accent-glow);
   }
   .cell.active:hover {
     background: #ff8938;
