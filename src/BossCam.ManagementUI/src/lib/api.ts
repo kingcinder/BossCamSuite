@@ -60,6 +60,16 @@ export const api = {
   /** GET /api/devices */
   devices: () => request<DeviceIdentity[]>('/api/devices'),
 
+  /** GET /api/devices/stars — ids of cameras pinned to the landing page (server-side, mirrors desktop) */
+  stars: () => request<{ deviceIds: string[] }>('/api/devices/stars'),
+
+  /** PUT /api/devices/{id}/star — pin/unpin a camera to the landing page (server-side) */
+  setStar: (id: string, starred: boolean) =>
+    request<{ deviceId: string; starred: boolean }>(`/api/devices/${id}/star`, {
+      method: 'PUT',
+      body: JSON.stringify({ starred }),
+    }),
+
   /** POST /api/devices/discover */
   discover: () => request<DeviceIdentity[]>('/api/devices/discover', { method: 'POST' }),
 

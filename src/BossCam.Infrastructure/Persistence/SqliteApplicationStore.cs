@@ -66,7 +66,8 @@ public sealed class SqliteApplicationStore : IApplicationStore
                 "CREATE TABLE IF NOT EXISTS image_writable_test_sets (device_id TEXT PRIMARY KEY, firmware_fingerprint TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL)",
                 "CREATE TABLE IF NOT EXISTS grouped_apply_profiles (profile_key TEXT PRIMARY KEY, device_id TEXT NOT NULL, firmware_fingerprint TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL)",
                 "CREATE TABLE IF NOT EXISTS grouped_retest_results (result_key TEXT PRIMARY KEY, device_id TEXT NOT NULL, firmware_fingerprint TEXT NOT NULL, payload TEXT NOT NULL, captured_at TEXT NOT NULL)",
-                "CREATE TABLE IF NOT EXISTS device_connectivity_snapshots (device_id TEXT PRIMARY KEY, payload TEXT NOT NULL, last_checked_at TEXT NOT NULL)"
+                "CREATE TABLE IF NOT EXISTS device_connectivity_snapshots (device_id TEXT PRIMARY KEY, payload TEXT NOT NULL, last_checked_at TEXT NOT NULL)",
+                "CREATE TABLE IF NOT EXISTS device_stars (device_id TEXT PRIMARY KEY, starred INTEGER NOT NULL, updated_at TEXT NOT NULL)"
             };
 
             foreach (var text in commands)
@@ -879,6 +880,53 @@ public sealed class SqliteApplicationStore : IApplicationStore
             "SELECT payload FROM device_connectivity_snapshots ORDER BY last_checked_at DESC",
             null,
             cancellationToken);
+
+    public async Task<IReadOnlyCollection<Guid>> GetStarredDeviceIdsAsync(CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            await using var connection = OpenConnection();
+            await connection.OpenAsync(cancellationToken);
+            await using var command = connection.CreateCommand();
+            command.CommandText = "SELECT device_id FROM device_stars WHERE starred = 1";
+            var ids = new List<Guid>();
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                if (Guid.TryParse(reader.GetString(0), out var id))
+                {
+                    ids.Add(id);
+                }
+            }
+            return ids;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task SetDeviceStarredAsync(Guid deviceId, bool starred, CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            await using var connection = OpenConnection();
+            await connection.OpenAsync(cancellationToken);
+            await using var command = connection.CreateCommand();
+            command.CommandText = starred
+                ? "INSERT INTO device_stars (device_id, starred, updated_at) VALUES ($id, 1, $updated) ON CONFLICT(device_id) DO UPDATE SET starred = excluded.starred, updated_at = excluded.updated_at"
+                : "DELETE FROM device_stars WHERE device_id = $id";
+            command.Parameters.AddWithValue("$id", deviceId.ToString());
+            command.Parameters.AddWithValue("$updated", DateTimeOffset.UtcNow.ToString("O"));
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
 
     private async Task UpsertPayloadAsync<T>(StoreTable table, string key, T payload, DateTimeOffset timestamp, CancellationToken cancellationToken, string? deviceId = null)
     {

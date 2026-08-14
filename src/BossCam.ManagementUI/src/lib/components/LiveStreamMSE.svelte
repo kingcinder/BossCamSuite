@@ -4,7 +4,12 @@
   import { AppState } from '../store.svelte';
   import { api } from '../api';
 
-  let { device, appState }: { device: DeviceIdentity; appState: AppState } = $props();
+  let { device, appState, muted = $bindable(true), volume = $bindable(1) }: {
+    device: DeviceIdentity;
+    appState: AppState;
+    muted?: boolean;
+    volume?: number;
+  } = $props();
 
   let videoEl: HTMLVideoElement | undefined = $state();
   let fallbackMode = $state<'mse' | 'mjpeg' | 'snapshot'>('mse');
@@ -52,8 +57,11 @@
   }
 
   function mimeFor(mode: LiveMediaMode): string | null {
-    if (mode === 'HevcFmp4') return 'video/mp4; codecs="hvc1.1.6.L93.B0"';
-    if (mode === 'H264Fmp4') return 'video/mp4; codecs="avc1.42E01E"';
+    // Audio is now carried in the live fMP4/TS pipes (transcoded to AAC server-side),
+    // so the MSE codec string must declare the audio track or the browser rejects
+    // the init segment. Declaring a superset is safe when a source is video-only.
+    if (mode === 'HevcFmp4') return 'video/mp4; codecs="hvc1.1.6.L93.B0, mp4a.40.2"';
+    if (mode === 'H264Fmp4') return 'video/mp4; codecs="avc1.42E01E, mp4a.40.2"';
     return null;
   }
 
@@ -481,6 +489,19 @@
     void startStream();
   }
 
+  // Keep the video element's mute/volume in sync with the caller (fullscreen audio
+  // toggle + volume slider). Unmuting is a user gesture (spacebar), so autoplay stays
+  // legal: browsers only allow sound after interaction.
+  $effect(() => {
+    if (videoEl) videoEl.muted = muted;
+  });
+  $effect(() => {
+    if (videoEl && typeof volume === 'number') videoEl.volume = Math.min(1, Math.max(0, volume));
+  });
+  $effect(() => {
+    if (videoEl && !muted && videoEl.paused) void videoEl.play().catch(() => undefined);
+  });
+
   $effect(() => {
     const quality = appState.streamQuality;
     if (startedQuality !== undefined && startedQuality !== quality) {
@@ -499,7 +520,7 @@
 
 <div class="mse-wrapper">
   {#if fallbackMode === 'mse'}
-    <video bind:this={videoEl} autoplay muted playsinline class="mse-video" controls={false}></video>
+    <video bind:this={videoEl} autoplay muted={muted} playsinline class="mse-video" controls={false}></video>
   {:else if manifest}
     {#key imgKey}
       <img
@@ -511,7 +532,7 @@
       />
     {/key}
   {/if}
-  <div class="status-bar">
+  <div class="status-bar" onclick={(e) => e.stopPropagation()}>
     <span class:live={isActive} class="dot"></span>
     <span class="muted small">{streamStatus}</span>
     {#if isActive}<span class="mode">{modeLabel(selectedMode)}</span>{/if}

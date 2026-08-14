@@ -15,7 +15,9 @@ export class AppState {
     ? Number(localStorage.getItem('bosscam.viewLayout'))
     : 0);
   liveRefreshEnabled = $state<boolean>(true);
-  streamQuality = $state<'sub' | 'main' | 'rtsp'>('sub');
+  // High quality is the default: the user wants the HD main stream chosen whenever
+  // a feed is viewed. The operator can still drop to sub/rtsp from the Live Wall toolbar.
+  streamQuality = $state<'sub' | 'main' | 'rtsp'>(readStreamQuality());
   liveInterval = $state<number>(2000);
   activeTab = $state<string>('viewall');
 
@@ -43,6 +45,64 @@ export class AppState {
 
   // Fullscreen
   fullscreenEnabled = $state<boolean>(false);
+  // Device currently shown in the immersive fullscreen camera view (null = none).
+  fullscreenDeviceId = $state<string | null>(null);
+
+  // ══ Starred cameras ═══════════════════════════════════════════
+  // Starred cameras are pinned to the landing page and auto-load on startup.
+  // The AUTHORITATIVE set lives server-side (/api/devices/stars) so every platform
+  // (web SPA + desktop app) mirrors the same stars. localStorage is the offline
+  // cache: it seeds instantly and holds changes when the service is unreachable.
+  starredDeviceIds = $state<string[]>(readStarredDeviceIds());
+
+  /** True when the landing board filters to starred cameras only. */
+  landingStarredOnly = $state<boolean>(localStorage.getItem('bosscam.starredOnly') !== 'false');
+
+  isStarred(id: string): boolean {
+    return this.starredDeviceIds.includes(id);
+  }
+
+  /**
+   * Pull the authoritative starred set from the service. Called once at startup
+   * (App.svelte onMount) and after reconnect, so stars added on the desktop app
+   * appear here and vice-versa. Falls back to the localStorage cache offline.
+   */
+  async loadStars() {
+    try {
+      const res = await api.stars();
+      const ids = Array.isArray(res?.deviceIds) ? res.deviceIds : [];
+      this.starredDeviceIds = ids;
+      localStorage.setItem('bosscam.starredDevices', JSON.stringify(ids));
+    } catch {
+      // Offline: keep the cached set; a later loadStars reconciles.
+    }
+  }
+
+  /**
+   * Toggle the hollow/gold star for a camera. Updates the local set immediately
+   * (optimistic UI) and persists to the service; the service write is best-effort
+   * so pinning still works offline (localStorage cache keeps it for the next sync).
+   */
+  toggleStar(id: string) {
+    const next = this.isStarred(id)
+      ? this.starredDeviceIds.filter(x => x !== id)
+      : [...this.starredDeviceIds, id];
+    this.starredDeviceIds = next;
+    localStorage.setItem('bosscam.starredDevices', JSON.stringify(next));
+    void api.setStar(id, next.includes(id)).catch(() => {
+      // Fire-and-forget: offline pin stays cached and syncs on the next loadStars.
+    });
+  }
+
+  setLandingStarredOnly(v: boolean) {
+    this.landingStarredOnly = v;
+    localStorage.setItem('bosscam.starredOnly', String(v));
+  }
+
+  setStreamQuality(q: 'sub' | 'main' | 'rtsp') {
+    this.streamQuality = q;
+    localStorage.setItem('bosscam.streamQuality', q);
+  }
 
   // Picture-in-Picture: deviceId currently in PiP window, or null
   pipDeviceId = $state<string | null>(null);
@@ -119,6 +179,10 @@ export class AppState {
 
   // Health
   healthInfo = $state<string>('Connecting…');
+  // Persistent color-coded service connection indicator (mirrors the desktop app's
+  // green/amber/red status strip): 'starting' (amber) → 'online' (green) → 'offline'
+  // (red). Driven by the periodic /api/health probe; a Retry button re-runs it.
+  connectionStatus = $state<'starting' | 'online' | 'offline'>('starting');
   // LAN-only / air-gapped operation (from /api/health offlineMode).
   offlineMode = $state<boolean>(false);
   // Automatic WAN/cloud status. This is advisory only; LAN camera traffic continues in every state.
@@ -199,5 +263,22 @@ export class AppState {
   resetOrder() {
     localStorage.removeItem('bosscam.viewOrder');
     this.syncOrder();
+  }
+}
+
+function readStreamQuality(): 'sub' | 'main' | 'rtsp' {
+  const v = localStorage.getItem('bosscam.streamQuality');
+  if (v === 'main' || v === 'sub' || v === 'rtsp') return v;
+  return 'main'; // HD main stream is the always-preferred default
+}
+
+function readStarredDeviceIds(): string[] {
+  try {
+    const raw = localStorage.getItem('bosscam.starredDevices');
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter(x => typeof x === 'string') : [];
+  } catch {
+    return [];
   }
 }

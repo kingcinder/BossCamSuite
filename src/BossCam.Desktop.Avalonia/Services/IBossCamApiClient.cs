@@ -49,6 +49,12 @@ public interface IBossCamApiClient : IDisposable
     /// <summary>POST /api/devices/register-aegon-lan</summary>
     Task<List<DeviceIdentity>> RegisterAegonLanAsync(string? lorexPassword, string? wvcPassword);
 
+    /// <summary>GET /api/devices/stars — ids of cameras pinned to the landing board (server-side, mirrors the SPA).</summary>
+    Task<IReadOnlyCollection<Guid>> GetStarredDeviceIdsAsync();
+
+    /// <summary>PUT /api/devices/{id}/star — pin/unpin a camera to the landing board (server-side).</summary>
+    Task SetDeviceStarredAsync(Guid deviceId, bool starred);
+
     // ── Probe / validation / capabilities ────────────────────────────
     /// <summary>POST /api/devices/{id}/probe</summary>
     Task<CapabilityMap?> ProbeAsync(Guid deviceId);

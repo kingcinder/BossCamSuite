@@ -1,0 +1,113 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:BossCam.Desktop.Avalonia.ViewModels"
+        xmlns:c="clr-namespace:BossCam.Desktop.Avalonia.Controls"
+        x:Class="BossCam.Desktop.Avalonia.Views.FullscreenCameraWindow"
+        Title="Camera fullscreen"
+        Width="1280" Height="800"
+        WindowState="FullScreen"
+        SystemDecorations="None"
+        Background="#000000"
+        Foreground="#e8e8f0"
+        Topmost="True"
+        KeyDown="OnKeyDown">
+
+  <Grid RowDefinitions="*,Auto,Auto">
+
+    <!-- ── Fullscreen video stage ─────────────────────────────── -->
+    <!-- The pointer handler lives on the stage Grid only: banner/menu buttons are
+         sibling rows and their clicks never bubble into the single-click/double-click
+         disambiguation, so opening a menu cannot be undone by the debounce. -->
+    <!-- Focusable so Space always reaches the window's audio toggle: after a banner/menu
+         button is clicked, focus is returned here so the button cannot swallow the key. -->
+    <Grid x:Name="Stage" Focusable="True" PointerPressed="OnStagePointerPressed">
+      <Image Source="{Binding LiveVideoFrame}" Stretch="Uniform" />
+
+      <!-- Top overlay: identity + playback/audio status (translucent pill, like the hint) -->
+      <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="18" CornerRadius="10"
+              Background="#66000000" Padding="14,10" IsHitTestVisible="False">
+        <StackPanel Spacing="2">
+          <TextBlock Text="{Binding DisplayName}" FontSize="22" FontWeight="Bold" Foreground="#fff" />
+          <TextBlock Text="{Binding Subtitle}" FontSize="13" Foreground="#c9c9dd" />
+          <TextBlock Text="{Binding PlaybackStatus}" FontSize="12" Foreground="#9ad19a" />
+          <TextBlock Text="{Binding AudioStatus}" FontSize="12"
+                     Foreground="{Binding IsAudioOn, Converter={x:Static c:BooleanBrushConverter.Instance}}" />
+        </StackPanel>
+      </Border>
+
+      <!-- Hint pill: how to interact -->
+      <Border HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,8"
+              Background="#66000000" CornerRadius="10" Padding="12,5"
+              IsHitTestVisible="False">
+        <TextBlock Text="Double-click to exit · Space toggles audio · Click for options · Esc/Backspace hides menus"
+                   FontSize="12" Foreground="#cfcfdf" />
+      </Border>
+    </Grid>
+
+    <!-- ── Menu sheet (opens from a banner tile) ──────────────── -->
+    <Border Grid.Row="1" Background="#ee141426" CornerRadius="10,10,0,0" Padding="16,12"
+            IsVisible="{Binding ActiveMenu, Converter={x:Static c:NotNullToBoolConverter.Instance}}">
+      <StackPanel Spacing="8">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Text="{Binding MenuHeading}" FontSize="15" FontWeight="Bold" Foreground="#ffb06a"
+                     VerticalAlignment="Center" />
+          <Button Grid.Column="1" Command="{Binding DismissMenusCommand}" Content="✕ Hide"
+                  c:InfoExplainer.Title="Hide menus"
+                  c:InfoExplainer.Explanation="Closes the menu sheet. Press Escape or Backspace, or click the video, to hide the whole banner." />
+        </Grid>
+        <TextBlock Text="The full camera option set lives in the matching management section — every tile below opens the right one."
+                   FontSize="12" Foreground="#b6b6cc" TextWrapping="Wrap" />
+        <ItemsControl ItemsSource="{Binding MenuTiles}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <WrapPanel />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <Button Command="{Binding $parent[Window].DataContext.OpenSectionCommand}"
+                      CommandParameter="{Binding Title}"
+                      Margin="0,0,8,8" Padding="12,8"
+                      Background="#2a2a44" BorderBrush="#0000" CornerRadius="8"
+                      c:InfoExplainer.Title="{Binding Title}"
+                      c:InfoExplainer.Explanation="Opens the {Binding Title} management section for this camera.">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <TextBlock Text="{Binding Glyph}" FontSize="14" VerticalAlignment="Center" />
+                  <TextBlock Text="{Binding Title}" FontSize="13" VerticalAlignment="Center" />
+                </StackPanel>
+              </Button>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+    </Border>
+
+    <!-- ── Option banner (single click) ───────────────────────── -->
+    <Border Grid.Row="2" Background="#cc0b0b14" CornerRadius="0" Padding="14,10"
+            IsVisible="{Binding BannerVisible}">
+      <ItemsControl ItemsSource="{Binding MenuTiles}">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="10" />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate>
+            <Button Command="{Binding $parent[Window].DataContext.OpenMenuCommand}"
+                    CommandParameter="{Binding Title}"
+                    MinWidth="86" Padding="10,8"
+                    Background="#26263f" BorderBrush="#3a3a5c" BorderThickness="1" CornerRadius="8"
+                    HorizontalContentAlignment="Center"
+                    c:InfoExplainer.Title="{Binding Title}"
+                    c:InfoExplainer.Explanation="Opens the {Binding Title} options for this camera.">
+              <StackPanel Spacing="2">
+                <TextBlock Text="{Binding Glyph}" FontSize="16" HorizontalAlignment="Center" />
+                <TextBlock Text="{Binding Title}" FontSize="11" HorizontalAlignment="Center" Foreground="#ddd" />
+              </StackPanel>
+            </Button>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </Border>
+  </Grid>
+</Window>

@@ -1,41 +1,112 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:BossCam.Desktop.Avalonia.ViewModels"
              xmlns:c="clr-namespace:BossCam.Desktop.Avalonia.Controls"
              x:Class="BossCam.Desktop.Avalonia.Views.LiveView">
-  <StackPanel Spacing="10">
+  <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <StackPanel Spacing="10">
 
-    <TextBlock Text="Live View" FontSize="18" FontWeight="Bold" Foreground="#fff"
-               c:InfoExplainer.Title="Live View"
-               c:InfoExplainer.Explanation="Streams the selected camera through the negotiated backend media session. The desktop player uses bounded H.264 compatibility output and reconnects after transient drops; snapshots remain as a visible fallback." />
+      <TextBlock Text="Live View" FontSize="18" FontWeight="Bold" Foreground="#fff"
+                 c:InfoExplainer.Title="Live View"
+                 c:InfoExplainer.Explanation="Your starred cameras auto-load here as a landing board — the same pinned set the web app uses (stars are saved on the service, so every platform mirrors them). Double-click a tile to open that camera fullscreen." />
 
-    <Border Background="#0c0c18" CornerRadius="8" Height="340"
-            c:InfoExplainer.Title="Live picture"
-            c:InfoExplainer.Explanation="Live decoded video from the service's negotiated H.264 stream. If the media session is unavailable, the snapshot layer remains available below it.">
-      <Grid>
-        <Image Source="{Binding LiveFrame}" Stretch="Uniform" />
-        <Image Source="{Binding LiveVideoFrame}" Stretch="Uniform" />
-      </Grid>
-    </Border>
+      <!-- ── Starred landing board ─────────────────────────────── -->
+      <Border Background="#14141f" CornerRadius="10" Padding="10"
+              c:InfoExplainer.Title="Starred landing board"
+              c:InfoExplainer.Explanation="Every starred camera streams onto this board automatically when the app starts. Click a tile to select it below; double-click to open it fullscreen. Click ☆ on any tile to unpin it, or use the toolbar chip to show all cameras.">
+        <StackPanel Spacing="8">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="⭐ Starred cameras — auto-loaded" FontSize="14" FontWeight="Bold"
+                       Foreground="#ffd25a" VerticalAlignment="Center" />
+            <Button Grid.Column="1" Command="{Binding ToggleStarredOnlyCommand}"
+                    Content="{Binding StarredFilterText}" FontSize="12" Padding="10,5"
+                    c:InfoExplainer.Title="Landing board filter"
+                    c:InfoExplainer.Explanation="Toggles between starred cameras only and every camera. Starred-only is the default landing view." />
+          </Grid>
 
-    <Border Background="#20203a" CornerRadius="6" Padding="8"
-            c:InfoExplainer.Title="Playback status"
-            c:InfoExplainer.Explanation="Shows the negotiated playback mode and reconnect state. A reconnecting message means the backend stream or ffmpeg decoder is being restarted without crashing the desktop client.">
-      <TextBlock Text="{Binding LivePlaybackStatus}" FontSize="12" Foreground="#ffb06a" TextWrapping="Wrap" />
-    </Border>
+          <ItemsControl ItemsSource="{Binding BoardTiles}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <WrapPanel />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="{x:Type vm:BoardTileViewModel}">
+                <Border Width="220" Height="150" Margin="0,0,10,10" CornerRadius="8" Background="#0c0c18"
+                        BorderBrush="#3a3a5c" BorderThickness="1" ClipToBounds="True"
+                        DoubleTapped="OnTileDoubleTapped"
+                        PointerPressed="OnTilePointerPressed">
+                  <Border.Styles>
+                    <Style Selector="Border">
+                      <Setter Property="BorderBrush" Value="#3a3a5c" />
+                    </Style>
+                    <Style Selector="Border.pointerover">
+                      <Setter Property="BorderBrush" Value="#ffd25a" />
+                    </Style>
+                  </Border.Styles>
+                  <Grid>
+                    <Image Source="{Binding LiveFrame}" Stretch="Uniform" />
+                    <Border VerticalAlignment="Top" Background="#a6000000" Padding="6,4">
+                      <StackPanel Spacing="1">
+                        <TextBlock Text="{Binding DisplayName}" FontWeight="Bold" FontSize="12" Foreground="#fff"
+                                   TextTrimming="CharacterEllipsis" MaxWidth="150" />
+                        <TextBlock Text="{Binding IpAddress}" FontSize="10" Foreground="#9a9ab0" />
+                      </StackPanel>
+                    </Border>
+                    <Button HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,4,0"
+                            Command="{Binding ToggleStarCommand}" Content="{Binding StarGlyph}"
+                            FontSize="18" Background="Transparent" BorderThickness="0" Padding="4"
+                            Foreground="#ffd25a" Width="32" Height="32"
+                            c:InfoExplainer.Title="Pin / unpin"
+                            c:InfoExplainer.Explanation="Stars this camera so it auto-loads on the landing board on every platform." />
+                    <TextBlock Text="Double-click for fullscreen" HorizontalAlignment="Center"
+                               VerticalAlignment="Bottom" FontSize="10" Foreground="#7a7a94"
+                               Margin="0,0,0,4" IsHitTestVisible="False" />
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
 
-    <Border Background="#20203a" CornerRadius="8" Padding="10"
-            c:InfoExplainer.Title="Device details"
-            c:InfoExplainer.Explanation="Identity of the selected camera: model, IP, firmware version and device type, plus the main RTSP URL when the service knows it.">
-      <TextBlock Text="{Binding DeviceInfoText}" FontSize="13" Foreground="#ccc" TextWrapping="Wrap" />
-    </Border>
+          <TextBlock Text="{Binding StarredBoardHint}" FontSize="12" Foreground="#9a9ab0" TextWrapping="Wrap"
+                     IsVisible="{Binding BoardTiles.Count, Converter={x:Static c:ZeroToBoolConverter.Instance}}" />
+        </StackPanel>
+      </Border>
 
-    <StackPanel Orientation="Horizontal" Spacing="8">
-      <Button Command="{Binding RefreshDeviceCommand}" Content="⟳ Refresh"
-              c:InfoExplainer.Title="Refresh"
-              c:InfoExplainer.Explanation="Refreshes the selected camera's live picture and identity details now." />
-      <Button Command="{Binding SnapshotCommand}" Content="📷 Save Snapshot"
-              c:InfoExplainer.Title="Save Snapshot"
-              c:InfoExplainer.Explanation="Requests the camera's current snapshot and stores it in the configured Snapshots media folder." />
+      <!-- ── Selected camera detail pane ────────────────────────── -->
+      <TextBlock Text="Selected camera" FontSize="14" FontWeight="Bold" Foreground="#eee" Margin="2,8,0,0"
+                 c:InfoExplainer.Title="Selected camera"
+                 c:InfoExplainer.Explanation="The camera selected on the board (or in the camera list) plays here at HD main quality. Use Refresh, Snapshot or Save to manage the current view." />
+
+      <Border Background="#0c0c18" CornerRadius="8" Height="340"
+              c:InfoExplainer.Title="Live picture"
+              c:InfoExplainer.Explanation="Live decoded video from the service's negotiated H.264 stream. If the media session is unavailable, the snapshot layer remains available below it.">
+        <Grid>
+          <Image Source="{Binding LiveFrame}" Stretch="Uniform" />
+          <Image Source="{Binding LiveVideoFrame}" Stretch="Uniform" />
+        </Grid>
+      </Border>
+
+      <Border Background="#20203a" CornerRadius="6" Padding="8"
+              c:InfoExplainer.Title="Playback status"
+              c:InfoExplainer.Explanation="Shows the negotiated playback mode and reconnect state. A reconnecting message means the backend stream or ffmpeg decoder is being restarted without crashing the desktop client.">
+        <TextBlock Text="{Binding LivePlaybackStatus}" FontSize="12" Foreground="#ffb06a" TextWrapping="Wrap" />
+      </Border>
+
+      <Border Background="#20203a" CornerRadius="8" Padding="10"
+              c:InfoExplainer.Title="Device details"
+              c:InfoExplainer.Explanation="Identity of the selected camera: model, IP, firmware version and device type, plus the main RTSP URL when the service knows it.">
+        <TextBlock Text="{Binding DeviceInfoText}" FontSize="13" Foreground="#ccc" TextWrapping="Wrap" />
+      </Border>
+
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Button Command="{Binding RefreshDeviceCommand}" Content="⟳ Refresh"
+                c:InfoExplainer.Title="Refresh"
+                c:InfoExplainer.Explanation="Refreshes the selected camera's live picture and identity details now." />
+        <Button Command="{Binding SnapshotCommand}" Content="📷 Save Snapshot"
+                c:InfoExplainer.Title="Save Snapshot"
+                c:InfoExplainer.Explanation="Requests the camera's current snapshot and stores it in the configured Snapshots media folder." />
+      </StackPanel>
     </StackPanel>
-  </StackPanel>
+  </ScrollViewer>
 </UserControl>

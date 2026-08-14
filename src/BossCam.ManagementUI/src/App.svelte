@@ -17,6 +17,7 @@
   import AdvancedPanel from './lib/components/AdvancedPanel.svelte';
   import FirmwarePanel from './lib/components/FirmwarePanel.svelte';
   import RecoveryPanel from './lib/components/RecoveryPanel.svelte';
+  import CameraFullscreen from './lib/components/CameraFullscreen.svelte';
 
   let appState = new AppState();
 
@@ -27,16 +28,80 @@
   let identityHtml = $state('');
   let fullscreenSupported = $state(typeof document !== 'undefined' && !!document.documentElement.requestFullscreen);
   let healthPollTimer: ReturnType<typeof setInterval> | undefined;
+  let fullscreenDevice = $derived(
+    appState.devices.find(d => d.id === appState.fullscreenDeviceId) ?? null
+  );
 
-  async function refreshHealth() {
+  // If the fullscreen target disappears from the fleet (device removed/renamed),
+  // drop the stale id so the overlay isn't wedged open forever.
+  $effect(() => {
+    if (appState.fullscreenDeviceId && !fullscreenDevice) {
+      appState.fullscreenDeviceId = null;
+    }
+  });
+
+  // Returns true when the service answered healthy. Also drives the persistent
+  // connection indicator (mirrors the desktop green/amber/red strip): green the
+  // moment /api/health answers, red when it does not. No device-count heuristic —
+  // a healthy service with zero registered cameras must still show green.
+  async function refreshHealth(): Promise<boolean> {
     try {
       const h = await api.health();
       appState.offlineMode = !!h.offlineMode;
       appState.internetConnectivity = h.internetConnectivity || (h.offlineMode ? 'Disabled' : 'Unknown');
       appState.internetConnectivityChangedAt = h.internetConnectivityChangedAt || '';
       appState.healthInfo = `API ok · ${h.platform || ''} · ${h.timestamp || ''}`;
+      appState.connectionStatus = 'online';
+      return true;
     } catch {
       appState.healthInfo = 'API unreachable';
+      appState.connectionStatus = 'offline';
+      return false;
+    }
+  }
+
+  // ── Retry connection (mirrors the desktop Retry button) ──────
+  // Re-runs the full startup handshake: health probe, device list, server stars,
+  // connectivity snapshots, and the fleet recording guarantee. No-op while a
+  // retry is already in flight (non-reentrant, like the desktop handshake).
+  let retryInFlight = false;
+  async function retryConnection() {
+    if (retryInFlight) return;
+    retryInFlight = true;
+    appState.connectionStatus = 'starting';
+    appState.showToast('Reconnecting to BossCamService…');
+    try {
+      const healthy = await refreshHealth();
+      if (!healthy) {
+        appState.showToast('BossCamService offline — check the service and retry', false);
+        return;
+      }
+      try {
+        appState.devices = await api.devices();
+        appState.syncOrder();
+      } catch (e: unknown) {
+        appState.healthInfo = 'Devices load failed: ' + String(e);
+      }
+      await appState.loadStars();
+      try {
+        const snapshots = await api.connectivityAll();
+        const map: Record<string, { status: string; transportResults?: Record<string, boolean>; lastCheckedAt?: string }> = {};
+        for (const snap of snapshots || []) {
+          map[snap.deviceId] = {
+            status: snap.status,
+            transportResults: snap.transportResults || undefined,
+            lastCheckedAt: snap.lastCheckedAt,
+          };
+        }
+        if (Object.keys(map).length > 0) appState.connectivitySnapshots = map;
+      } catch {
+        // Connectivity snapshots are optional; degrade gracefully.
+      }
+      appState.connectionStatus = 'online';
+      void ensureFleetRecording();
+      appState.showToast(`Connected — ${appState.devices.length} camera(s)`);
+    } finally {
+      retryInFlight = false;
     }
   }
 
@@ -68,12 +133,16 @@
 
   // ── Keyboard shortcuts (replaces WPF keyboard navigation) ────
   function handleKeyboard(e: KeyboardEvent) {
-    // F11 / Escape: fullscreen toggle
+    // F11: native browser fullscreen toggle
     if (e.key === 'F11') {
       e.preventDefault();
       toggleFullscreen();
       return;
     }
+
+    // While the immersive camera fullscreen is open, all keys belong to that view
+    // (spacebar = audio, Esc/Backspace = dismiss menus) — skip app-level shortcuts.
+    if (appState.fullscreenDeviceId) return;
 
     // Don't handle shortcuts while typing in inputs
     if ((e.target as HTMLElement)?.tagName === 'INPUT' || (e.target as HTMLElement)?.tagName === 'TEXTAREA') return;
@@ -236,6 +305,10 @@
         appState.healthInfo = 'Devices load failed: ' + String(e);
       }
 
+      // Authoritative starred set from the service (mirrors the desktop app's stars).
+      // Best-effort: offline keeps the localStorage cache until the next sync.
+      await appState.loadStars();
+
       // Fetch initial connectivity snapshots for all devices
       try {
         const snapshots = await api.connectivityAll();
@@ -263,6 +336,8 @@
       appState.activeTab = 'viewall';
       void ensureFleetRecording();
     })();
+
+    document.addEventListener('bosscam:retry-connection', () => void retryConnection());
 
     document.addEventListener('bosscam:discover', () => {
       api.discover().then(() => {
@@ -395,6 +470,10 @@
 </div>
 
 <Toast appState={appState} />
+
+{#if appState.fullscreenDeviceId && fullscreenDevice}
+  <CameraFullscreen device={fullscreenDevice} appState={appState} />
+{/if}
 
 <style>
   #app {

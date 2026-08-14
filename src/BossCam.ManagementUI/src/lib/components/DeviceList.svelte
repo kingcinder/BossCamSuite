@@ -96,6 +96,12 @@
     appState.netPayload = null;
   }
 
+  function toggleStar(e: MouseEvent, id: string) {
+    e.stopPropagation();
+    appState.toggleStar(id);
+    appState.showToast(appState.isStarred(id) ? '⭐ Pinned to landing page' : '☆ Unpinned');
+  }
+
   function connectivityClass(deviceId: string): string {
     const cs = appState.connectivitySnapshots[deviceId];
     if (!cs) return 'unknown';
@@ -174,6 +180,14 @@
         data-tip={connectivityTitle(d.id)}
       >
         <div class="name-row">
+          <button
+            type="button"
+            class="row-star"
+            class:starred={appState.isStarred(d.id)}
+            onclick={(e) => toggleStar(e, d.id)}
+            data-tip={appState.isStarred(d.id) ? 'Pinned — auto-loads on landing. Click to unpin.' : 'Pin to landing page (auto-loads on startup).'}
+            aria-label={appState.isStarred(d.id) ? `Unpin ${labelOf(d)}` : `Pin ${labelOf(d)} to landing page`}
+          >{appState.isStarred(d.id) ? '★' : '☆'}</button>
           <span class="signal-dot {connectivityClass(d.id)}"></span>
           <div class="name">{labelOf(d)}</div>
         </div>
@@ -250,6 +264,31 @@
     gap: 7px;
   }
   .name-row .name { font-weight: 600; word-break: break-word; color: var(--text); }
+  .row-star {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: transparent;
+    border: 1px solid var(--border-soft);
+    color: #7a6a62;
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+    transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+  }
+  .row-star:hover { border-color: #ffd25a99; color: #ffd25a; background: #2a2413; }
+  .row-star:active { transform: scale(0.88); }
+  .row-star.starred {
+    color: #ffd25a;
+    border-color: #ffd25a88;
+    background: linear-gradient(180deg, #4a3c12, #2a2410);
+    text-shadow: 0 0 8px rgba(255, 210, 90, 0.65);
+  }
   .device-item .sub { color: var(--faint); font-size: var(--fs-xs); word-break: break-all; margin-top: 3px; line-height: 1.6; }
 
   .signal-dot {

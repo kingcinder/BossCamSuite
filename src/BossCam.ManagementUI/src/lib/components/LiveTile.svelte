@@ -146,6 +146,20 @@
     appState.selectedDeviceId = device.id;
   }
 
+  function toggleStar(e: MouseEvent) {
+    e.stopPropagation();
+    e.preventDefault();
+    appState.toggleStar(device.id);
+    appState.showToast(appState.isStarred(device.id)
+      ? `⭐ ${labelOf(device)} pinned to landing page`
+      : `☆ ${labelOf(device)} unpinned`);
+  }
+
+  function openFullscreen() {
+    appState.selectedDeviceId = device.id;
+    appState.fullscreenDeviceId = device.id;
+  }
+
   // Drag-n-drop
   function onDragStart(e: DragEvent) {
     isDragging = true;
@@ -236,6 +250,7 @@
   ondragover={onDragOver}
   ondragleave={onDragLeave}
   ondrop={onDrop}
+  ondblclick={openFullscreen}
 >
   <div class="view-tile-bar" class:recording={isRecording}>
     <div>
@@ -245,6 +260,17 @@
       </strong>
       <div class="sub">{device.ipAddress || ''} · {device.hardwareModel || ''}</div>
     </div>
+    <button
+      type="button"
+      class="tile-star"
+      class:starred={appState.isStarred(device.id)}
+      onclick={toggleStar}
+      data-tip-pos="below"
+      data-tip={appState.isStarred(device.id) ? 'Pinned — auto-loads on the landing page. Click to unpin.' : 'Pin to landing page (auto-loads on startup).'}
+      aria-label={appState.isStarred(device.id) ? `Unpin ${labelOf(device)}` : `Pin ${labelOf(device)} to landing page`}
+    >
+      {appState.isStarred(device.id) ? '★' : '☆'}
+    </button>
     <span class="tile-status" class:live={!streamFailed && !!streamImageUrl} class:snap={appState.streamStatusByDevice[device.id] === 'snapshot'} class:rec={isRecording} data-tip-pos="below" data-tip={streamFailed ? streamErrorMsg : appState.streamStatusByDevice[device.id] === 'snapshot' ? 'Video stream unavailable — showing snapshot still' : isRecording ? 'Recording' : 'Live stream active'}>
       {#if isRecording}● REC{:else if appState.streamStatusByDevice[device.id] === 'snapshot'}📷 Still{:else if streamFailed}↻ Retrying{:else if streamImageUrl}● Live{:else}… Connecting{/if}
     </span>
@@ -313,6 +339,35 @@
   .view-tile-bar strong { display: flex; align-items: center; gap: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
   .view-tile-bar strong.recording { color: #ffb06a; }
   .view-tile-bar .sub { color: var(--faint); font-size: var(--fs-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tile-star {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: transparent;
+    border: 1px solid var(--border-soft);
+    color: #7a6a62;
+    font-size: 1.05rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+    transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease, transform 0.1s ease, text-shadow 0.15s ease;
+  }
+  .tile-star:hover {
+    border-color: #ffd25a99;
+    color: #ffd25a;
+    background: #2a2413;
+  }
+  .tile-star:active { transform: scale(0.88); }
+  .tile-star.starred {
+    color: #ffd25a;
+    border-color: #ffd25a88;
+    background: linear-gradient(180deg, #4a3c12, #2a2410);
+    text-shadow: 0 0 8px rgba(255, 210, 90, 0.65);
+  }
   .tile-status {
     display: inline-flex;
     align-items: center;
@@ -379,6 +434,7 @@
     border-top: 1px solid var(--border-faint);
     background: #0d0a0b;
   }
+  .view-tile-bar .tile-star { align-self: center; }
   .view-tile-actions .btn {
     flex: 1 1 auto;
     min-width: 72px;

@@ -17,6 +17,18 @@
     if (d.firmwareVersion) bits.push(`fw ${d.firmwareVersion}`);
     return bits.filter(Boolean).join(' · ');
   });
+
+  let connText = $derived.by(() => {
+    if (appState.connectionStatus === 'starting') return 'Starting…';
+    if (appState.connectionStatus === 'online') return 'Service online';
+    return 'Service offline';
+  });
+
+  let connTip = $derived.by(() => {
+    if (appState.connectionStatus === 'starting') return 'BossCamService is starting — camera list and streams are loading';
+    if (appState.connectionStatus === 'online') return 'BossCamService is reachable and healthy';
+    return 'BossCamService is not responding — click Retry to reconnect';
+  });
 </script>
 
 <div class="topbar">
@@ -30,6 +42,22 @@
     <p class="muted">{subtitle}</p>
   </div>
   <div class="actions">
+    <!-- Persistent service-connection indicator (mirrors the desktop green/amber/red strip) -->
+    <span
+      class="pill conn {appState.connectionStatus}"
+      data-tip={connTip}
+    >
+      <span class="dot {appState.connectionStatus === 'online' ? 'ok' : appState.connectionStatus === 'starting' ? 'warn' : 'bad'}"></span>
+      {connText}
+    </span>
+    {#if appState.connectionStatus === 'offline'}
+      <button
+        type="button"
+        class="btn btn-sm"
+        onclick={() => document.dispatchEvent(new CustomEvent('bosscam:retry-connection'))}
+        data-tip="Re-probe health, reload cameras, and restart fleet recording"
+      >↻ Retry</button>
+    {/if}
     {#if appState.offlineMode}
       <span class="pill lan" data-tip="BossCam:OfflineMode=true — cloud/P2P tunnels disabled; LAN cameras, streaming, and recording keep working.">
         <span class="dot ok"></span> LAN-only mode
@@ -87,4 +115,9 @@
   .pill.lan { background: #0f2e1a; border: 1px solid #3ecf8e55; color: var(--ok-text); }
   .pill.down { background: var(--warn-dim); border: 1px solid #cf9e3e66; color: var(--warn-text); }
   .pill.up { background: #0f2e1a; border: 1px solid #3ecf8e55; color: var(--ok-text); }
+
+  /* Persistent service-connection indicator (mirrors the desktop green/amber/red strip) */
+  .pill.conn.starting { background: var(--warn-dim); border: 1px solid #cf9e3e66; color: var(--warn-text); }
+  .pill.conn.online { background: #0f2e1a; border: 1px solid #3ecf8e55; color: var(--ok-text); }
+  .pill.conn.offline { background: var(--bad-dim); border: 1px solid #ff3e3e66; color: var(--bad-text); }
 </style>

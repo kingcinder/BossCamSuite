@@ -36,6 +36,9 @@
         <Button Command="{Binding LoadDevicesCommand}" Content="📡 Load Devices"
                 c:InfoExplainer.Title="Load Devices"
                 c:InfoExplainer.Explanation="Fetches the list of registered cameras from the BossCamService. Press this after the service starts or after adding cameras." />
+        <Button Command="{Binding ToggleStarredOnlyCommand}" Content="{Binding StarredFilterText}"
+                c:InfoExplainer.Title="Landing board filter"
+                c:InfoExplainer.Explanation="Toggles the Live View landing board between your starred cameras (auto-loaded on startup) and every camera. Stars are saved on the service, so the same set appears in the web app." />
         <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" Foreground="#9a9ab0"
                    FontSize="13" MaxWidth="360" TextTrimming="CharacterEllipsis"
                    c:InfoExplainer.Explanation="Status bar — the latest result of your last action (device loads, registrations, applies, recordings)." />
@@ -80,11 +83,26 @@
             <ListBox.ItemTemplate>
               <DataTemplate>
                 <Border Background="#23233f" CornerRadius="6" Padding="8,6" Margin="0,2">
-                  <StackPanel>
-                    <TextBlock Text="{Binding DisplayName}" FontWeight="Bold" Foreground="#eee"
-                               FontSize="13" />
-                    <TextBlock Text="{Binding IpAddress}" FontSize="12" Foreground="#8a8aa8" />
-                  </StackPanel>
+                  <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel>
+                      <TextBlock Text="{Binding DisplayName}" FontWeight="Bold" Foreground="#eee"
+                                 FontSize="13" />
+                      <TextBlock Text="{Binding IpAddress}" FontSize="12" Foreground="#8a8aa8" />
+                    </StackPanel>
+                    <Button Grid.Column="1" VerticalAlignment="Center"
+                            Command="{Binding DataContext.ToggleStarCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                            CommandParameter="{Binding}"
+                            Background="Transparent" BorderThickness="0" Padding="4" FontSize="16"
+                            c:InfoExplainer.Title="Pin to landing page"
+                            c:InfoExplainer.Explanation="Stars this camera so it auto-loads on the Live View landing board on every platform.">
+                      <Button.Content>
+                        <MultiBinding Converter="{x:Static c:StarGlyphConverter.Instance}">
+                          <Binding Path="." />
+                          <Binding Path="DataContext.StarredDeviceIds" RelativeSource="{RelativeSource AncestorType=Window}" />
+                        </MultiBinding>
+                      </Button.Content>
+                    </Button>
+                  </Grid>
                 </Border>
               </DataTemplate>
             </ListBox.ItemTemplate>

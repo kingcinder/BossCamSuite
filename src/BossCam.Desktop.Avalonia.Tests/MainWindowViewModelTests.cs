@@ -647,6 +647,147 @@ public sealed class MainWindowViewModelTests
         Assert.Null(App.ResolveConfiguredLanToken("   ", " "));
     }
 
+    // ── Starred landing board (server-synced, mirrors the SPA) ───
+
+    [Fact]
+    public async Task InitializeAsync_Loads_Starred_Ids_From_Server()
+    {
+        var starredId = Guid.NewGuid();
+        var api = new TestBossCamApiClient
+        {
+            HealthResult = JsonSerializer.Deserialize<JsonElement>("""{"status":"ok"}"""),
+            DevicesResult = [new() { Id = starredId, Name = "Cam1" }],
+            StarredIds = [starredId]
+        };
+        var vm = CreateVm(api);
+
+        await vm.InitializeAsync();
+
+        Assert.True(vm.IsStarred(starredId));
+        Assert.Equal(1, vm.StarredCount);
+        // Starred-only landing: the board shows the starred camera.
+        Assert.Single(vm.BoardTiles);
+        Assert.Equal(starredId, vm.BoardTiles[0].Device.Id);
+        // Auto-load: the starred camera becomes the selected/streaming camera.
+        Assert.NotNull(vm.SelectedDevice);
+        Assert.Equal(starredId, vm.SelectedDevice!.Id);
+    }
+
+    [Fact]
+    public async Task StarredLoad_Failure_Keeps_Local_State()
+    {
+        var api = new TestBossCamApiClient
+        {
+            HealthResult = JsonSerializer.Deserialize<JsonElement>("""{"status":"ok"}"""),
+            DevicesResult = [new() { Id = Guid.NewGuid(), Name = "Cam1" }],
+            ThrowOnStars = true
+        };
+        var vm = CreateVm(api);
+
+        await vm.InitializeAsync();
+
+        // Offline-tolerant: no stars loaded, board falls back to all cameras.
+        Assert.Equal(0, vm.StarredCount);
+        Assert.Single(vm.BoardTiles);
+    }
+
+    [Fact]
+    public async Task ToggleStar_Persists_Server_Side()
+    {
+        var device = new DeviceIdentity { Id = Guid.NewGuid(), Name = "Cam1" };
+        var api = new TestBossCamApiClient { DevicesResult = [device] };
+        var vm = CreateVm(api);
+
+        await vm.ToggleStarCommand.ExecuteAsync(device);
+
+        Assert.True(vm.IsStarred(device.Id));
+        Assert.Equal(1, api.SetStarCallCount);
+        Assert.Equal(device.Id, api.LastStarredDeviceId);
+        Assert.True(api.LastStarredValue);
+        Assert.Contains("pinned", vm.StatusText);
+    }
+
+    [Fact]
+    public async Task ToggleStar_Unstars_And_Persists_Server_Side()
+    {
+        var device = new DeviceIdentity { Id = Guid.NewGuid(), Name = "Cam1" };
+        var api = new TestBossCamApiClient
+        {
+            HealthResult = JsonSerializer.Deserialize<JsonElement>("""{"status":"ok"}"""),
+            DevicesResult = [device],
+            StarredIds = [device.Id]
+        };
+        var vm = CreateVm(api);
+        await vm.InitializeAsync();
+
+        await vm.ToggleStarCommand.ExecuteAsync(device);
+
+        Assert.False(vm.IsStarred(device.Id));
+        Assert.Equal(1, api.SetStarCallCount);
+        Assert.False(api.LastStarredValue);
+        Assert.Contains("unpinned", vm.StatusText);
+    }
+
+    [Fact]
+    public async Task ToggleStar_Failed_Save_Keeps_Local_Pin()
+    {
+        var device = new DeviceIdentity { Id = Guid.NewGuid(), Name = "Cam1" };
+        var api = new TestBossCamApiClient { DevicesResult = [device], ThrowOnStars = true };
+        var vm = CreateVm(api);
+
+        await vm.ToggleStarCommand.ExecuteAsync(device);
+
+        // Offline-tolerant (mirrors the SPA): the optimistic local pin survives.
+        Assert.True(vm.IsStarred(device.Id));
+        Assert.Contains("offline", vm.StatusText);
+    }
+
+    [Fact]
+    public async Task ToggleStarredOnly_Filters_Board()
+    {
+        var starredId = Guid.NewGuid();
+        var api = new TestBossCamApiClient
+        {
+            HealthResult = JsonSerializer.Deserialize<JsonElement>("""{"status":"ok"}"""),
+            DevicesResult =
+            [
+                new() { Id = starredId, Name = "Starred" },
+                new() { Id = Guid.NewGuid(), Name = "Other" }
+            ],
+            StarredIds = [starredId]
+        };
+        var vm = CreateVm(api);
+        await vm.InitializeAsync();
+
+        // Default: starred-only board.
+        Assert.Single(vm.BoardTiles);
+        Assert.Equal("⭐ Starred (1)", vm.StarredFilterText);
+
+        vm.ToggleStarredOnlyCommand.Execute(null);
+
+        // All-cameras board.
+        Assert.Equal(2, vm.BoardTiles.Count);
+        Assert.Equal("All cameras", vm.StarredFilterText);
+    }
+
+    // ── HD-main default (mirrors the SPA's stream-quality default) ─
+
+    [Fact]
+    public async Task LivePlayback_Requests_Main_Quality()
+    {
+        var api = new TestBossCamApiClient
+        {
+            HealthResult = JsonSerializer.Deserialize<JsonElement>("""{"status":"ok"}"""),
+            DevicesResult = [new() { Id = Guid.NewGuid(), Name = "Cam1" }]
+        };
+        var vm = CreateVm(api);
+        await vm.InitializeAsync();
+
+        // SelectedDevice is auto-selected at startup → the live loop requests main.
+        Assert.NotNull(vm.SelectedDevice);
+        Assert.Equal("main", api.LastManifestQuality);
+    }
+
     // ── Dispose ──────────────────────────────────────────────────
 
     [Fact]

@@ -163,4 +163,16 @@ public interface IApplicationStore
     /// Load connectivity snapshots for all known devices.
     /// </summary>
     Task<IReadOnlyCollection<DeviceConnectivitySnapshot>> GetAllDeviceConnectivitySnapshotsAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Device ids the operator has starred (pinned to the landing board). Server-side so
+    /// every client — web SPA and desktop app — mirrors the same starred set.
+    /// </summary>
+    Task<IReadOnlyCollection<Guid>> GetStarredDeviceIdsAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Persist (or clear) the starred/pinned flag for a device. Server-side so the web
+    /// SPA and the desktop app share one authoritative starred set.
+    /// </summary>
+    Task SetDeviceStarredAsync(Guid deviceId, bool starred, CancellationToken cancellationToken);
 }

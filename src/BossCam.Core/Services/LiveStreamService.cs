@@ -566,10 +566,11 @@ public sealed class LiveStreamService(
             "-analyzeduration", "2000000",
             "-max_delay", "500000",
             "-i", rtspUrl,
-            "-an", "-map", "0:v:0", "-vf", $"scale={scale}",
+            "-map", "0:v:0", "-map", "0:a:0?", "-vf", $"scale={scale}",
             "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency",
             "-profile:v", "baseline", "-pix_fmt", "yuv420p",
             "-b:v", bitrate, "-maxrate", bitrate, "-bufsize", "800k",
+            "-c:a", "aac", "-b:a", "128k",
             "-g", "30", "-bf", "0", "-f", "mp4",
             "-movflags", "frag_keyframe+empty_moov+default_base_moof", "-"
         ];
@@ -587,7 +588,8 @@ public sealed class LiveStreamService(
             "-analyzeduration", "2000000",
             "-max_delay", "500000",
             "-i", rtspUrl,
-            "-an", "-c:v", "copy",
+            "-map", "0:v:0", "-map", "0:a:0?", "-c:v", "copy",
+            "-c:a", "aac", "-b:a", "128k",
             "-f", "mp4",
             "-movflags", "frag_keyframe+empty_moov+default_base_moof",
             "-"
@@ -608,10 +610,11 @@ public sealed class LiveStreamService(
             "-analyzeduration", "2000000",
             "-max_delay", "500000",
             "-i", rtspUrl,
-            "-an", "-map", "0:v:0", "-vf", $"scale={scale}",
+            "-map", "0:v:0", "-map", "0:a:0?", "-vf", $"scale={scale}",
             "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency",
             "-profile:v", "baseline", "-pix_fmt", "yuv420p",
             "-b:v", bitrate, "-maxrate", bitrate, "-bufsize", "800k",
+            "-c:a", "aac", "-b:a", "128k",
             "-g", "30", "-bf", "0", "-f", "mpegts", "-flush_packets", "1", "-"
         ];
     }

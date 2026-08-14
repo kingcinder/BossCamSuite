@@ -73,6 +73,35 @@ public sealed class TestBossCamApiClient : IBossCamApiClient
     public JsonElement? HealthResult { get; set; }
     public bool ThrowOnHealth { get; set; }
 
+    // ── Stars (server-side pinned-to-landing) ────────────────────
+    public HashSet<Guid> StarredIds { get; set; } = [];
+    public int SetStarCallCount { get; private set; }
+    public Guid? LastStarredDeviceId { get; private set; }
+    public bool? LastStarredValue { get; private set; }
+    public bool ThrowOnStars { get; set; }
+
+    public Task<IReadOnlyCollection<Guid>> GetStarredDeviceIdsAsync()
+    {
+        if (ThrowOnStars)
+        {
+            return Task.FromException<IReadOnlyCollection<Guid>>(new HttpRequestException("Simulated star load failure"));
+        }
+        return Task.FromResult<IReadOnlyCollection<Guid>>(StarredIds.ToList());
+    }
+
+    public Task SetDeviceStarredAsync(Guid deviceId, bool starred)
+    {
+        if (ThrowOnStars)
+        {
+            return Task.FromException(new HttpRequestException("Simulated star save failure"));
+        }
+        SetStarCallCount++;
+        LastStarredDeviceId = deviceId;
+        LastStarredValue = starred;
+        if (starred) StarredIds.Add(deviceId); else StarredIds.Remove(deviceId);
+        return Task.CompletedTask;
+    }
+
     public Task<List<DeviceIdentity>> GetDevicesAsync()
     {
         GetDevicesCallCount++;
@@ -91,8 +120,12 @@ public sealed class TestBossCamApiClient : IBossCamApiClient
         return Task.FromResult(LiveInfoResult);
     }
 
+    public string? LastManifestQuality { get; private set; }
+
     public Task<LiveMediaManifest?> GetLiveManifestAsync(Guid deviceId, string quality = "sub")
-        => Task.FromResult<LiveMediaManifest?>(new LiveMediaManifest
+    {
+        LastManifestQuality = quality;
+        return Task.FromResult<LiveMediaManifest?>(new LiveMediaManifest
         {
             DeviceId = deviceId,
             PreferredMode = LiveMediaModeContract.H264MpegTs,
@@ -100,6 +133,7 @@ public sealed class TestBossCamApiClient : IBossCamApiClient
             MpegTsUrl = GetLiveTsUrl(deviceId, quality),
             MjpegUrl = GetLiveMjpegUrl(deviceId, quality)
         });
+    }
 
     public Task<byte[]?> GetSnapshotAsync(Guid deviceId)
     {

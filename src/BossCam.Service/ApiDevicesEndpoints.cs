@@ -78,6 +78,26 @@ public static class ApiDevicesEndpoints
             return result is null ? Results.NotFound() : Results.Ok(result);
         });
 
+        // ── Starred (pinned-to-landing) devices ─────────────────────────
+        // Server-side authoritative set so the web SPA and desktop app mirror the
+        // same starred cameras on every platform.
+        app.MapGet("/api/devices/stars", async (IApplicationStore store, CancellationToken ct) =>
+        {
+            var ids = await store.GetStarredDeviceIdsAsync(ct);
+            return Results.Ok(new { deviceIds = ids.Select(id => id.ToString()).ToList() });
+        });
+
+        app.MapPut("/api/devices/{id:guid}/star", async (Guid id, StarDeviceRequest request, IApplicationStore store, CancellationToken ct) =>
+        {
+            var device = await store.GetDeviceAsync(id, ct);
+            if (device is null)
+            {
+                return Results.NotFound();
+            }
+            await store.SetDeviceStarredAsync(id, request.Starred, ct);
+            return Results.Ok(new { deviceId = id.ToString(), starred = request.Starred });
+        });
+
         app.MapGet("/api/devices/{id:guid}/settings", async (Guid id, SettingsService settingsService, CancellationToken ct) =>
         {
             var result = await settingsService.ReadAsync(id, ct);
@@ -136,4 +156,10 @@ public static class ApiDevicesEndpoints
 
         return app;
     }
+}
+
+/// <summary>Request body for PUT /api/devices/{id}/star.</summary>
+public sealed record StarDeviceRequest
+{
+    public bool Starred { get; init; }
 }

@@ -14,8 +14,14 @@
   };
 
   let allDevices = $derived(appState.orderedDevices);
+  // Landing board = starred cameras only (the user's pinned fleet), unless the
+  // operator flips the Starred chip to show every camera.
+  let starredDevices = $derived(allDevices.filter(d => appState.isStarred(d.id)));
+  let boardDevices = $derived(
+    appState.landingStarredOnly && starredDevices.length > 0 ? starredDevices : allDevices
+  );
   let shownDevices = $derived(
-    appState.layout === 0 ? allDevices : allDevices.slice(0, appState.layout)
+    appState.layout === 0 ? boardDevices : boardDevices.slice(0, appState.layout)
   );
 
   // Live board summary — computed from ACTUAL per-tile stream state (reported by LiveTile
@@ -98,12 +104,23 @@
 
     <div class="group">
       <span class="group-label">Stream mode</span>
-      <select class="select" bind:value={appState.streamQuality} aria-label="Stream mode">
-        <option value="sub">Multi-view (recommended)</option>
-        <option value="rtsp">Full motion RTSP (1–2 cams)</option>
-        <option value="main">HD RTSP main (heavy)</option>
+      <select class="select" value={appState.streamQuality} onchange={(e) => appState.setStreamQuality(e.currentTarget.value as 'sub' | 'main' | 'rtsp')} aria-label="Stream mode">
+        <option value="main">HD main (preferred)</option>
+        <option value="sub">Sub (lighter)</option>
+        <option value="rtsp">RTSP (1–2 cams)</option>
       </select>
     </div>
+
+    <button
+      type="button"
+      class="star-filter"
+      class:active={appState.landingStarredOnly && starredDevices.length > 0}
+      onclick={() => appState.setLandingStarredOnly(!appState.landingStarredOnly)}
+      data-tip={starredDevices.length === 0 ? 'No cameras pinned yet — click the ☆ on any camera tile to pin it here' : 'Toggle: landing page shows only your pinned cameras'}
+    >
+      {appState.landingStarredOnly && starredDevices.length > 0 ? '★' : '☆'}
+      Starred{starredDevices.length > 0 ? ` (${starredDevices.length})` : ''}
+    </button>
 
     <label class="inline-check">
       <input type="checkbox" bind:checked={appState.liveRefreshEnabled} />
@@ -130,7 +147,7 @@
     </button>
   </div>
   <p class="faint small toolbar-hint">
-    Continuous live streams (RTSP→MJPEG via ffmpeg). Drag title bar to rearrange. Click a tile to select for settings/record.
+    Continuous live streams (RTSP→MJPEG via ffmpeg). Drag to rearrange · single-click selects · <strong>double-click opens the camera fullscreen</strong> · pin with ☆ to auto-load on this landing page.
   </p>
 </div>
 
@@ -209,6 +226,29 @@
     border-color: #ffb06a99;
     color: #fff;
     box-shadow: 0 2px 10px var(--accent-glow);
+  }
+
+  .star-filter {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: #221618;
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-xs);
+    padding: 6px 10px;
+    cursor: pointer;
+    color: var(--muted);
+    font: inherit;
+    font-size: var(--fs-sm);
+    font-weight: 700;
+    transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+  }
+  .star-filter:hover { border-color: #ffd25a88; color: #ffd25a; background: #2a2413; }
+  .star-filter.active {
+    color: #ffd25a;
+    border-color: #ffd25a88;
+    background: linear-gradient(180deg, #4a3c12, #2a2410);
+    text-shadow: 0 0 8px rgba(255, 210, 90, 0.5);
   }
 
   .inline-check {

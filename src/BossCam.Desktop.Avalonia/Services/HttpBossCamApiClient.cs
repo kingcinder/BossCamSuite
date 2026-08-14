@@ -143,6 +143,18 @@ public sealed class HttpBossCamApiClient : IBossCamApiClient
     public Task<List<DeviceIdentity>> RegisterAegonLanAsync(string? lorexPassword, string? wvcPassword)
         => PostJsonAsync<List<DeviceIdentity>>("/api/devices/register-aegon-lan", new { lorexPassword, wvcPassword });
 
+    public async Task<IReadOnlyCollection<Guid>> GetStarredDeviceIdsAsync()
+    {
+        var res = await GetJsonAsync<StarredDeviceIdsResponse>("/api/devices/stars");
+        return (res?.DeviceIds ?? [])
+            .Select(static raw => Guid.TryParse(raw, out var id) ? id : Guid.Empty)
+            .Where(static id => id != Guid.Empty)
+            .ToList();
+    }
+
+    public Task SetDeviceStarredAsync(Guid deviceId, bool starred)
+        => PutJsonAsync<object?>($"/api/devices/{deviceId}/star", new { starred });
+
     // ── Probe / validation / capabilities ────────────────────────────
 
     public Task<CapabilityMap?> ProbeAsync(Guid deviceId)
@@ -482,6 +494,8 @@ public sealed class HttpBossCamApiClient : IBossCamApiClient
 
     public void Dispose() => _http.Dispose();
 
+    private sealed record StarredDeviceIdsResponse(List<string>? DeviceIds);
+
     /// <summary>
     /// Resolves a relative API path against the configured base address so the
     /// GUI can hand the result straight to image sources / external players.
@@ -491,6 +505,12 @@ public sealed class HttpBossCamApiClient : IBossCamApiClient
         => _http.BaseAddress is not null
             ? new Uri(_http.BaseAddress, relativePath).ToString()
             : relativePath;
+
+    private async Task<T> PutJsonAsync<T>(string path, object? body = null, CancellationToken ct = default)
+    {
+        using var res = await _http.PutAsJsonAsync(path, body, _json, ct).ConfigureAwait(false);
+        return await ReadContentAsync<T>(res, ct).ConfigureAwait(false);
+    }
 
     private static string BuildQuery(string path, params (string Key, object? Value)[] pairs)
     {

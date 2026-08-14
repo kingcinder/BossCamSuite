@@ -267,6 +267,207 @@ public sealed partial class MainWindowViewModel : ObservableObject, ISectionView
     [ObservableProperty]
     private string _statusText = "Connecting to BossCamService at http://127.0.0.1:5317\u2026";
 
+    // ── Starred (pinned-to-landing) cameras ───────────────────────
+    // Server-side authoritative set (mirrors the web SPA): stars added on the
+    // desktop app appear on the web landing and vice-versa.
+
+    [ObservableProperty]
+    private IReadOnlyCollection<Guid> _starredDeviceIds = [];
+
+    /// <summary>True when the landing board shows starred cameras only (all when none are starred).</summary>
+    [ObservableProperty]
+    private bool _starredOnly = true;
+
+    [ObservableProperty]
+    private ObservableCollection<BoardTileViewModel> _boardTiles = [];
+
+    /// <summary>Raised whenever the starred set changes so tiles can refresh their glyph.</summary>
+    internal event Action? StarsChanged;
+
+    /// <summary>
+    /// Pins whose server save failed (offline-tolerant). Only these are re-applied on the
+    /// next authoritative load — pins the user removed elsewhere are never resurrected.
+    /// </summary>
+    private readonly HashSet<Guid> _unsyncedStars = [];
+
+    public bool IsStarred(Guid id) => StarredDeviceIds.Contains(id);
+
+    /// <summary>Star count shown in the Live View toolbar chip.</summary>
+    public int StarredCount => StarredDeviceIds.Count;
+
+    /// <summary>Label for the landing-board filter chip (starred-only vs all cameras).</summary>
+    public string StarredFilterText => StarredOnly
+        ? (StarredCount > 0 ? $"⭐ Starred ({StarredCount})" : "⭐ Starred (0)")
+        : "All cameras";
+
+    /// <summary>Hint shown under the landing board when it is empty.</summary>
+    public string StarredBoardHint => Devices.Count == 0
+        ? "No cameras registered yet — use 📡 Load Devices or the Devices section to add cameras."
+        : (StarredOnly && StarredCount == 0
+            ? "No starred cameras yet — click ☆ on a camera below (or in the camera list) to pin it to this landing board."
+            : string.Empty);
+
+
+
+    partial void OnStarredDeviceIdsChanged(IReadOnlyCollection<Guid> value)
+    {
+        StarsChanged?.Invoke();
+        OnPropertyChanged(nameof(StarredCount));
+        OnPropertyChanged(nameof(StarredFilterText));
+        RebuildBoardAsync();
+    }
+
+    partial void OnStarredOnlyChanged(bool value)
+    {
+        OnPropertyChanged(nameof(StarredFilterText));
+        RebuildBoardAsync();
+    }
+
+    partial void OnDevicesChanged(ObservableCollection<DeviceIdentity> value)
+    {
+        OnPropertyChanged(nameof(StarredCount));
+        OnPropertyChanged(nameof(StarredBoardHint));
+        RebuildBoardAsync();
+    }
+
+    /// <summary>Toggles the landing board between starred-only and every camera.</summary>
+    [RelayCommand]
+    private void ToggleStarredOnly() => StarredOnly = !StarredOnly;
+
+    /// <summary>
+    /// Toggles the hollow/gold star for a camera. Optimistic local update first
+    /// (instant UI), then persists server-side; a failed save keeps the local pin
+    /// (offline-tolerant, like the SPA) and reports it in the status bar.
+    /// </summary>
+    [RelayCommand]
+    private async Task ToggleStarAsync(DeviceIdentity device)
+    {
+        if (device is null) return;
+        var target = !IsStarred(device.Id);
+        StarredDeviceIds = target
+            ? StarredDeviceIds.Append(device.Id).Distinct().ToList()
+            : StarredDeviceIds.Where(id => id != device.Id).ToList();
+        StatusText = target
+            ? $"⭐ {device.DisplayName} pinned to the landing board"
+            : $"☆ {device.DisplayName} unpinned from the landing board";
+        try
+        {
+            await _api.SetDeviceStarredAsync(device.Id, target);
+            _unsyncedStars.Remove(device.Id);
+        }
+        catch (Exception ex)
+        {
+            if (target)
+            {
+                _unsyncedStars.Add(device.Id);
+            }
+            StatusText = $"Star kept locally (offline): {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Rebuilds the landing board tiles from the current device list. Shows starred
+    /// cameras when any are starred and StarredOnly is on; otherwise every camera
+    /// (so the board is never empty — same fallback as the SPA).
+    /// </summary>
+    internal void RebuildBoardAsync()
+    {
+        foreach (var tile in BoardTiles)
+        {
+            tile.Dispose();
+        }
+        var source = Devices.ToList();
+        var starred = source.Where(d => IsStarred(d.Id)).ToList();
+        var shown = StarredOnly && starred.Count > 0 ? starred : source;
+        BoardTiles = new ObservableCollection<BoardTileViewModel>(
+            shown.Select(d => new BoardTileViewModel(_api, this, d)));
+    }
+
+    /// <summary>Loads the authoritative starred set from the service (startup handshake).</summary>
+    private async Task LoadStarsAsync()
+    {
+        try
+        {
+            var serverSet = (await _api.GetStarredDeviceIdsAsync()).ToList();
+            // Re-apply only pins whose save previously failed (offline-tolerant): never
+            // resurrect stars the user removed elsewhere. A confirmed re-persist clears the
+            // unsynced marker; a failed one keeps it for the next reload.
+            foreach (var id in _unsyncedStars.Where(id => !serverSet.Contains(id)).ToList())
+            {
+                serverSet.Add(id);
+                try
+                {
+                    await _api.SetDeviceStarredAsync(id, true);
+                    _unsyncedStars.Remove(id);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Re-persisting offline star {DeviceId} failed; keeping local pin", id);
+                }
+            }
+            StarredDeviceIds = serverSet;
+        }
+        catch (Exception ex)
+        {
+            // Offline-tolerant: keep whatever the local cache had (empty on first run).
+            _logger.LogDebug(ex, "Starred set load failed");
+        }
+    }
+
+    /// <summary>
+    /// Banner tile → management section mapping. Tile names (Display/Audio/Network/…)
+    /// intentionally differ from section titles, so each tile resolves to the section
+    /// that actually holds its controls; unknown tiles fall back to the literal title.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, string> FullscreenTileSectionMap =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Display"] = "Features",      // image/display controls live in the Features section
+            ["Audio"] = "Features",        // audio output options share the control-point surface
+            ["Network"] = "Connectivity",  // AP / networking capabilities
+            ["Hotspot"] = "Connectivity",  // hotspot daisy-chain lives with the wireless surface
+            ["Features"] = "Features",
+            ["Settings"] = "Features",
+            ["Record"] = "Recordings",
+            ["Advanced"] = "Diagnostics",
+            ["Firmware"] = "Firmware",
+            ["Recovery"] = "Devices"
+        };
+
+    /// <summary>
+    /// Opens the immersive fullscreen camera view for the given camera. The fullscreen
+    /// view owns its own HD-main decode loop, so it is independent of the shell's
+    /// selected-camera loop; it also receives the section-navigation callback so its
+    /// option tiles can jump to the matching management section (Features/Record/…).
+    /// </summary>
+    [RelayCommand]
+    private void OpenFullscreen(DeviceIdentity device)
+    {
+        if (device is null) return;
+        SelectedDevice = device;
+        var fullscreen = new FullscreenCameraViewModel(_api, device, _api.LanToken);
+        var window = new Views.FullscreenCameraWindow
+        {
+            DataContext = fullscreen
+        };
+        fullscreen.RequestOpenSection += section =>
+        {
+            var title = FullscreenTileSectionMap.TryGetValue(section, out var mapped)
+                ? mapped
+                : section;
+            var target = Sections.FirstOrDefault(s => string.Equals(s.Title, title, StringComparison.OrdinalIgnoreCase));
+            if (target is not null)
+            {
+                SelectedSection = target;
+            }
+            // Dismiss the Topmost fullscreen window so the user actually lands in the
+            // section instead of navigating invisibly behind the video (the window
+            // subscribes RequestClose → Close via the VM's ExitFullscreen command).
+            fullscreen.ExitFullscreenCommand.Execute(null);
+        };
+        window.Show();
+    }
+
     // ── Persistent connection indicator ────────────────────────────
 
     [ObservableProperty]
@@ -307,6 +508,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, ISectionView
             _ = RefreshDeviceAsync();
         }
 
+        // Keep board tiles' selection highlight in sync.
+        foreach (var tile in BoardTiles)
+        {
+            tile.RefreshSelectionState();
+        }
+
         // Keep the Features section in sync with the camera being managed.
         _ = FeaturesSection.DeviceChangedAsync();
     }
@@ -325,6 +532,16 @@ public sealed partial class MainWindowViewModel : ObservableObject, ISectionView
         {
             var devices = await _api.GetDevicesAsync();
             Devices = new ObservableCollection<DeviceIdentity>(devices);
+            // Authoritative starred set from the service (mirrors the SPA). Best-effort:
+            // an offline load keeps the previous local set and the board still shows all.
+            await LoadStarsAsync();
+            RebuildBoardAsync();
+            // Starred cameras auto-load on the landing page: select the first one so its
+            // HD main stream starts with no further interaction (fallback: first camera).
+            if (SelectedDevice is null && devices.Count > 0)
+            {
+                SelectedDevice = devices.FirstOrDefault(d => IsStarred(d.Id)) ?? devices[0];
+            }
             StatusText = $"Loaded {devices.Count} device(s)";
             return true;
         }
@@ -395,7 +612,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, ISectionView
     private async Task StartLiveVideoAsync(Guid deviceId)
     {
         await StopLiveVideoAsync();
-        var manifest = await _api.GetLiveManifestAsync(deviceId, "sub");
+        // HD main is the always-preferred stream (mirrors the SPA's default). The
+        // backend negotiates down to sub/MJPEG/snapshot only when main is unavailable.
+        var manifest = await _api.GetLiveManifestAsync(deviceId, "main");
         var streamUrls = manifest is null ? [] : SelectDesktopStreamUrls(manifest);
         if (streamUrls.Count == 0)
         {
@@ -681,6 +900,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, ISectionView
 
         _healthPollTimer?.Dispose();
         _liveTimer?.Dispose();
+        foreach (var tile in BoardTiles)
+        {
+            tile.Dispose();
+        }
+        BoardTiles.Clear();
 
         // Do not synchronously join the decoder task here: it can be waiting for the
         // Avalonia UI dispatcher while Dispose is called on that same UI thread. Cancel and
