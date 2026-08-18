@@ -34,6 +34,31 @@ public sealed class HttpBossCamApiClientTests
         Assert.Equal("http://127.0.0.1:5317/api/devices/00000000-0000-0000-0000-000000000001/live.mjpeg?quality=sub", manifest.MjpegUrl);
     }
 
+    [Fact]
+    public async Task LiveManifest_Direct_Rtsp_Url_Survives_Normalization_Untouched()
+    {
+        var deviceId = Guid.NewGuid();
+        using var handler = new StaticResponseHandler("""
+            {
+              "deviceId": "00000000-0000-0000-0000-000000000001",
+              "sourceCodec": "hevc",
+              "preferredMode": "HevcFmp4",
+              "rtspUrl": "rtsp://admin:p%40ss@10.0.0.169:554/ch0_0.264",
+              "hevcFmp4Url": "/api/devices/00000000-0000-0000-0000-000000000001/live.mp4?quality=main",
+              "snapshotUrl": "/api/devices/00000000-0000-0000-0000-000000000001/snapshot"
+            }
+            """);
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://127.0.0.1:5317") };
+        using var client = new HttpBossCamApiClient(http);
+
+        var manifest = await client.GetLiveManifestAsync(deviceId, "main");
+
+        Assert.NotNull(manifest);
+        // The direct-RTSP URL is already absolute and must NOT be mangled by the
+        // relative-URL normalization pass.
+        Assert.Equal("rtsp://admin:p%40ss@10.0.0.169:554/ch0_0.264", manifest.RtspUrl);
+    }
+
     private sealed class StaticResponseHandler(string json) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)

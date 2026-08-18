@@ -187,6 +187,41 @@ public sealed class BossCamServiceStarterTests
     // ── TryStartAsync end-to-end ────────────────────────────────────
 
     [Fact]
+    public async Task TryStartAsync_When_Already_Healthy_Does_Not_Spawn_A_Second_Service()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        var published = CreateTempDir();
+        var devRoot = CreateTempDir();
+        var marker = Path.Combine(published, "spawned.marker");
+        try
+        {
+            File.WriteAllText(Path.Combine(published, "BossCam.Service.dll"), "fake");
+            var fakeDotnet = Path.Combine(published, "dotnet");
+            File.WriteAllText(fakeDotnet, $"#!/bin/sh\nprintf x > '{marker}'\nexit 0\n");
+            File.SetUnixFileMode(fakeDotnet,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+
+            var starter = CreateStarter(published, devRoot, dotnetPathOverride: fakeDotnet);
+            using (starter)
+            {
+                var started = await starter.TryStartAsync(() => Task.FromResult(true));
+
+                Assert.True(started);
+                Assert.False(File.Exists(marker));
+            }
+        }
+        finally
+        {
+            Directory.Delete(published, recursive: true);
+            Directory.Delete(devRoot, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task TryStartAsync_Returns_False_When_Nothing_Available()
     {
         var published = CreateTempDir();

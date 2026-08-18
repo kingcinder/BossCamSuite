@@ -203,10 +203,18 @@ public sealed class SecurityHardeningTests
         var dbPath = Path.Combine(Path.GetTempPath(), $"bosscam-aegon-{Guid.NewGuid():N}.db");
         var store = new SqliteApplicationStore(Options.Create(new BossCamRuntimeOptions { DatabasePath = dbPath }));
         await store.InitializeAsync(CancellationToken.None);
+        // SettingsService is injected but never exercised here (empty Aegon config returns early
+        // before RegisterAsync, so no auto clock-sync fires) — an empty adapter set marks it inert.
+        var settings = new SettingsService(
+            [],
+            store,
+            new ProtocolValidationService([], new EndpointContractCatalogService(store, NullLogger<EndpointContractCatalogService>.Instance), store, NullLogger<ProtocolValidationService>.Instance),
+            NullLogger<SettingsService>.Instance);
         var registration = new DeviceRegistrationService(
             store,
             new Static404HttpClientFactory(),
             new CapabilityProbeService([], store, NullBossCamEventBroadcaster.Instance, NullLogger<CapabilityProbeService>.Instance),
+            settings,
             Options.Create(new BossCamRuntimeOptions()), // AegonLanDevices defaults to empty
             NullLogger<DeviceRegistrationService>.Instance);
 

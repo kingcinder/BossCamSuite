@@ -48,6 +48,9 @@
   // while the HTTP connection stays open, abort and let the recovery ladder reconnect.
   let fallbackLastFrameAt = 0;
   let fallbackStallWatchdog: ReturnType<typeof setInterval> | undefined;
+  // Rolling 1s frame counter so the status line shows the live fallback rate.
+  let fallbackFpsStart = 0;
+  let fallbackFpsCount = 0;
 
   const lanHeaders = () => ({
     'X-LAN-Token': localStorage.getItem('bosscam.lanToken') || '',
@@ -140,6 +143,8 @@
     if (fallbackObjectUrl) URL.revokeObjectURL(fallbackObjectUrl);
     fallbackObjectUrl = undefined;
     fallbackImageUrl = '';
+    fallbackFpsStart = 0;
+    fallbackFpsCount = 0;
   }
 
   function publishFallbackFrame(bytes: Uint8Array, run: number) {
@@ -151,7 +156,21 @@
     if (previous) URL.revokeObjectURL(previous);
     isActive = true;
     fallbackLastFrameAt = Date.now();
-    streamStatus = fallbackMode === 'snapshot' ? 'Snapshot fallback active' : 'MJPEG fallback active';
+    // Rolling fps readout for the MJPEG fallback (snapshot refresh is rate-limited).
+    if (fallbackMode === 'mjpeg') {
+      if (!fallbackFpsStart) fallbackFpsStart = Date.now();
+      fallbackFpsCount += 1;
+      const elapsed = Date.now() - fallbackFpsStart;
+      streamStatus = elapsed >= 1000
+        ? `MJPEG fallback active · ${Math.round((fallbackFpsCount * 1000) / elapsed)} fps`
+        : 'MJPEG fallback active';
+      if (elapsed >= 1000) {
+        fallbackFpsStart = 0;
+        fallbackFpsCount = 0;
+      }
+    } else {
+      streamStatus = 'Snapshot fallback active';
+    }
     appState.setStreamStatus(device.id, fallbackMode === 'snapshot' ? 'snapshot' : 'live');
     if (fallbackMode === 'snapshot') scheduleStreamRecovery(15_000);
   }

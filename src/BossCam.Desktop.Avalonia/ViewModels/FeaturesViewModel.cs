@@ -153,6 +153,46 @@ public sealed partial class FeaturesViewModel : SectionViewModelBase
     private FeatureControlRow CreateRow(string family, ControlPointInventoryItem item, Dictionary<string, JsonNode?> liveValues)
         => new(this, family, item, liveValues.TryGetValue(item.FieldKey, out var live) ? live : null);
 
+    /// <summary>
+    /// Syncs the selected camera's clock to the host's current time via the
+    /// MaintenanceOperation.TimeSync adapter write (bare-scalar RTC + timeZone PUTs
+    /// proven on 5523-W firmware). Fixes an OSD timestamp that has drifted into the
+    /// future without touching the rest of the camera's settings.
+    /// </summary>
+    [RelayCommand]
+    private async Task SyncCameraClockAsync()
+    {
+        if (Shell.SelectedDevice is null)
+        {
+            DetailText = "Select a camera first.";
+            return;
+        }
+
+        IsBusy = true;
+        DetailText = $"Syncing {Shell.SelectedDevice.DisplayName} clock to host time…";
+        try
+        {
+            // Send an explicit empty object (mirrors the SPA's '{}' maintenance body) so
+            // the maintenance endpoint always receives a well-formed JSON payload.
+            var result = await Api.ExecuteMaintenanceAsync(
+                Shell.SelectedDevice.Id,
+                nameof(MaintenanceOperation.TimeSync),
+                payload: new JsonObject());
+            DetailText = result?.Success == true
+                ? $"Clock synced: {result.Message}"
+                : $"Clock sync failed: {result?.Message ?? "no maintenance response"}";
+            SetStatus(DetailText);
+        }
+        catch (Exception ex)
+        {
+            DetailText = $"Clock sync failed: {ex.Message}";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
     [RelayCommand]
     private async Task QuickProbeAsync()
     {

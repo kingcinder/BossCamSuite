@@ -306,8 +306,11 @@ public sealed class HttpBossCamApiClient : IBossCamApiClient
     {
         try
         {
+            // client=native: the desktop's local ffmpeg decodes HEVC, so the backend
+            // advertises the zero-transcode direct-HEVC path (pure codec copy on the
+            // server) as PreferredMode instead of the H.264 browser transcode.
             var manifest = await GetJsonAsync<LiveMediaManifest?>(
-                $"/api/devices/{deviceId}/live-manifest?quality={Uri.EscapeDataString(quality)}").ConfigureAwait(false);
+                $"/api/devices/{deviceId}/live-manifest?quality={Uri.EscapeDataString(quality)}&client=native").ConfigureAwait(false);
             return manifest is null ? null : NormalizeManifestUrls(manifest);
         }
         catch (Exception ex)

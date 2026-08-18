@@ -35,7 +35,7 @@ public sealed class MainWindowViewModelTests
         Assert.Empty(vm.Devices);
         Assert.Null(vm.SelectedDevice);
         Assert.False(vm.IsLive);
-        Assert.Null(vm.LiveFrame);
+        Assert.Equal("Not started", vm.LivePlaybackStatus);
         Assert.Empty(vm.DeviceInfoText);
     }
 
@@ -241,13 +241,15 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
-    public async Task InitializeAsync_Health_Throws_Shows_Offline()
+    public async Task InitializeAsync_Health_Throws_Attempts_Service_Start_Then_Shows_Offline()
     {
         var api = new TestBossCamApiClient { ThrowOnHealth = true };
-        var vm = CreateVm(api);
+        var starter = new FakeServiceStarter { StartResult = false };
+        var vm = CreateVm(api, starter);
 
         await vm.InitializeAsync();
 
+        Assert.Equal(1, starter.StartCallCount);
         Assert.Empty(vm.Devices);
         Assert.Contains("BossCamService offline", vm.StatusText);
     }
@@ -526,6 +528,96 @@ public sealed class MainWindowViewModelTests
     // ── Live playback command construction ───────────────────────
 
     [Fact]
+    public async Task ReadExact_Uses_One_Deadline_For_The_Whole_Frame()
+    {
+        await using var stream = new DelayedByteStream(
+            [1, 2],
+            TimeSpan.FromMilliseconds(80));
+        var buffer = new byte[2];
+
+        var completed = await MainWindowViewModel.ReadExactAsync(
+            stream,
+            buffer,
+            CancellationToken.None,
+            TimeSpan.FromMilliseconds(40));
+
+        Assert.False(completed);
+    }
+
+    [Fact]
+    public void HardwareDecoder_Failure_Retries_Same_Source_In_Software()
+    {
+        Assert.True(MainWindowViewModel.ShouldRetryWithSoftwareDecoder(
+            hardwareAttempt: true,
+            processExited: true,
+            renderedFrame: false,
+            attemptDuration: TimeSpan.FromSeconds(1)));
+        Assert.False(MainWindowViewModel.ShouldRetryWithSoftwareDecoder(
+            hardwareAttempt: false,
+            processExited: true,
+            renderedFrame: false,
+            attemptDuration: TimeSpan.FromSeconds(1)));
+        Assert.False(MainWindowViewModel.ShouldRetryWithSoftwareDecoder(
+            hardwareAttempt: true,
+            processExited: false,
+            renderedFrame: false,
+            attemptDuration: TimeSpan.FromSeconds(1)));
+        Assert.False(MainWindowViewModel.ShouldRetryWithSoftwareDecoder(
+            hardwareAttempt: true,
+            processExited: true,
+            renderedFrame: false,
+            attemptDuration: TimeSpan.FromSeconds(5)));
+        Assert.False(MainWindowViewModel.ShouldRetryWithSoftwareDecoder(
+            hardwareAttempt: true,
+            processExited: true,
+            renderedFrame: true,
+            attemptDuration: TimeSpan.FromSeconds(1)));
+    }
+
+    [Fact]
+    public void LiveManifestRetry_Stops_After_Three_Attempts_Or_Dispose()
+    {
+        Assert.True(MainWindowViewModel.ShouldRetryLiveManifest(attempt: 1, disposed: false));
+        Assert.True(MainWindowViewModel.ShouldRetryLiveManifest(attempt: 2, disposed: false));
+        Assert.False(MainWindowViewModel.ShouldRetryLiveManifest(attempt: 3, disposed: false));
+        Assert.False(MainWindowViewModel.ShouldRetryLiveManifest(attempt: 1, disposed: true));
+    }
+
+    [Fact]
+    public void ReconnectDelay_Uses_Capped_Exponential_Backoff()
+    {
+        Assert.Equal(TimeSpan.FromMilliseconds(250), MainWindowViewModel.GetReconnectDelay(0));
+        Assert.Equal(TimeSpan.FromMilliseconds(500), MainWindowViewModel.GetReconnectDelay(1));
+        Assert.Equal(TimeSpan.FromMilliseconds(1000), MainWindowViewModel.GetReconnectDelay(2));
+        Assert.Equal(TimeSpan.FromMilliseconds(5000), MainWindowViewModel.GetReconnectDelay(20));
+        Assert.Equal(TimeSpan.FromMilliseconds(250), MainWindowViewModel.GetReconnectDelay(-1));
+    }
+
+    [Fact]
+    public void FirstFrameWatchdog_Reports_Only_An_Active_NoFrame_Stall()
+    {
+        var started = DateTimeOffset.UtcNow.AddSeconds(-6);
+        Assert.True(MainWindowViewModel.ShouldReportNoFirstFrame(
+            processActive: true,
+            renderedFrame: false,
+            startedAt: started,
+            now: DateTimeOffset.UtcNow,
+            timeout: TimeSpan.FromSeconds(5)));
+        Assert.False(MainWindowViewModel.ShouldReportNoFirstFrame(
+            processActive: false,
+            renderedFrame: false,
+            startedAt: started,
+            now: DateTimeOffset.UtcNow,
+            timeout: TimeSpan.FromSeconds(5)));
+        Assert.False(MainWindowViewModel.ShouldReportNoFirstFrame(
+            processActive: true,
+            renderedFrame: true,
+            startedAt: started,
+            now: DateTimeOffset.UtcNow,
+            timeout: TimeSpan.FromSeconds(5)));
+    }
+
+    [Fact]
     public void DesktopPlayback_Prefers_Shared_H264_Fmp4_Manifest_Output()
     {
         var manifest = new LiveMediaManifest
@@ -537,6 +629,419 @@ public sealed class MainWindowViewModelTests
         };
 
         Assert.Equal(manifest.H264Fmp4Url, MainWindowViewModel.SelectDesktopStreamUrl(manifest));
+    }
+
+    [Fact]
+    public void CopyBgraFrameToFramebuffer_Respects_Padded_Destination_Stride()
+    {
+        const int width = 2;
+        const int height = 2;
+        const int sourceRowBytes = width * 4;
+        const int destinationRowBytes = 12;
+        var frame = new byte[]
+        {
+            1, 2, 3, 4, 5, 6, 7, 8,
+            9, 10, 11, 12, 13, 14, 15, 16
+        };
+        var destination = System.Runtime.InteropServices.Marshal.AllocHGlobal(destinationRowBytes * height);
+        try
+        {
+            for (var i = 0; i < destinationRowBytes * height; i++)
+            {
+                System.Runtime.InteropServices.Marshal.WriteByte(destination, i, 0xCC);
+            }
+
+            MainWindowViewModel.CopyBgraFrameToFramebuffer(
+                frame, destination, destinationRowBytes, width, height);
+
+            var copied = new byte[destinationRowBytes * height];
+            System.Runtime.InteropServices.Marshal.Copy(destination, copied, 0, copied.Length);
+            Assert.Equal(frame[..sourceRowBytes], copied[..sourceRowBytes]);
+            Assert.Equal(frame[sourceRowBytes..], copied[destinationRowBytes..(destinationRowBytes + sourceRowBytes)]);
+            Assert.All(copied[sourceRowBytes..destinationRowBytes], b => Assert.Equal(0xCC, b));
+            Assert.All(copied[(destinationRowBytes + sourceRowBytes)..], b => Assert.Equal(0xCC, b));
+        }
+        finally
+        {
+            System.Runtime.InteropServices.Marshal.FreeHGlobal(destination);
+        }
+    }
+
+    [Fact]
+    public void Decoder_Drops_Frame_When_No_Render_Slot_Is_Free()
+    {
+        Assert.False(MainWindowViewModel.ShouldDiscardDecodedFrame(hasFreeRenderSlot: true));
+        Assert.True(MainWindowViewModel.ShouldDiscardDecodedFrame(hasFreeRenderSlot: false));
+    }
+
+    [Fact]
+    public void Queued_Frame_From_Older_Decode_Generation_Is_Not_Presented()
+    {
+        Assert.True(MainWindowViewModel.ShouldRenderFrame(
+            disposed: false,
+            frameGeneration: 7,
+            currentGeneration: 7));
+        Assert.False(MainWindowViewModel.ShouldRenderFrame(
+            disposed: false,
+            frameGeneration: 6,
+            currentGeneration: 7));
+        Assert.False(MainWindowViewModel.ShouldRenderFrame(
+            disposed: true,
+            frameGeneration: 7,
+            currentGeneration: 7));
+    }
+
+    [Fact]
+    public void Fullscreen_Queued_Frame_From_Older_Decode_Generation_Is_Not_Presented()
+    {
+        // Fullscreen uses the same shared generation predicate as board tiles.
+        Assert.True(MainWindowViewModel.ShouldRenderFrame(
+            disposed: false,
+            frameGeneration: 3,
+            currentGeneration: 3));
+        Assert.False(MainWindowViewModel.ShouldRenderFrame(
+            disposed: false,
+            frameGeneration: 2,
+            currentGeneration: 3));
+        Assert.False(MainWindowViewModel.ShouldRenderFrame(
+            disposed: true,
+            frameGeneration: 3,
+            currentGeneration: 3));
+    }
+
+
+    private sealed class DelayedByteStream(byte[] bytes, TimeSpan delay) : Stream
+    {
+        private int _position;
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => bytes.Length;
+        public override long Position
+        {
+            get => _position;
+            set => throw new NotSupportedException();
+        }
+
+        public override async ValueTask<int> ReadAsync(
+            Memory<byte> destination,
+            CancellationToken cancellationToken = default)
+        {
+            // First byte arrives promptly; the second is deliberately delayed. The old
+            // per-read timeout reset after byte one, while the fixed whole-frame deadline
+            // rejects the incomplete frame.
+            if (_position > 0)
+            {
+                await Task.Delay(delay, cancellationToken);
+            }
+            if (_position >= bytes.Length)
+            {
+                return 0;
+            }
+
+            destination.Span[0] = bytes[_position++];
+            return 1;
+        }
+
+        public override void Flush()
+        {
+        }
+
+        public override int Read(byte[] buffer, int offset, int count)
+            => throw new NotSupportedException();
+
+        public override long Seek(long offset, SeekOrigin origin)
+            => throw new NotSupportedException();
+
+        public override void SetLength(long value)
+            => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count)
+            => throw new NotSupportedException();
+    }
+
+    [Fact]
+    public void Snapshot_Fallback_Is_Rejected_When_A_New_Video_Generation_Started()
+    {
+        Assert.True(BoardTileViewModel.ShouldApplySnapshot(
+            videoProcessActive: false,
+            snapshotGeneration: 4,
+            currentVideoGeneration: 4));
+        Assert.False(BoardTileViewModel.ShouldApplySnapshot(
+            videoProcessActive: false,
+            snapshotGeneration: 4,
+            currentVideoGeneration: 5));
+        Assert.False(BoardTileViewModel.ShouldApplySnapshot(
+            videoProcessActive: true,
+            snapshotGeneration: 4,
+            currentVideoGeneration: 4));
+    }
+
+    [Fact]
+    public void Snapshot_Fallback_Activates_When_Active_Decoder_Has_Stalled()
+    {
+        var now = TimeSpan.FromSeconds(6).Ticks;
+        var started = TimeSpan.FromSeconds(1).Ticks;
+        var lastFrame = TimeSpan.FromSeconds(2).Ticks;
+
+        Assert.False(BoardTileViewModel.ShouldUseSnapshotFallback(
+            videoProcessActive: true,
+            lastFrameUtcTicks: lastFrame,
+            videoStartedUtcTicks: started,
+            nowUtcTicks: now,
+            maxFrameAge: TimeSpan.FromSeconds(5)));
+        Assert.True(BoardTileViewModel.ShouldUseSnapshotFallback(
+            videoProcessActive: true,
+            lastFrameUtcTicks: lastFrame,
+            videoStartedUtcTicks: started,
+            nowUtcTicks: now + TimeSpan.FromSeconds(2).Ticks,
+            maxFrameAge: TimeSpan.FromSeconds(5)));
+        Assert.True(BoardTileViewModel.ShouldUseSnapshotFallback(
+            videoProcessActive: true,
+            lastFrameUtcTicks: 0,
+            videoStartedUtcTicks: started,
+            nowUtcTicks: now + TimeSpan.FromSeconds(1).Ticks,
+            maxFrameAge: TimeSpan.FromSeconds(5)));
+    }
+
+    [Fact]
+    public void Snapshot_Fallback_Does_Not_Replace_Fresh_Live_Video()
+    {
+        var now = TimeSpan.FromSeconds(10).Ticks;
+        Assert.False(BoardTileViewModel.ShouldUseSnapshotFallback(
+            videoProcessActive: true,
+            lastFrameUtcTicks: TimeSpan.FromSeconds(8).Ticks,
+            videoStartedUtcTicks: TimeSpan.FromSeconds(1).Ticks,
+            nowUtcTicks: now,
+            maxFrameAge: TimeSpan.FromSeconds(5)));
+    }
+
+    [Fact]
+    public void DesktopPlayback_Tolerates_Manifest_With_Null_FallbackModes()
+    {
+        var manifest = new LiveMediaManifest
+        {
+            PreferredMode = LiveMediaModeContract.H264Fmp4,
+            FallbackModes = null!,
+            H264Fmp4Url = "http://127.0.0.1:5317/live.h264.mp4"
+        };
+
+        var urls = MainWindowViewModel.SelectDesktopStreamUrls(manifest);
+
+        Assert.Equal([manifest.H264Fmp4Url], urls);
+    }
+
+    [Fact]
+    public void DesktopPlayback_Prefers_Direct_Hevc_Copy_For_Native_Manifest()
+    {
+        var manifest = new LiveMediaManifest
+        {
+            PreferredMode = LiveMediaModeContract.HevcFmp4,
+            FallbackModes =
+            [
+                LiveMediaModeContract.HevcFmp4,
+                LiveMediaModeContract.H264Fmp4,
+                LiveMediaModeContract.Mjpeg,
+                LiveMediaModeContract.Snapshot
+            ],
+            HevcFmp4Url = "http://127.0.0.1:5317/api/devices/device/live.mp4",
+            H264Fmp4Url = "http://127.0.0.1:5317/api/devices/device/live.h264.mp4",
+            MpegTsUrl = "http://127.0.0.1:5317/api/devices/device/live.ts",
+            MjpegUrl = "http://127.0.0.1:5317/api/devices/device/live.mjpeg",
+            SnapshotAvailable = true,
+            SnapshotUrl = "http://127.0.0.1:5317/api/devices/device/snapshot"
+        };
+
+        // Native desktop: the zero-transcode direct-HEVC URL wins over the H.264 browser
+        // transcode. The compatibility fallback loop appends the TS URL because it is set
+        // on the manifest; the HEVC copy stays first in the ladder either way.
+        Assert.Equal(manifest.HevcFmp4Url, MainWindowViewModel.SelectDesktopStreamUrl(manifest));
+        Assert.Equal(
+            [manifest.HevcFmp4Url, manifest.H264Fmp4Url],
+            MainWindowViewModel.SelectDesktopStreamUrls(manifest));
+    }
+
+    [Fact]
+    public void DesktopPlayback_Prefers_Shared_Server_Stream_Over_Extra_Direct_Rtsp()
+    {
+        var manifest = new LiveMediaManifest
+        {
+            PreferredMode = LiveMediaModeContract.HevcFmp4,
+            FallbackModes =
+            [
+                LiveMediaModeContract.HevcFmp4,
+                LiveMediaModeContract.H264Fmp4,
+                LiveMediaModeContract.Mjpeg,
+                LiveMediaModeContract.Snapshot
+            ],
+            RtspUrl = "rtsp://admin:p%40ss@10.0.0.169:554/ch0_0.264",
+            HevcFmp4Url = "http://127.0.0.1:5317/api/devices/device/live.mp4",
+            H264Fmp4Url = "http://127.0.0.1:5317/api/devices/device/live.h264.mp4",
+            MjpegUrl = "http://127.0.0.1:5317/api/devices/device/live.mjpeg",
+            SnapshotAvailable = true,
+            SnapshotUrl = "http://127.0.0.1:5317/api/devices/device/snapshot"
+        };
+
+        // The shared native HEVC session owns one RTSP connection per camera and fans out
+        // to every desktop viewer. This avoids starving a camera that is already recording.
+        Assert.Equal(manifest.HevcFmp4Url, MainWindowViewModel.SelectDesktopStreamUrl(manifest));
+        var urls = MainWindowViewModel.SelectDesktopStreamUrls(manifest);
+        Assert.Equal([manifest.HevcFmp4Url, manifest.H264Fmp4Url], urls);
+        Assert.DoesNotContain(manifest.RtspUrl, urls);
+    }
+
+    [Fact]
+    public void Native_BoardTiles_Keep_Shared_Stream_First_For_Freshest_Reliable_Cadence()
+    {
+        var manifest = new LiveMediaManifest
+        {
+            PreferredMode = LiveMediaModeContract.HevcFmp4,
+            FallbackModes = [LiveMediaModeContract.HevcFmp4, LiveMediaModeContract.H264Fmp4],
+            RtspUrl = "rtsp://admin:@10.0.0.169:554/ch0_0.264",
+            HevcFmp4Url = "http://127.0.0.1:5317/api/devices/device/live.mp4",
+            H264Fmp4Url = "http://127.0.0.1:5317/api/devices/device/live.h264.mp4"
+        };
+
+        var urls = MainWindowViewModel.SelectDesktopStreamUrls(manifest, preferDirectRtsp: true);
+
+        // The opt-in flag is retained only for an emergency last resort. Shared service
+        // output must remain first so each landing tile does not open another camera socket.
+        Assert.Equal(manifest.HevcFmp4Url, urls[0]);
+        Assert.Equal([manifest.HevcFmp4Url, manifest.H264Fmp4Url, manifest.RtspUrl], urls);
+    }
+
+    [Fact]
+    public void BoardTiles_Prefer_Shared_HighQuality_Stream_Then_Direct_Rtsp_Fallback()
+    {
+        var manifest = new LiveMediaManifest
+        {
+            PreferredMode = LiveMediaModeContract.HevcFmp4,
+            FallbackModes = [LiveMediaModeContract.HevcFmp4, LiveMediaModeContract.H264Fmp4],
+            RtspUrl = "rtsp://admin:@10.0.0.169:554/ch0_0.264",
+            HevcFmp4Url = "http://127.0.0.1:5317/api/devices/device/live.mp4",
+            H264Fmp4Url = "http://127.0.0.1:5317/api/devices/device/live.h264.mp4"
+        };
+
+        var urls = BoardTileViewModel.SelectBoardStreamUrls(manifest);
+
+        // Landing tiles use the shared native HEVC representation first. It preserves native
+        // resolution/cadence while keeping one RTSP session per camera for all viewers.
+        Assert.Equal(manifest.HevcFmp4Url, urls[0]);
+        Assert.DoesNotContain(manifest.RtspUrl, urls);
+    }
+
+    [Fact]
+    public void DesktopPlayback_CanPrefer_ServerShared_Hevc_ForBoardTiles()
+    {
+        var manifest = new LiveMediaManifest
+        {
+            PreferredMode = LiveMediaModeContract.HevcFmp4,
+            FallbackModes = [LiveMediaModeContract.HevcFmp4, LiveMediaModeContract.H264Fmp4],
+            RtspUrl = "rtsp://admin:@10.0.0.169:554/ch0_0.264",
+            HevcFmp4Url = "http://127.0.0.1:5317/api/devices/device/live.mp4",
+            H264Fmp4Url = "http://127.0.0.1:5317/api/devices/device/live.h264.mp4"
+        };
+
+        var urls = MainWindowViewModel.SelectDesktopStreamUrls(manifest, preferDirectRtsp: false);
+
+        Assert.Equal(manifest.HevcFmp4Url, urls[0]);
+        Assert.DoesNotContain(manifest.RtspUrl, urls);
+    }
+
+    [Fact]
+    public void DirectRtspFirst_Refresh_Puts_Direct_Rtsp_Before_Shared_Ladder()
+    {
+        var manifest = new LiveMediaManifest
+        {
+            PreferredMode = LiveMediaModeContract.HevcFmp4,
+            FallbackModes = [LiveMediaModeContract.HevcFmp4, LiveMediaModeContract.H264Fmp4],
+            RtspUrl = "rtsp://admin:@10.0.0.29:554/ch0_0.264",
+            HevcFmp4Url = "http://127.0.0.1:5317/api/devices/device/live.mp4",
+            H264Fmp4Url = "http://127.0.0.1:5317/api/devices/device/live.h264.mp4"
+        };
+
+        // After the shared-session ladder failed repeatedly, the refresh path re-points
+        // the camera's direct RTSP first — the recorder proves these cameras stream
+        // direct RTSP reliably, and a stalled service session must not strand the tile.
+        var urls = BoardTileViewModel.SelectBoardStreamUrls(manifest, directRtspFirst: true);
+
+        Assert.Equal(manifest.RtspUrl, urls[0]);
+        Assert.Contains(manifest.HevcFmp4Url, urls);
+        Assert.Contains(manifest.H264Fmp4Url, urls);
+    }
+
+    [Fact]
+    public void DirectRtspFirst_Is_Opt_In_And_Default_Ladder_Is_Unchanged()
+    {
+        var manifest = new LiveMediaManifest
+        {
+            PreferredMode = LiveMediaModeContract.HevcFmp4,
+            FallbackModes = [LiveMediaModeContract.HevcFmp4, LiveMediaModeContract.H264Fmp4],
+            RtspUrl = "rtsp://admin:@10.0.0.29:554/ch0_0.264",
+            HevcFmp4Url = "http://127.0.0.1:5317/api/devices/device/live.mp4",
+            H264Fmp4Url = "http://127.0.0.1:5317/api/devices/device/live.h264.mp4"
+        };
+
+        // The ordinary landing-tile ladder must NOT open a direct camera socket first;
+        // direct-RTSP-first is reserved for the post-failure refresh path only.
+        var urls = MainWindowViewModel.SelectDesktopStreamUrls(manifest);
+
+        Assert.Equal(manifest.HevcFmp4Url, urls[0]);
+        Assert.DoesNotContain(manifest.RtspUrl, urls);
+    }
+
+    [Fact]
+    public void BoardTiles_Put_Direct_Rtsp_Last_As_Emergency_Source()
+    {
+        var manifest = new LiveMediaManifest
+        {
+            PreferredMode = LiveMediaModeContract.HevcFmp4,
+            FallbackModes = [LiveMediaModeContract.HevcFmp4, LiveMediaModeContract.H264Fmp4],
+            RtspUrl = "rtsp://admin:@10.0.0.169:554/ch0_0.264",
+            HevcFmp4Url = "http://127.0.0.1:5317/api/devices/device/live.mp4",
+            H264Fmp4Url = "http://127.0.0.1:5317/api/devices/device/live.h264.mp4"
+        };
+
+        var urls = BoardTileViewModel.SelectBoardStreamUrls(manifest);
+
+        Assert.Equal(
+            [manifest.HevcFmp4Url, manifest.H264Fmp4Url],
+            urls);
+        Assert.DoesNotContain(manifest.RtspUrl, urls);
+    }
+
+    [Fact]
+    public void BoardTiles_Never_Open_Extra_Direct_Rtsp_Session()
+    {
+        var manifest = new LiveMediaManifest
+        {
+            PreferredMode = LiveMediaModeContract.Mjpeg,
+            FallbackModes = [LiveMediaModeContract.Mjpeg, LiveMediaModeContract.Snapshot],
+            RtspUrl = "rtsp://admin:@10.0.0.169:554/ch0_0.264",
+            MjpegUrl = "http://127.0.0.1:5317/api/devices/device/live.mjpeg"
+        };
+
+        // The service owns the camera RTSP session and provides the retrying HTTP ladder.
+        // Desktop tiles must not open a second camera session after the shared modes fail.
+        Assert.Empty(BoardTileViewModel.SelectBoardStreamUrls(manifest));
+        Assert.DoesNotContain(manifest.RtspUrl, BoardTileViewModel.SelectBoardStreamUrls(manifest));
+    }
+
+    [Fact]
+    public void DesktopPlayback_Omits_Direct_Rtsp_When_Manifest_Does_Not_Advertise_It()
+    {
+        var manifest = new LiveMediaManifest
+        {
+            PreferredMode = LiveMediaModeContract.H264Fmp4,
+            FallbackModes = [LiveMediaModeContract.H264Fmp4, LiveMediaModeContract.Mjpeg],
+            H264Fmp4Url = "http://127.0.0.1:5317/api/devices/device/live.h264.mp4",
+            MjpegUrl = "http://127.0.0.1:5317/api/devices/device/live.mjpeg"
+        };
+
+        // RtspUrl empty (browser manifest or RTSP probe failed): ladder starts at the
+        // negotiated HTTP mode — no rtsp:// entry is injected.
+        Assert.DoesNotContain("rtsp://", MainWindowViewModel.SelectDesktopStreamUrl(manifest)!);
     }
 
     [Fact]
@@ -554,12 +1059,12 @@ public sealed class MainWindowViewModelTests
         };
 
         Assert.Equal(
-            [manifest.H264Fmp4Url, manifest.MjpegUrl, manifest.SnapshotUrl],
+            [manifest.H264Fmp4Url],
             MainWindowViewModel.SelectDesktopStreamUrls(manifest));
     }
 
     [Fact]
-    public void DesktopPlayback_Uses_Mjpeg_When_Backend_Negotiates_Mjpeg_First()
+    public void DesktopPlayback_Skips_Mjpeg_When_Backend_Negotiates_Mjpeg_First()
     {
         var manifest = new LiveMediaManifest
         {
@@ -571,11 +1076,52 @@ public sealed class MainWindowViewModelTests
             SnapshotUrl = "http://127.0.0.1:5317/api/devices/device/snapshot"
         };
 
-        Assert.Equal(manifest.MjpegUrl, MainWindowViewModel.SelectDesktopStreamUrl(manifest));
+        // MJPEG is intentionally not fed into the rawvideo decoder, and no continuous
+        // fallback was negotiated. Snapshot remains on the separate watchdog path.
+        Assert.Null(MainWindowViewModel.SelectDesktopStreamUrl(manifest));
     }
 
     [Fact]
-    public void DesktopPlayback_Uses_Snapshot_When_Only_Snapshot_Is_Negotiated()
+    public void DesktopPlayback_Does_Not_Feed_Snapshot_To_Continuous_Decoder()
+    {
+        var manifest = new LiveMediaManifest
+        {
+            PreferredMode = LiveMediaModeContract.H264Fmp4,
+            FallbackModes = [LiveMediaModeContract.H264Fmp4, LiveMediaModeContract.Mjpeg, LiveMediaModeContract.Snapshot],
+            H264Fmp4Url = "http://127.0.0.1:5317/live.h264.mp4",
+            MjpegUrl = "http://127.0.0.1:5317/live.mjpeg",
+            SnapshotAvailable = true,
+            SnapshotUrl = "http://127.0.0.1:5317/snapshot"
+        };
+
+        var urls = MainWindowViewModel.SelectDesktopStreamUrls(manifest);
+
+        Assert.DoesNotContain(manifest.SnapshotUrl, urls);
+        Assert.Equal([manifest.H264Fmp4Url], urls);
+    }
+
+    [Fact]
+    public void DesktopPlayback_Does_Not_Fall_Back_To_Mjpeg_Slideshow()
+    {
+        var manifest = new LiveMediaManifest
+        {
+            PreferredMode = LiveMediaModeContract.HevcFmp4,
+            FallbackModes = [LiveMediaModeContract.HevcFmp4, LiveMediaModeContract.H264Fmp4, LiveMediaModeContract.Mjpeg],
+            RtspUrl = "rtsp://admin:@10.0.0.169:554/ch0_0.264",
+            HevcFmp4Url = "http://127.0.0.1:5317/live.mp4",
+            H264Fmp4Url = "http://127.0.0.1:5317/live.h264.mp4",
+            MjpegUrl = "http://127.0.0.1:5317/live.mjpeg"
+        };
+
+        var urls = MainWindowViewModel.SelectDesktopStreamUrls(manifest);
+
+        Assert.Equal([manifest.HevcFmp4Url, manifest.H264Fmp4Url], urls);
+        Assert.DoesNotContain(manifest.RtspUrl, urls);
+        Assert.DoesNotContain(manifest.MjpegUrl, urls);
+    }
+
+    [Fact]
+    public void DesktopPlayback_Uses_No_Continuous_Url_When_Only_Snapshot_Is_Negotiated()
     {
         var manifest = new LiveMediaManifest
         {
@@ -585,7 +1131,22 @@ public sealed class MainWindowViewModelTests
             SnapshotUrl = "http://127.0.0.1:5317/api/devices/device/snapshot"
         };
 
-        Assert.Equal(manifest.SnapshotUrl, MainWindowViewModel.SelectDesktopStreamUrl(manifest));
+        Assert.Empty(MainWindowViewModel.SelectDesktopStreamUrls(manifest));
+    }
+
+    [Fact]
+    public void DesktopPlayback_Does_Not_Select_Snapshot_For_Continuous_Decoder()
+    {
+        var manifest = new LiveMediaManifest
+        {
+            PreferredMode = LiveMediaModeContract.Snapshot,
+            FallbackModes = [LiveMediaModeContract.Snapshot],
+            SnapshotAvailable = true,
+            SnapshotUrl = "http://127.0.0.1:5317/api/devices/device/snapshot"
+        };
+
+        Assert.Empty(MainWindowViewModel.SelectDesktopStreamUrls(manifest));
+        Assert.Null(MainWindowViewModel.SelectDesktopStreamUrl(manifest));
     }
 
     [Fact]
@@ -603,7 +1164,7 @@ public sealed class MainWindowViewModelTests
         };
 
         Assert.Equal(
-            [manifest.H264Fmp4Url, manifest.MpegTsUrl, manifest.MjpegUrl, manifest.SnapshotUrl],
+            [manifest.H264Fmp4Url, manifest.MpegTsUrl],
             MainWindowViewModel.SelectDesktopStreamUrls(manifest));
     }
 
@@ -637,6 +1198,159 @@ public sealed class MainWindowViewModelTests
             null);
 
         Assert.DoesNotContain("-headers", args);
+    }
+
+    [Fact]
+    public void LiveVideoFfmpegArguments_Default_To_CPU_BGRA_For_Stable_Frame_Size()
+    {
+        var args = MainWindowViewModel.BuildLiveVideoFfmpegArguments(
+            "rtsp://admin:@10.0.0.169:554/ch0_0.264",
+            null);
+        var argList = args.ToList();
+
+        // The renderer consumes a fixed-size CPU BGRA frame. Automatic hardware decode
+        // can leave frames in an accelerator surface or fail the scale/pad download path,
+        // so the stable default is software decode; operators can explicitly opt into
+        // hardware with useHardwareAcceleration=true after validating their driver.
+        Assert.DoesNotContain("-hwaccel", args);
+        Assert.True(argList.IndexOf("-i") > 0);
+    }
+
+    [Fact]
+    public void LiveVideoFfmpegArguments_Can_Force_Software_Decode_For_Driver_Recovery()
+    {
+        var args = MainWindowViewModel.BuildLiveVideoFfmpegArguments(
+            "http://127.0.0.1:5317/api/devices/1/live.mp4",
+            null,
+            useHardwareAcceleration: false);
+
+        Assert.DoesNotContain("-hwaccel", args);
+    }
+
+    [Fact]
+    public void LiveVideoFfmpegArguments_Accept_Target_Resolution_And_MultiThreaded_Decode()
+    {
+        var args = MainWindowViewModel.BuildLiveVideoFfmpegArguments(
+            "http://127.0.0.1:5317/api/devices/1/live.mp4",
+            null,
+            width: 1920,
+            height: 1080);
+
+        // -threads 0 lets ffmpeg use every core for HEVC software decode (native path).
+        Assert.Contains("-threads", args);
+        Assert.Contains("0", args);
+        // Keep the input low-latency without dropping HEVC reference frames: the
+        // 5523-W's ordered TCP stream needs the normal demuxer queue for 15 fps decode.
+        Assert.Contains("-fflags", args);
+        var argList = args.ToList();
+        var fflags = args[argList.IndexOf("-fflags") + 1];
+        Assert.DoesNotContain("nobuffer", fflags);
+        Assert.Contains("discardcorrupt", fflags);
+        // Do not disable decoder reordering: the 5523-W HEVC reference chain needs
+        // normal frame reordering for smooth playback.
+        Assert.DoesNotContain("low_delay", args);
+        Assert.Equal("2000000", argList[argList.IndexOf("-probesize") + 1]);
+        Assert.Equal("2000000", argList[argList.IndexOf("-analyzeduration") + 1]);
+        // Passthrough frame timing preserves the camera's native timestamps without
+        // CFR duplication/drops.
+        Assert.Equal("passthrough", argList[argList.IndexOf("-fps_mode") + 1]);
+        // The requested surface resolution is encoded into the scale/pad filter chain.
+        Assert.Contains(
+            "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2",
+            args);
+    }
+
+    [Fact]
+    public void LiveVideoFfmpegArguments_Default_To_Board_Tile_Resolution()
+    {
+        var args = MainWindowViewModel.BuildLiveVideoFfmpegArguments(
+            "http://127.0.0.1:5317/api/devices/1/live.mp4",
+            null);
+
+        Assert.Contains(
+            "scale=960:540:force_original_aspect_ratio=decrease,pad=960:540:(ow-iw)/2:(oh-ih)/2",
+            args);
+    }
+
+    [Fact]
+    public void LiveVideoFfmpegArguments_Direct_Rtsp_Preserves_Reference_Frame_Pacing()
+    {
+        var args = MainWindowViewModel.BuildLiveVideoFfmpegArguments(
+            "rtsp://admin:@10.0.0.169:554/ch0_0.264",
+            null);
+        var argList = args.ToList();
+        var fflags = argList[argList.IndexOf("-fflags") + 1];
+
+        // The 5523-W sends HEVC reference frames over ordered TCP. Forcing ffmpeg's
+        // demuxer into nobuffer/reorder-queue-zero mode drops reference frames and
+        // measured output fell to 1-3 fps instead of the camera's 15 fps.
+        Assert.DoesNotContain("nobuffer", fflags);
+        Assert.DoesNotContain("-reorder_queue_size", args);
+        Assert.Equal("passthrough", argList[argList.IndexOf("-fps_mode") + 1]);
+    }
+
+    [Fact]
+    public void LiveVideoFfmpegArguments_Add_Rtsp_Transport_Flags_For_Direct_Rtsp_Url()
+    {
+        var args = MainWindowViewModel.BuildLiveVideoFfmpegArguments(
+            "rtsp://admin:p%40ss@10.0.0.169:554/ch0_0.264",
+            null);
+
+        // Direct RTSP uses TCP transport and a bounded socket timeout. Keep the normal
+        // packet reorder queue because the camera's HEVC reference chain depends on it.
+        Assert.Contains("-rtsp_transport", args);
+        Assert.Contains("tcp", args);
+        Assert.Contains("-rtsp_flags", args);
+        Assert.Contains("prefer_tcp", args);
+        // Assert flag→value pairings: a bare Contains("0") would be vacuous here because
+        // -threads 0 already emits a standalone "0" element in the same arg list.
+        // discardcorrupt belongs inside -fflags; it is not a standalone ffmpeg option.
+        var argList = args.ToList();
+        Assert.Equal("500000", argList[argList.IndexOf("-max_delay") + 1]);
+        Assert.DoesNotContain("-reorder_queue_size", args);
+        Assert.Contains("discardcorrupt", argList[argList.IndexOf("-fflags") + 1]);
+        Assert.DoesNotContain("-discardcorrupt", args);
+        Assert.Equal("10000000", argList[argList.IndexOf("-timeout") + 1]);
+    }
+
+    [Fact]
+    public void LiveVideoFfmpegArguments_Http_Url_Omits_Rtsp_Transport_Flags()
+    {
+        var args = MainWindowViewModel.BuildLiveVideoFfmpegArguments(
+            "http://127.0.0.1:5317/api/devices/1/live.mp4",
+            null);
+
+        Assert.DoesNotContain("-rtsp_transport", args);
+        Assert.DoesNotContain("-rtsp_flags", args);
+        Assert.DoesNotContain("-max_delay", args);
+    }
+
+    [Fact]
+    public void LiveVideoFfmpegArguments_Http_Url_Adds_Rw_Timeout_To_Fail_Fast_On_Stalls()
+    {
+        // The service's shared HTTP fMP4 session can stall mid-stream (half-open connection
+        // after a camera Wi-Fi blip). ffmpeg's HTTP demuxer has no built-in read deadline,
+        // so rw_timeout bounds the socket read/write and lets the frame watchdog advance the
+        // reconnect ladder instead of freezing the tile on its last frame.
+        var args = MainWindowViewModel.BuildLiveVideoFfmpegArguments(
+            "http://127.0.0.1:5317/api/devices/1/live.mp4",
+            null);
+        var argList = args.ToList();
+
+        Assert.Equal("10000000", argList[argList.IndexOf("-rw_timeout") + 1]);
+    }
+
+    [Fact]
+    public void LiveVideoFfmpegArguments_Direct_Rtsp_Does_Not_Add_Http_Rw_Timeout()
+    {
+        // rw_timeout is an HTTP-protocol option; direct RTSP uses -timeout instead.
+        var args = MainWindowViewModel.BuildLiveVideoFfmpegArguments(
+            "rtsp://admin:@10.0.0.169:554/ch0_0.264",
+            null);
+        var argList = args.ToList();
+
+        Assert.DoesNotContain("-rw_timeout", args);
+        Assert.Equal("10000000", argList[argList.IndexOf("-timeout") + 1]);
     }
 
     [Fact]
@@ -786,9 +1500,7 @@ public sealed class MainWindowViewModelTests
         // SelectedDevice is auto-selected at startup → the live loop requests main.
         Assert.NotNull(vm.SelectedDevice);
         Assert.Equal("main", api.LastManifestQuality);
-    }
-
-    // ── Dispose ──────────────────────────────────────────────────
+    }    // ── Dispose ─────────────────────────────────────────────
 
     [Fact]
     public void Dispose_Does_Not_Throw()
@@ -805,7 +1517,6 @@ public sealed class MainWindowViewModelTests
         var vm = new MainWindowViewModel(api);
         var exception = Record.Exception(() => vm.Dispose());
         Assert.Null(exception);
-        // api should not throw on double-dispose either
         var ex2 = Record.Exception(() => api.Dispose());
         Assert.Null(ex2);
     }

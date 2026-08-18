@@ -53,6 +53,15 @@ public sealed class BossCamRuntimeOptions
     public int DiscoveryTimeoutSeconds { get; set; } = 3;
     public int HttpTimeoutSeconds { get; set; } = 8;
     /// <summary>
+    /// Maximum acceptable OSD-vs-host clock drift (seconds) for
+    /// <c>MaintenanceOperation.ClockVerify</c> to report success. The 5523-W RTC is a
+    /// bare unix-seconds int written at second granularity, and the read-back happens a
+    /// few hundred ms after the write, so a tolerance of 5–30s absorbs both the RTC
+    /// resolution and the round-trip while still catching the “a day into the future”
+    /// drift the operator reported. Default 30.
+    /// </summary>
+    public int ClockVerifyToleranceSeconds { get; set; } = 30;
+    /// <summary>
     /// How long a successful NetSDK family probe (deviceInfo) stays trusted in the device's
     /// store metadata before <see cref="Video.NativeNetSdkStreamAdapter"/> re-probes. A fresh
     /// verdict skips the network probe on every stream-request source resolution; expiry or

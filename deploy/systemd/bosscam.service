@@ -2,9 +2,18 @@
 Description=BossCamSuite camera control service (Linux)
 After=network-online.target
 Wants=network-online.target
+# Stop thrashing when the app aborts on startup (e.g. port-bind conflict with
+# a stale manual instance): after 5 restarts in 120s the unit gives up instead
+# of spinning forever. scripts/service-lifecycle-guard.sh recovers it once the
+# port is free.
+StartLimitIntervalSec=120
+StartLimitBurst=5
 
 [Service]
-Type=notify
+# The service exposes /api/health and the GUI performs readiness polling.
+# Use simple rather than notify so systemd does not wait for a readiness signal
+# during bootstrap and race a second manually spawned instance onto port 5317.
+Type=simple
 # Set User= to a real account (install-systemd.sh fills this in).
 User=cody
 WorkingDirectory=/opt/bosscam

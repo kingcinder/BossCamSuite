@@ -17,6 +17,15 @@ public sealed record LiveMediaManifest
     public string HevcFmp4Url { get; init; } = string.Empty;
     public string MpegTsUrl { get; init; } = string.Empty;
     public string SnapshotUrl { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Credentialed direct-RTSP URL for the negotiated source, populated only for native
+    /// clients (client=native) whose RTSP probe succeeded. The desktop's local ffmpeg can
+    /// connect straight to the camera — no server HTTP hop, no fragment-alignment delay —
+    /// and the negotiated HTTP modes below remain the automatic fallback ladder.
+    /// Empty for browser manifests.
+    /// </summary>
+    public string RtspUrl { get; init; } = string.Empty;
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]

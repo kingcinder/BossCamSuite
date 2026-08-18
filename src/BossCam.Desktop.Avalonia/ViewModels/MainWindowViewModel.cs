@@ -1,8 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Text.Json;
-using Avalonia.Threading;
-using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using BossCam.Contracts;
@@ -22,11 +20,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, ISectionView
     private readonly IBossCamApiClient _api;
     private readonly ILogger<MainWindowViewModel> _logger;
     private readonly IBossCamServiceStarter _serviceStarter;
-    private Timer? _liveTimer;
     private Timer? _healthPollTimer;
-    private CancellationTokenSource? _liveVideoCts;
-    private Task? _liveVideoTask;
-    private Process? _liveVideoProcess;
     private readonly CancellationTokenSource _startupCts = new();
     private int _handshakeInProgress;
     private bool _disposed;
@@ -120,9 +114,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, ISectionView
     public string Title => "Live View";
     public string Glyph => "\U0001F4FA";
     public string Explain =>
-        "Live View streams a snapshot of the selected camera and shows its identity " +
-        "details. Click a camera in the sidebar device list, then use Refresh, Snapshot " +
-        "or Save to manage the current view.";
+        "Live View is the landing board: every starred camera auto-loads and streams here " +
+        "at the camera's native rate, each tile the same size. Double-click a tile for " +
+        "fullscreen; click ☆ to pin or unpin. The footer shows the negotiated stream mode " +
+        "and the selected camera's identity.";
 
     public async Task ActivateAsync()
     {
@@ -178,12 +173,36 @@ public sealed partial class MainWindowViewModel : ObservableObject, ISectionView
         var startupToken = _startupCts.Token;
         try
         {
-            if (!IsHealthy(await _api.GetHealthAsync()))
+            // Connection refusal, timeout, and malformed health responses are all the same
+            // startup condition: the service is not usable yet. Do not let an exception
+            // bypass the auto-start path and strand the GUI in a false offline state.
+            var healthy = false;
+            try
+            {
+                healthy = IsHealthy(await _api.GetHealthAsync());
+            }
+            catch (Exception ex) when (!startupToken.IsCancellationRequested)
+            {
+                _logger.LogDebug(ex, "Initial BossCamService health probe failed; attempting startup");
+            }
+
+            if (!healthy)
             {
                 ConnectionStatus = ServiceConnectionStatus.Starting;
                 StatusText = "BossCamService offline at http://127.0.0.1:5317 \u2014 starting it\u2026";
                 var started = await _serviceStarter.TryStartAsync(
-                    async () => IsHealthy(await _api.GetHealthAsync()),
+                    async () =>
+                    {
+                        try
+                        {
+                            return IsHealthy(await _api.GetHealthAsync());
+                        }
+                        catch (Exception ex) when (!startupToken.IsCancellationRequested)
+                        {
+                            _logger.LogDebug(ex, "BossCamService health probe while starting failed");
+                            return false;
+                        }
+                    },
                     startupToken);
                 if (!started)
                 {
@@ -440,55 +459,20 @@ public sealed partial class MainWindowViewModel : ObservableObject, ISectionView
     }
 
     /// <summary>
-    /// Banner tile → management section mapping. Tile names (Display/Audio/Network/…)
-    /// intentionally differ from section titles, so each tile resolves to the section
-    /// that actually holds its controls; unknown tiles fall back to the literal title.
-    /// </summary>
-    private static readonly IReadOnlyDictionary<string, string> FullscreenTileSectionMap =
-        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["Display"] = "Features",      // image/display controls live in the Features section
-            ["Audio"] = "Features",        // audio output options share the control-point surface
-            ["Network"] = "Connectivity",  // AP / networking capabilities
-            ["Hotspot"] = "Connectivity",  // hotspot daisy-chain lives with the wireless surface
-            ["Features"] = "Features",
-            ["Settings"] = "Features",
-            ["Record"] = "Recordings",
-            ["Advanced"] = "Diagnostics",
-            ["Firmware"] = "Firmware",
-            ["Recovery"] = "Devices"
-        };
-
-    /// <summary>
     /// Opens the immersive fullscreen camera view for the given camera. The fullscreen
-    /// view owns its own HD-main decode loop, so it is independent of the shell's
-    /// selected-camera loop; it also receives the section-navigation callback so its
-    /// option tiles can jump to the matching management section (Features/Record/…).
+    /// view owns its own HD-main decode loop, independent of the shell's selected-camera
+    /// loop, and embeds the real camera-options surface (Features control points) so its
+    /// banner tiles open in-window menus instead of navigating away or closing the video.
     /// </summary>
     [RelayCommand]
     private void OpenFullscreen(DeviceIdentity device)
     {
         if (device is null) return;
         SelectedDevice = device;
-        var fullscreen = new FullscreenCameraViewModel(_api, device, _api.LanToken);
+        var fullscreen = new FullscreenCameraViewModel(_api, device, _api.LanToken, shell: this);
         var window = new Views.FullscreenCameraWindow
         {
             DataContext = fullscreen
-        };
-        fullscreen.RequestOpenSection += section =>
-        {
-            var title = FullscreenTileSectionMap.TryGetValue(section, out var mapped)
-                ? mapped
-                : section;
-            var target = Sections.FirstOrDefault(s => string.Equals(s.Title, title, StringComparison.OrdinalIgnoreCase));
-            if (target is not null)
-            {
-                SelectedSection = target;
-            }
-            // Dismiss the Topmost fullscreen window so the user actually lands in the
-            // section instead of navigating invisibly behind the video (the window
-            // subscribes RequestClose → Close via the VM's ExitFullscreen command).
-            fullscreen.ExitFullscreenCommand.Execute(null);
         };
         window.Show();
     }
@@ -515,13 +499,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, ISectionView
     private string _deviceInfoText = string.Empty;
 
     [ObservableProperty]
-    private Bitmap? _liveFrame;
-
-    [ObservableProperty]
     private bool _isLive;
-
-    [ObservableProperty]
-    private WriteableBitmap? _liveVideoFrame;
 
     [ObservableProperty]
     private string _livePlaybackStatus = "Not started";
@@ -600,21 +578,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, ISectionView
         catch (Exception ex)
         {
             // Optional enrichment only — GetLiveInfoAsync already returns null on failure,
-            // so the live view must not break if live-info is temporarily unavailable. The
-            // Debug log keeps transient failures traceable without spamming the 2s poll loop.
+            // so the live view must not break if live-info is temporarily unavailable.
             _logger.LogDebug(ex, "Live-info enrichment failed for device {DeviceId}", id);
         }
-
-        _liveTimer?.Dispose();
-        _liveTimer = new Timer(async _ =>
-        {
-            var bytes = await _api.GetSnapshotAsync(id);
-            if (bytes is { Length: > 100 })
-            {
-                using var ms = new MemoryStream(bytes);
-                LiveFrame = new Bitmap(ms);
-            }
-        }, null, 0, 2000);
 
         await StartLiveVideoAsync(id);
     }
@@ -636,41 +602,68 @@ public sealed partial class MainWindowViewModel : ObservableObject, ISectionView
 
     private async Task StartLiveVideoAsync(Guid deviceId)
     {
-        await StopLiveVideoAsync();
-        // HD main is the always-preferred stream (mirrors the SPA's default). The
-        // backend negotiates down to sub/MJPEG/snapshot only when main is unavailable.
+        // HD main is the always-preferred stream (mirrors the SPA's default). The landing
+        // board tiles each run their own decode loop at 960x540, so the shell must NOT
+        // launch a second hidden 1280x720 decode — it would only steal CPU from the feeds
+        // actually on screen. The shell negotiates the manifest so the footer reports the
+        // live mode without burning a decoder.
         var manifest = await _api.GetLiveManifestAsync(deviceId, "main");
-        var streamUrls = manifest is null ? [] : SelectDesktopStreamUrls(manifest);
-        if (streamUrls.Count == 0)
+        if (manifest is null || SelectDesktopStreamUrls(manifest).Count == 0)
         {
-            LivePlaybackStatus = "Live manifest unavailable; snapshot view remains active.";
+            LivePlaybackStatus = "Live manifest unavailable — board tiles keep streaming.";
             return;
         }
 
-        var cts = new CancellationTokenSource();
-        _liveVideoCts = cts;
-        var lanToken = _api.LanToken;
-        _liveVideoTask = Task.Run(() => RunLiveVideoLoopAsync(streamUrls, lanToken, cts.Token));
+        LivePlaybackStatus =
+            $"Negotiated {manifest.PreferredMode} — board tiles stream at the camera's native rate";
     }
 
-    internal static IReadOnlyList<string> SelectDesktopStreamUrls(LiveMediaManifest manifest)
+    internal static IReadOnlyList<string> SelectDesktopStreamUrls(
+        LiveMediaManifest manifest,
+        bool preferDirectRtsp = false,
+        bool directRtspFirst = false)
     {
         ArgumentNullException.ThrowIfNull(manifest);
         // Follow the backend's ordered negotiation result. The old "first non-empty URL"
         // behavior could launch fMP4 even when RTSP had already degraded to MJPEG/snapshot.
+        // A non-null FallbackModes collection is authoritative. Only manifests from
+        // older services that omitted the field entirely may use the legacy URL sweep
+        // below; otherwise an explicitly unsupported URL must not be resurrected after
+        // the direct source fails.
+        var hasAdvertisedFallbacks = manifest.FallbackModes is not null;
+        // A non-null fallback list is authoritative. Only older manifests that omitted
+        // the field entirely may use the legacy URL sweep below.
         var modes = new[] { manifest.PreferredMode }
-            .Concat(manifest.FallbackModes)
+            .Concat(manifest.FallbackModes ?? [])
             .Distinct()
             .ToList();
         var urls = new List<string>();
+        // The shared native HTTP representation is always the primary desktop path. The
+        // service owns one RTSP session per camera and fans it out to all desktop/browser
+        // viewers; opening direct RTSP from every tile/fullscreen window can exhaust the
+        // 5523-W session budget when recording is active and was confirmed to starve
+        // 10.0.0.169. Direct RTSP is retained only as an emergency fallback, appended
+        // after every negotiated server-owned continuous representation.
         foreach (var mode in modes)
         {
             var url = mode switch
             {
+                // Direct HEVC copy is the native desktop path (local ffmpeg decodes HEVC);
+                // H.264 fMP4/TS are the browser-compatibility transcodes. The backend only
+                // advertises HevcFmp4 for client=native manifests.
+                LiveMediaModeContract.HevcFmp4 => manifest.HevcFmp4Url,
                 LiveMediaModeContract.H264Fmp4 => manifest.H264Fmp4Url,
                 LiveMediaModeContract.H264MpegTs => manifest.MpegTsUrl,
-                LiveMediaModeContract.Mjpeg => manifest.MjpegUrl,
-                LiveMediaModeContract.Snapshot when manifest.SnapshotAvailable => manifest.SnapshotUrl,
+                // The desktop decoder must not use the MJPEG compatibility endpoint. On
+                // 5523-W this endpoint is backed by a snapshot pump, so treating it as a
+                // continuous source produces exactly the one-frame-every-few-seconds
+                // slideshow reported in the incident. It remains available to browser
+                // clients through their own negotiated player path.
+                LiveMediaModeContract.Mjpeg => null,
+                // Snapshot is a single JPEG, not a continuous media source. It is handled
+                // by BoardTileViewModel's snapshot watchdog and must never be handed to
+                // ffmpeg's continuous rawvideo loop (which would yield one frame per restart).
+                LiveMediaModeContract.Snapshot => null,
                 _ => null
             };
             if (!string.IsNullOrWhiteSpace(url) && !urls.Contains(url, StringComparer.OrdinalIgnoreCase))
@@ -679,122 +672,94 @@ public sealed partial class MainWindowViewModel : ObservableObject, ISectionView
             }
         }
 
-        // Compatibility with older manifests that omitted FallbackModes.
-        foreach (var url in new[] { manifest.H264Fmp4Url, manifest.MpegTsUrl, manifest.MjpegUrl,
-                                    manifest.SnapshotAvailable ? manifest.SnapshotUrl : string.Empty })
+        // Compatibility with older manifests that omitted FallbackModes. Only continuous
+        // media URLs belong in this decoder ladder; snapshot remains a separate watchdog
+        // path so it cannot produce the observed one-frame-every-few-seconds slideshow.
+        if (!hasAdvertisedFallbacks)
         {
-            if (!string.IsNullOrWhiteSpace(url) && !urls.Contains(url, StringComparer.OrdinalIgnoreCase))
+            foreach (var url in new[] { manifest.HevcFmp4Url, manifest.H264Fmp4Url, manifest.MpegTsUrl })
             {
-                urls.Add(url);
+                if (!string.IsNullOrWhiteSpace(url) && !urls.Contains(url, StringComparer.OrdinalIgnoreCase))
+                {
+                    urls.Add(url);
+                }
+            }
+        }
+
+        // Direct RTSP: as an opt-in emergency fallback (appended last) while the
+        // service-owned representations are merely degraded, or — after the shared
+        // session ladder has failed repeatedly — as the FIRST rung, so a stalled
+        // service session cannot strand a camera that still answers direct RTSP
+        // (the recorder demonstrably streams these cameras direct RTSP fine).
+        if (!string.IsNullOrWhiteSpace(manifest.RtspUrl)
+            && !urls.Contains(manifest.RtspUrl, StringComparer.OrdinalIgnoreCase))
+        {
+            if (directRtspFirst)
+            {
+                urls.Insert(0, manifest.RtspUrl);
+            }
+            else if (preferDirectRtsp)
+            {
+                urls.Add(manifest.RtspUrl);
             }
         }
         return urls;
     }
 
-    internal static string? SelectDesktopStreamUrl(LiveMediaManifest manifest)
-        => SelectDesktopStreamUrls(manifest).FirstOrDefault();
+    internal static string? SelectDesktopStreamUrl(LiveMediaManifest manifest, bool preferDirectRtsp = false)
+        => SelectDesktopStreamUrls(manifest, preferDirectRtsp).FirstOrDefault();
 
     internal static int NextDesktopStreamIndex(int currentIndex, int streamCount)
         => streamCount <= 0 ? 0 : (currentIndex + 1) % streamCount;
 
-    private async Task RunLiveVideoLoopAsync(IReadOnlyList<string> streamUrls, string? lanToken, CancellationToken cancellationToken)
+    /// <summary>
+    /// A hardware decoder that exits before delivering a frame is commonly a driver/
+    /// hwdownload negotiation failure, not a dead camera. Retry the same representation
+    /// once with software decoding before advancing the transport ladder. A stream that
+    /// remains alive but produces no bytes is treated as a transport stall instead, so
+    /// it advances normally rather than being misclassified as a hardware failure.
+    /// </summary>
+    internal static bool ShouldRetryWithSoftwareDecoder(
+        bool hardwareAttempt,
+        bool processExited,
+        bool renderedFrame,
+        TimeSpan attemptDuration)
+        => hardwareAttempt
+           && processExited
+           && !renderedFrame
+           && attemptDuration < TimeSpan.FromSeconds(5);
+
+    /// <summary>Limits manifest acquisition retries so a dead service cannot create a request storm.</summary>
+    internal static bool ShouldRetryLiveManifest(int attempt, bool disposed)
+        => !disposed && attempt < 3;
+
+    /// <summary>
+    /// Capped exponential reconnect delay. A dead camera/service must not create an
+    /// unbounded ffmpeg/HTTP retry storm, while a transient drop still recovers quickly.
+    /// </summary>
+    internal static TimeSpan GetReconnectDelay(int failureIndex)
     {
-        var streamIndex = 0;
-        while (!cancellationToken.IsCancellationRequested)
-        {
-            Process? process = null;
-            try
-            {
-                var streamUrl = streamUrls[streamIndex];
-                LivePlaybackStatus = $"Connecting compatibility stream {streamIndex + 1}/{streamUrls.Count}…";
-                var ffmpeg = ResolveFfmpegPath();
-                if (ffmpeg is null)
-                {
-                    LivePlaybackStatus = "FFmpeg unavailable; snapshot view remains active.";
-                    return;
-                }
-
-                var startInfo = new ProcessStartInfo
-                {
-                    FileName = ffmpeg,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true
-                };
-                foreach (var arg in BuildLiveVideoFfmpegArguments(streamUrl, lanToken))
-                {
-                    startInfo.ArgumentList.Add(arg);
-                }
-
-                process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
-                if (!process.Start())
-                {
-                    throw new InvalidOperationException("FFmpeg failed to start.");
-                }
-                // stderr is redirected; drain it continuously or repeated camera/network
-                // errors can fill the OS pipe and stall ffmpeg's stdout playback stream.
-                _ = Task.Run(async () =>
-                {
-                    try { await process.StandardError.ReadToEndAsync(); }
-                    catch (Exception ex) when (ex is IOException or ObjectDisposedException or InvalidOperationException)
-                    {
-                        _logger.LogDebug(ex, "FFmpeg stderr drain ended");
-                    }
-                });
-                _liveVideoProcess = process;
-                LivePlaybackStatus = $"Playing compatibility stream {streamIndex + 1}/{streamUrls.Count}";
-
-                const int width = 960;
-                const int height = 540;
-                var frameSize = width * height * 4;
-                var buffer = new byte[frameSize];
-                while (!cancellationToken.IsCancellationRequested)
-                {
-                    if (!await ReadExactAsync(process.StandardOutput.BaseStream, buffer, cancellationToken))
-                    {
-                        break;
-                    }
-
-                    var frame = buffer.ToArray();
-                    await Dispatcher.UIThread.InvokeAsync(() =>
-                    {
-                        LiveVideoFrame ??= new WriteableBitmap(
-                            new global::Avalonia.PixelSize(width, height),
-                            new global::Avalonia.Vector(96, 96),
-                            global::Avalonia.Platform.PixelFormat.Bgra8888,
-                            global::Avalonia.Platform.AlphaFormat.Opaque);
-                        using var locked = LiveVideoFrame.Lock();
-                        System.Runtime.InteropServices.Marshal.Copy(frame, 0, locked.Address, frame.Length);
-                    });
-                }
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                return;
-            }
-            catch (Exception ex)
-            {
-                LivePlaybackStatus = $"Playback reconnecting: {ex.Message}";
-            }
-            finally
-            {
-                if (ReferenceEquals(_liveVideoProcess, process))
-                {
-                    _liveVideoProcess = null;
-                }
-                await StopProcessSafelyAsync(process);
-            }
-
-            if (!cancellationToken.IsCancellationRequested)
-            {
-                // Move through the backend-negotiated representations after a decoder or
-                // transport failure instead of retrying a dead fMP4 URL forever.
-                streamIndex = NextDesktopStreamIndex(streamIndex, streamUrls.Count);
-                await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
-            }
-        }
+        var exponent = Math.Clamp(failureIndex, 0, 5);
+        var milliseconds = 250L * (1L << exponent);
+        return TimeSpan.FromMilliseconds(Math.Min(milliseconds, 5000L));
     }
+
+    /// <summary>
+    /// Identifies an ffmpeg process that is alive but has not delivered its first complete
+    /// frame within the bounded startup window. The caller tears down that process and lets
+    /// the normal transport ladder retry; this prevents a blank fullscreen window from
+    /// remaining in a misleading "Playing" state forever.
+    /// </summary>
+    internal static bool ShouldReportNoFirstFrame(
+        bool processActive,
+        bool renderedFrame,
+        DateTimeOffset startedAt,
+        DateTimeOffset now,
+        TimeSpan timeout)
+        => processActive
+           && !renderedFrame
+           && startedAt != default
+           && now - startedAt > timeout;
 
     /// <summary>
     /// Reads a full rawvideo frame, bounding each read with a stall timeout. A silent RTSP
@@ -802,28 +767,109 @@ public sealed partial class MainWindowViewModel : ObservableObject, ISectionView
     /// and freezes the last frame on screen for minutes. A timed-out read returns false so the
     /// caller advances to the next negotiated representation and reconnects.
     /// </summary>
-    private static async Task<bool> ReadExactAsync(Stream stream, byte[] buffer, CancellationToken cancellationToken)
+    /// <summary>
+    /// Copies packed BGRA decoder output into an Avalonia framebuffer without assuming
+    /// that the destination rows are tightly packed. Avalonia may pad RowBytes for the
+    /// platform framebuffer; copying one row at a time preserves image alignment and
+    /// prevents writes from crossing row boundaries.
+    /// </summary>
+    internal static void CopyBgraFrameToFramebuffer(
+        byte[] frame,
+        IntPtr destination,
+        int destinationRowBytes,
+        int width,
+        int height)
     {
-        var offset = 0;
-        while (offset < buffer.Length)
+        ArgumentNullException.ThrowIfNull(frame);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
+        var sourceRowBytes = checked(width * 4);
+        var requiredBytes = checked(sourceRowBytes * height);
+        if (frame.Length < requiredBytes)
         {
-            using var readTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            readTimeout.CancelAfter(TimeSpan.FromSeconds(15));
-            try
+            throw new ArgumentException("The BGRA frame is smaller than the requested surface.", nameof(frame));
+        }
+        if (destinationRowBytes < sourceRowBytes)
+        {
+            throw new ArgumentException("The framebuffer row stride is smaller than the packed BGRA row.", nameof(destinationRowBytes));
+        }
+
+        for (var row = 0; row < height; row++)
+        {
+            global::System.Runtime.InteropServices.Marshal.Copy(
+                frame,
+                row * sourceRowBytes,
+                IntPtr.Add(destination, row * destinationRowBytes),
+                sourceRowBytes);
+        }
+    }
+
+    /// <summary>Returns whether a decoded frame should be discarded when the UI queue is full.</summary>
+    internal static bool ShouldDiscardDecodedFrame(bool hasFreeRenderSlot) => !hasFreeRenderSlot;
+
+    /// <summary>
+    /// Rejects a UI callback queued by an older decoder generation. A reconnect can leave one
+    /// render-priority callback in Avalonia's dispatcher after its ffmpeg process is gone;
+    /// comparing generations prevents that stale frame from replacing the first fresh frame
+    /// from the new source.
+    /// </summary>
+    internal static bool ShouldRenderFrame(bool disposed, int frameGeneration, int currentGeneration)
+        => !disposed && frameGeneration == currentGeneration;
+
+    internal static async Task<bool> ReadExactAsync(
+        Stream stream,
+        byte[] buffer,
+        CancellationToken cancellationToken,
+        TimeSpan? timeout = null)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        ArgumentNullException.ThrowIfNull(buffer);
+        if (buffer.Length == 0)
+        {
+            return true;
+        }
+
+        // The deadline belongs to the complete frame, not each partial read. A decoder
+        // emitting one byte periodically must not keep a tile alive forever while no
+        // complete frame can reach the renderer.
+        var frameTimeout = timeout ?? TimeSpan.FromSeconds(5);
+        if (frameTimeout <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(timeout), "The frame timeout must be positive.");
+        }
+
+        using var readTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        readTimeout.CancelAfter(frameTimeout);
+        var offset = 0;
+        try
+        {
+            while (offset < buffer.Length)
             {
                 var read = await stream.ReadAsync(buffer.AsMemory(offset), readTimeout.Token);
                 if (read == 0) return false;
                 offset += read;
             }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-            {
-                return false; // stalled — fail over to the next stream representation
-            }
+            return true;
         }
-        return true;
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return false; // stalled — fail over to the next stream representation
+        }
     }
 
-    internal static IReadOnlyList<string> BuildLiveVideoFfmpegArguments(string streamUrl, string? lanToken)
+    /// <summary>
+    /// Builds the ffmpeg args for a desktop rawvideo decode. Each surface decodes at its
+    /// own target resolution (board tiles 960x540, fullscreen 1920x1080) so CPU stays
+    /// proportional to what is actually displayed. -threads 0 lets ffmpeg use every core
+    /// for HEVC software decode (the direct native path), which is the single biggest
+    /// decoder bottleneck on this machine.
+    /// </summary>
+    internal static IReadOnlyList<string> BuildLiveVideoFfmpegArguments(
+        string streamUrl,
+        string? lanToken,
+        int width = 960,
+        int height = 540,
+        bool? useHardwareAcceleration = null)
     {
         var args = new List<string>
         {
@@ -831,59 +877,110 @@ public sealed partial class MainWindowViewModel : ObservableObject, ISectionView
         };
         // ffmpeg's HTTP input accepts custom headers. Keep the token out of the URL and
         // reject line breaks so a malformed token cannot create additional HTTP headers.
-        if (!string.IsNullOrWhiteSpace(lanToken)
-            && !lanToken.Contains('\r', StringComparison.Ordinal)
-            && !lanToken.Contains('\n', StringComparison.Ordinal))
+        // X-LAN-Token is an HTTP header. Passing -headers to the native RTSP
+        // demuxer makes ffmpeg reject the direct camera path before decoding starts,
+        // which then falls through to the slower fragment path.
+        if (streamUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            || streamUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
         {
-            args.Add("-headers");
-            args.Add($"X-LAN-Token: {lanToken}\r\n");
+            if (!string.IsNullOrWhiteSpace(lanToken)
+                && !lanToken.Contains('\r', StringComparison.Ordinal)
+                && !lanToken.Contains('\n', StringComparison.Ordinal))
+            {
+                args.Add("-headers");
+                args.Add($"X-LAN-Token: {lanToken}\r\n");
+            }
+            // The service's shared HTTP fMP4 session can stall mid-stream (a half-open
+            // connection after the camera Wi-Fi blips). ffmpeg's HTTP demuxer has no
+            // built-in read deadline, so a stalled session would hold the decode loop
+            // open forever. rw_timeout bounds the socket read/write so the 5-second
+            // frame watchdog gets a prompt EOF/error and the reconnect ladder advances
+            // instead of freezing the tile on its last frame.
+            args.Add("-rw_timeout");
+            args.Add("10000000"); // 10s, in microseconds
         }
+        // Keep the HEVC decoder's normal reference-frame reordering. The 5523-W's
+        // ordered TCP stream needs those references; low-delay decoder flags can cause
+        // POC errors and collapse a 15 fps source into a slideshow.
+        // Do not use nobuffer or a zero reorder queue here. The 5523-W sends HEVC
+        // reference frames over ordered TCP; those latency shortcuts make ffmpeg emit
+        // POC/reference errors and collapse a 15 fps source into a 1–3 fps slideshow.
+        // Keep timestamp generation/corrupt-frame dropping, but let the demuxer retain
+        // enough ordered packets to decode the reference chain.
         args.AddRange([
+            "-fflags", "genpts+discardcorrupt",
+            "-probesize", "2000000",
+            "-analyzeduration", "2000000"
+        ]);
+        // Direct-RTSP input uses TCP transport, a bounded delay, and a socket timeout.
+        // Keep ffmpeg's packet reorder queue enabled: ordered HEVC reference frames need it;
+        // a silent media stall still aborts through the socket timeout instead of freezing
+        // the last frame on screen.
+        if (streamUrl.StartsWith("rtsp://", StringComparison.OrdinalIgnoreCase))
+        {
+            args.AddRange([
+                "-rtsp_transport", "tcp",
+                "-rtsp_flags", "prefer_tcp",
+                "-max_delay", "500000",
+                "-timeout", "10000000"
+            ]);
+        }
+        // The renderer consumes a fixed-size CPU BGRA frame. Automatic hardware decode is
+        // intentionally opt-in: on Linux, ffmpeg can select a decoder surface that is not
+        // downloaded cleanly through scale/pad, leaving the raw pipe short or stalled and
+        // freezing every tile. Operators can opt in with BOSSCAM_ENABLE_HWACCEL=true after
+        // validating the host driver; a failed explicit attempt still falls back to software.
+        // This is deliberately before -i so the input decoder can use the selected path;
+        // the raw BGRA output remains a stable CPU-readable surface for Avalonia.
+        var hardwareAcceleration = useHardwareAcceleration ?? IsHardwareAccelerationEnabled();
+        if (hardwareAcceleration)
+        {
+            args.AddRange(["-hwaccel", "auto"]);
+        }
+        // Configure the video decoder before the input is opened. Keeping these as decoder
+        // options (rather than output options after -i) is important for HEVC: the camera's
+        // reference-frame chain must be decoded with the available workers.
+        args.AddRange([
+            "-threads", "0",
             "-i", streamUrl,
-            "-an", "-vf", "scale=960:540:force_original_aspect_ratio=decrease,pad=960:540:(ow-iw)/2:(oh-ih)/2",
+            "-an",
+            // Passthrough frame timing: rawvideo is emitted at the decoder's native cadence —
+            // no CFR duplication or drops, so motion stays as smooth as the camera's rate.
+            // Preserve the camera's timestamps without CFR duplication/drop decisions.
+            // fps_mode is the current ffmpeg spelling of the old -vsync 0 behavior.
+            "-fps_mode", "passthrough",
+            "-vf",
+            $"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2",
             "-pix_fmt", "bgra", "-f", "rawvideo", "pipe:1"
         ]);
         return args;
     }
 
-    private static string? ResolveFfmpegPath()
+    internal static bool IsHardwareAccelerationDisabled()
+    {
+        var value = Environment.GetEnvironmentVariable("BOSSCAM_DISABLE_HWACCEL");
+        return string.Equals(value, "1", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, "true", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, "yes", StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static bool IsHardwareAccelerationEnabled()
+    {
+        var value = Environment.GetEnvironmentVariable("BOSSCAM_ENABLE_HWACCEL");
+        return !IsHardwareAccelerationDisabled()
+            && (string.Equals(value, "1", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(value, "true", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(value, "yes", StringComparison.OrdinalIgnoreCase));
+    }
+
+    internal static string? ResolveFfmpegPath()
     {
         var configured = Environment.GetEnvironmentVariable("BOSSCAM_FFMPEG_PATH");
         if (!string.IsNullOrWhiteSpace(configured) && File.Exists(configured)) return configured;
         return File.Exists("/usr/bin/ffmpeg") ? "/usr/bin/ffmpeg" : null;
     }
 
-    private async Task StopLiveVideoAsync()
-    {
-        var cts = Interlocked.Exchange(ref _liveVideoCts, null);
-        cts?.Cancel();
-        var process = Interlocked.Exchange(ref _liveVideoProcess, null);
-        await StopProcessSafelyAsync(process);
-
-        var task = Interlocked.Exchange(ref _liveVideoTask, null);
-        if (task is not null)
-        {
-            try
-            {
-                await task.WaitAsync(TimeSpan.FromSeconds(3));
-            }
-            catch (TimeoutException)
-            {
-                // The process was already terminated; do not block navigation forever on a
-                // decoder that ignored cancellation.
-            }
-            catch (OperationCanceledException)
-            {
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug(ex, "Live video task ended during stop");
-            }
-        }
-        cts?.Dispose();
-    }
-
-    private static async Task StopProcessSafelyAsync(Process? process)
+    internal static async Task StopProcessSafelyAsync(Process? process)
     {
         if (process is null)
         {
@@ -927,68 +1024,18 @@ public sealed partial class MainWindowViewModel : ObservableObject, ISectionView
         {
             return;
         }
-        _disposed = true;
 
-        // Cancel any in-flight startup handshake so a spawned service is torn down
-        // promptly when the window closes instead of waiting out its health poll.
-        // The CTS stays non-nullable: cancellation must always reach the starter's
-        // ThrowIfCancellationRequested, and reading IsCancellationRequested remains
-        // safe after Dispose.
+        _disposed = true;
         _startupCts.Cancel();
         _serviceStarter.Dispose();
         _startupCts.Dispose();
-
         _healthPollTimer?.Dispose();
-        _liveTimer?.Dispose();
+
         foreach (var tile in BoardTiles)
         {
             tile.Dispose();
         }
         BoardTiles.Clear();
-
-        // Do not synchronously join the decoder task here: it can be waiting for the
-        // Avalonia UI dispatcher while Dispose is called on that same UI thread. Cancel and
-        // terminate immediately, then let the task's finally block finish asynchronously.
-        var cts = Interlocked.Exchange(ref _liveVideoCts, null);
-        cts?.Cancel();
-        var process = Interlocked.Exchange(ref _liveVideoProcess, null);
-        if (process is not null)
-        {
-            try
-            {
-                if (!process.HasExited) process.Kill(entireProcessTree: true);
-            }
-            catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException or System.ComponentModel.Win32Exception)
-            {
-                _logger.LogDebug(ex, "Live video process was already stopped during dispose");
-            }
-        }
-
-        var task = Interlocked.Exchange(ref _liveVideoTask, null);
-        if (task is not null || cts is not null)
-        {
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    if (task is not null) await task.WaitAsync(TimeSpan.FromSeconds(3));
-                }
-                catch (Exception ex) when (ex is TimeoutException or OperationCanceledException or ObjectDisposedException)
-                {
-                    _logger.LogDebug(ex, "Live video task cleanup completed asynchronously");
-                }
-                finally
-                {
-                    cts?.Dispose();
-                    process?.Dispose();
-                }
-            });
-        }
-        else
-        {
-            process?.Dispose();
-        }
-
         _api.Dispose();
     }
 }

@@ -159,6 +159,20 @@ public static class ApiDevicesEndpoints
             return result is null ? Results.NotFound() : Results.Ok(result);
         });
 
+        // ── Clock verification ──────────────────────────────────────────
+        // Per-device verification is also reachable as
+        // POST /api/devices/{id}/maintenance/clockverify (generic maintenance route).
+        // The fleet pass probes every registered 5523-W's /NetSDK/System/time/rtc +
+        // /timeZone, runs TimeSync, and confirms each OSD epoch matches the host.
+        app.MapPost("/api/devices/verify-clocks", async (SettingsService settingsService, CancellationToken ct) =>
+            Results.Ok(await settingsService.VerifyAll5523ClocksAsync(ct)));
+
+        app.MapPost("/api/devices/{id:guid}/verify-clock", async (Guid id, SettingsService settingsService, CancellationToken ct) =>
+        {
+            var result = await settingsService.VerifyClockAsync(id, ct);
+            return result is null ? Results.NotFound() : Results.Ok(result);
+        });
+
         app.MapGet("/api/devices/{id:guid}/settings/typed", async (Guid id, TypedSettingsService typedSettingsService, CancellationToken ct) =>
             Results.Ok(await typedSettingsService.GetTypedSettingsAsync(id, ct)));
 

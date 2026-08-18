@@ -3,12 +3,16 @@
              xmlns:c="clr-namespace:BossCam.Desktop.Avalonia.Controls"
              x:Class="BossCam.Desktop.Avalonia.Views.FeaturesView">
   <StackPanel Spacing="10">
-    <Grid ColumnDefinitions="*,Auto">
+    <Grid ColumnDefinitions="*,Auto,Auto">
       <TextBlock Text="Camera Features" FontSize="18" FontWeight="Bold" Foreground="#fff"
                  VerticalAlignment="Center"
                  c:InfoExplainer.Title="Camera Features"
                  c:InfoExplainer.Explanation="Safely discover and flip camera feature toggles (image, video, detection). Only write-verified controls are enabled; expert-only controls unlock with the override switch below." />
-      <Button Grid.Column="1" Command="{Binding QuickProbeCommand}" Content="⚡ Quick Probe"
+      <Button Grid.Column="1" Command="{Binding SyncCameraClockCommand}" Content="🕐 Sync Camera Clock"
+              Margin="0,0,6,0" IsEnabled="{Binding HasDevice}"
+              c:InfoExplainer.Title="Sync Camera Clock"
+              c:InfoExplainer.Explanation="Pushes the host's current time to the camera (bare-scalar RTC + timeZone writes proven on 5523-W firmware). Fixes an OSD timestamp that drifted into the future." />
+      <Button Grid.Column="2" Command="{Binding QuickProbeCommand}" Content="⚡ Quick Probe"
               IsEnabled="{Binding HasDevice}"
               c:InfoExplainer.Title="Quick Probe"
               c:InfoExplainer.Explanation="Normalizes the camera's typed settings, runs a capability probe, then reloads the control list. Run this first to discover what the selected camera can do." />

@@ -21,6 +21,7 @@ public sealed class BossCamServiceStarter : IBossCamServiceStarter
     private static readonly TimeSpan SpawnWait = TimeSpan.FromSeconds(45);
     private static readonly TimeSpan HealthPollInterval = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan SystemdStartTimeout = TimeSpan.FromSeconds(10);
+    private static readonly SemaphoreSlim StartGate = new(1, 1);
 
     private readonly ILogger _logger;
     private readonly string _publishedServiceDir;
@@ -58,6 +59,39 @@ public sealed class BossCamServiceStarter : IBossCamServiceStarter
     public async Task<bool> TryStartAsync(Func<Task<bool>> isHealthy, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(isHealthy);
+        await StartGate.WaitAsync(cancellationToken);
+        try
+        {
+            return await TryStartCoreAsync(isHealthy, cancellationToken);
+        }
+        finally
+        {
+            StartGate.Release();
+        }
+    }
+
+    private async Task<bool> TryStartCoreAsync(Func<Task<bool>> isHealthy, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(isHealthy);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // A health check can race another starter (systemd, an updater, or a second GUI
+        // instance). Re-check before every launch strategy: if port 5317 is already served,
+        // spawning another BossCamService only creates a bind failure/restart loop and can
+        // leave the GUI attached to stale recording/session state.
+        try
+        {
+            if (await isHealthy())
+            {
+                _logger.LogDebug("BossCamService is already healthy; no start required");
+                return true;
+            }
+        }
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            // Connection refused/timeout is expected while the service is down. Continue
+            // to the configured startup strategies.
+        }
 
         // 1) systemd unit (installed production layout). systemctl start on a
         //    Type=notify unit blocks until the service reports readiness, so a
@@ -110,10 +144,21 @@ public sealed class BossCamServiceStarter : IBossCamServiceStarter
 
         // 2) Direct spawn — the GUI runs the service itself. Prefer the published
         //    install; fall back to the dev checkout when running from source.
-        //    Re-check cancellation before spawning: if the caller cancelled between
-        //    the systemd attempt and here, Dispose has already run and a process
-        //    spawned now would never be reaped.
+        //    Re-check health immediately before spawning: systemd may have become ready
+        //    during its bounded wait even when the earlier systemctl process exited nonzero.
         cancellationToken.ThrowIfCancellationRequested();
+        try
+        {
+            if (await isHealthy())
+            {
+                _logger.LogDebug("BossCamService became healthy during startup; no direct spawn required");
+                return true;
+            }
+        }
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            // Still unavailable; proceed to the direct spawn fallback.
+        }
         var startInfo = BuildServiceStartInfo();
         if (startInfo is null)
         {

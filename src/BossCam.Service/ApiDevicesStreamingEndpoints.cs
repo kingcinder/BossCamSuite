@@ -132,8 +132,10 @@ public static class ApiDevicesStreamingEndpoints
             }
         });
 
-        // Preserve the original /live.mp4 contract as the direct HEVC fMP4 path. Browsers
-        // that cannot decode it use /live.h264.mp4 from the negotiated manifest.
+        // Direct HEVC fMP4 path for native clients (desktop ffmpeg decodes HEVC locally).
+        // Server-side it is a pure codec copy — no transcode, native resolution — served
+        // through a shared per-camera session (one RTSP connection fans out to all viewers).
+        // Browsers that cannot decode HEVC use /live.h264.mp4 from the negotiated manifest.
         app.MapGet("/api/devices/{id:guid}/live.mp4", async (Guid id, string? quality, HttpContext http, LiveStreamService live, CancellationToken ct) =>
         {
             http.Response.ContentType = "video/mp4";
@@ -143,7 +145,7 @@ public static class ApiDevicesStreamingEndpoints
             try
             {
                 await http.Response.StartAsync(ct);
-                await live.StreamFragmentedMp4Async(id, http.Response.Body, quality ?? "sub", ct);
+                await live.StreamHevcFmp4Async(id, http.Response.Body, quality ?? "sub", ct);
             }
             catch (InvalidOperationException ex)
             {
@@ -183,11 +185,15 @@ public static class ApiDevicesStreamingEndpoints
             }
         });
 
-        app.MapGet("/api/devices/{id:guid}/live-manifest", async (Guid id, string? quality, LiveStreamService live, CancellationToken ct) =>
+        app.MapGet("/api/devices/{id:guid}/live-manifest", async (Guid id, string? quality, string? client, LiveStreamService live, CancellationToken ct) =>
         {
             try
             {
-                return Results.Ok(await live.BuildManifestAsync(id, quality ?? "sub", ct));
+                // Native clients (desktop ffmpeg decodes HEVC) request client=native so the
+                // manifest advertises the zero-transcode direct HEVC path first. Browsers
+                // stay on the H.264 compatibility transcode.
+                var native = string.Equals(client, "native", StringComparison.OrdinalIgnoreCase);
+                return Results.Ok(await live.BuildManifestAsync(id, quality ?? "sub", ct, nativeClient: native));
             }
             catch (InvalidOperationException ex)
             {

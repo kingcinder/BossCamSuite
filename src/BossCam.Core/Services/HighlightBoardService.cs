@@ -362,6 +362,7 @@ public sealed class DeviceRegistrationService(
     IApplicationStore store,
     IHttpClientFactory httpClientFactory,
     CapabilityProbeService probeService,
+    SettingsService settingsService,
     IOptions<BossCamRuntimeOptions> options,
     ILogger<DeviceRegistrationService> logger)
 {
@@ -655,6 +656,11 @@ public sealed class DeviceRegistrationService(
         {
             logger.LogWarning(ex, "Probe after register failed for {Ip}", request.IpAddress);
         }
+
+        // Auto-sync the 5523-W OSD clock on registration so a freshly-registered camera shows
+        // the correct time without pressing the "Sync Camera Clock" button. Best-effort: the
+        // sync never throws and can never fail the registration.
+        await settingsService.AutoSyncClockAsync(enriched, cancellationToken);
 
         return enriched;
     }

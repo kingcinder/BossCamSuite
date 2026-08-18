@@ -387,6 +387,74 @@ public sealed class SectionViewModelTests
         Assert.NotNull(shell.DashboardSection.LastRefreshed);
     }
 
+    // ── Fullscreen menu sheet (per-tile content) ─────────────────
+
+    [Fact]
+    public void Fullscreen_MenuContent_Opens_The_Tiles_Own_Panel()
+    {
+        var (shell, api) = Create();
+        var device = Device();
+        var vm = new FullscreenCameraViewModel(api, device, lanToken: null, shell: shell);
+
+        // Network → the shell's real connectivity section (never Features).
+        vm.ActiveMenu = "Network";
+        Assert.Same(shell.ConnectivitySection, vm.MenuContent);
+
+        // Record → the shell's recordings section.
+        vm.ActiveMenu = "Record";
+        Assert.Same(shell.RecordingsSection, vm.MenuContent);
+
+        // Advanced → diagnostics; Firmware → firmware.
+        vm.ActiveMenu = "Advanced";
+        Assert.Same(shell.DiagnosticsSection, vm.MenuContent);
+        vm.ActiveMenu = "Firmware";
+        Assert.Same(shell.FirmwareSection, vm.MenuContent);
+
+        // Features / Settings → the typed control-point surface.
+        vm.ActiveMenu = "Features";
+        Assert.Same(vm.Features, vm.MenuContent);
+        vm.ActiveMenu = "Settings";
+        Assert.Same(vm.Features, vm.MenuContent);
+
+        // Display / Audio / Hotspot / Recovery → dedicated panels off the VM itself,
+        // never the Features surface (this was the "every tile opens Features" bug).
+        vm.ActiveMenu = "Display";
+        Assert.Same(vm, vm.MenuContent);
+        Assert.True(vm.IsDisplayMenu);
+        vm.ActiveMenu = "Audio";
+        Assert.Same(vm, vm.MenuContent);
+        Assert.True(vm.IsAudioMenu);
+        vm.ActiveMenu = "Hotspot";
+        Assert.Same(vm, vm.MenuContent);
+        Assert.True(vm.IsHotspotMenu);
+        vm.ActiveMenu = "Recovery";
+        Assert.Same(vm, vm.MenuContent);
+        Assert.True(vm.IsRecoveryMenu);
+
+        vm.Dispose();
+        shell.Dispose();
+    }
+
+    [Fact]
+    public void Fullscreen_Quality_Switches_Manifest_Quality_And_Restarts()
+    {
+        var (shell, api) = Create();
+        var vm = new FullscreenCameraViewModel(api, Device(), lanToken: null, shell: shell);
+
+        // HD main is the always-preferred default.
+        Assert.Equal("main", vm.Quality);
+        Assert.True(vm.IsMainQuality);
+        Assert.False(vm.IsSubQuality);
+
+        // Switching to sub updates the manifest-requested quality.
+        vm.SelectQualityCommand.Execute("sub");
+        Assert.Equal("sub", vm.Quality);
+        Assert.True(vm.IsSubQuality);
+
+        vm.Dispose();
+        shell.Dispose();
+    }
+
     // ── Navigation shell ──────────────────────────────────────────
 
     [Fact]

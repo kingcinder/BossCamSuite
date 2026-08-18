@@ -59,6 +59,54 @@ public sealed record MaintenanceResult
     public JsonNode? Response { get; init; }
 }
 
+/// <summary>
+/// One device's clock-verification outcome. Produced by <c>MaintenanceOperation.ClockVerify</c>
+/// on the 5523-W NetSDK surface: the OSD rtc epoch (bare unix-seconds int) and timeZone (bare
+/// string) are probed, a TimeSync runs (bare-scalar PUTs), then both are re-read and the OSD
+/// epoch is compared against the host epoch within the configured tolerance.
+/// </summary>
+public sealed record ClockVerificationResult
+{
+    public Guid DeviceId { get; init; }
+    public string? DeviceName { get; init; }
+    public bool Success { get; init; }
+    public string AdapterName { get; init; } = string.Empty;
+    public string? Message { get; init; }
+    /// <summary>OSD rtc epoch read BEFORE the sync (bare unix-seconds int).</summary>
+    public long? RtcBefore { get; init; }
+    /// <summary>OSD timeZone string read BEFORE the sync (e.g. "GMT+08:00").</summary>
+    public string? TimeZoneBefore { get; init; }
+    /// <summary>Host unix-seconds epoch at sync time (what we PUT to the camera).</summary>
+    public long HostEpoch { get; init; }
+    /// <summary>OSD rtc epoch re-read AFTER the sync.</summary>
+    public long? RtcAfter { get; init; }
+    /// <summary>OSD timeZone string re-read AFTER the sync.</summary>
+    public string? TimeZoneAfter { get; init; }
+    /// <summary>Absolute OSD-vs-host drift in seconds after the sync (RtcAfter − HostEpoch).</summary>
+    public long? DriftSeconds { get; init; }
+    /// <summary>Configured tolerance in seconds; verification succeeds when |DriftSeconds| ≤ tolerance.</summary>
+    public int ToleranceSeconds { get; init; } = 30;
+    /// <summary>
+    /// Diagnostic (never a hard failure): whether the camera's timeZone string matched the host
+    /// offset after the sync. A mismatch means the camera normalized the zone differently from
+    /// the host's GMT token (e.g. "GMT+8" vs "GMT+08:00") — surfaced so the operator can decide.
+    /// </summary>
+    public bool TimeZoneMatchesHost { get; init; }
+}
+
+/// <summary>
+/// Fleet-wide clock verification: per-device results for every registered 5523-W, with a
+/// summary of how many were reachable and how many came out in-sync.
+/// </summary>
+public sealed record ClockFleetReport
+{
+    public DateTimeOffset GeneratedAt { get; init; } = DateTimeOffset.UtcNow;
+    public int DevicesChecked { get; init; }
+    public int DevicesVerified { get; init; }
+    public int DevicesFailed { get; init; }
+    public IReadOnlyCollection<ClockVerificationResult> Results { get; init; } = [];
+}
+
 public sealed record VideoSourceDescriptor
 {
     public string Id { get; init; } = Guid.NewGuid().ToString("N");

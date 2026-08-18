@@ -8,6 +8,7 @@
   let report = $state<ControlPointInventoryReport | null>(null);
   let isLoading = $state(false);
   let isProbing = $state(false);
+  let isSyncingClock = $state(false);
   let statusText = $state('Select a camera and load features.');
 
   // Track apply in-flight per fieldKey+endpoint
@@ -96,6 +97,20 @@
       statusText = 'Failed: ' + String(e);
     }
     isLoading = false;
+  }
+
+  async function syncCameraClock() {
+    if (!appState.selectedDeviceId) return;
+    isSyncingClock = true;
+    statusText = 'Syncing camera clock to host time…';
+    try {
+      const result = await api.syncCameraClock(appState.selectedDeviceId);
+      statusText = result?.success ? `Clock synced: ${result.message || result.Message || 'OK'}` : `Clock sync failed: ${result?.message || result?.Message || 'no response'}`;
+    } catch (e: unknown) {
+      statusText = 'Clock sync failed: ' + String(e);
+    } finally {
+      isSyncingClock = false;
+    }
   }
 
   async function quickProbe() {
@@ -284,6 +299,15 @@
     </button>
     <button class="btn" onclick={loadControlPoints} type="button" disabled={isLoading || !appState.selectedDeviceId}>
       {isLoading ? '⏳ Loading…' : '🔄 Reload features'}
+    </button>
+    <button
+      class="btn"
+      onclick={syncCameraClock}
+      type="button"
+      disabled={isSyncingClock || !appState.selectedDeviceId}
+      data-tip="Push the host's current time to the camera (RTC + timezone). Fixes an OSD clock that drifted into the future."
+    >
+      {isSyncingClock ? '⏳ Syncing…' : '🕐 Sync Camera Clock'}
     </button>
     <label class="inline-check">
       <input type="checkbox" bind:checked={showExpert} />

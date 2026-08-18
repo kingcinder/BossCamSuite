@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using BossCam.Contracts;
 using BossCam.Core;
@@ -28,13 +29,22 @@ public abstract class HttpControlAdapterBase(IOptions<BossCamRuntimeOptions> opt
     }
 
     protected async Task<HttpAdapterResponse?> SendAsync(DeviceIdentity device, string endpoint, string method, JsonObject? payload, CancellationToken cancellationToken, string? mediaType = null)
+        => await SendRawAsync(device, endpoint, method, payload?.ToJsonString(), cancellationToken, mediaType);
+
+    /// <summary>
+    /// Sends a request whose body is an exact raw JSON document. The 5523-W time
+    /// endpoints require BARE documents on the wire (a plain unix-seconds number for
+    /// /NetSDK/System/time/rtc, a bare string for /timeZone); object wrappers are
+    /// rejected with statusCode 6 'Invalid Document'. WritePlan.Payload is a JsonObject,
+    /// so those writes cannot go through the typed-settings path — this is the adapter
+    /// entry point that preserves the exact wire form.
+    /// </summary>
+    protected async Task<HttpAdapterResponse?> SendRawAsync(DeviceIdentity device, string endpoint, string method, string? payloadRaw, CancellationToken cancellationToken, string? mediaType = null)
     {
         if (string.IsNullOrWhiteSpace(device.IpAddress))
         {
             return null;
         }
-
-        var payloadRaw = payload?.ToJsonString();
         // Discovery can record an ONVIF/media port (8888/8899) on the device while the
         // NetSDK REST control plane actually listens on 80 — verified live on 5523-W
         // units where deviceInfo/properties return 200 on :80 but transport-fail on the
@@ -76,6 +86,137 @@ public abstract class HttpControlAdapterBase(IOptions<BossCamRuntimeOptions> opt
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Syncs the camera clock to the host's current time using the firmware-proven BARE
+    /// document forms: a plain unix-seconds number PUT to /NetSDK/System/time/rtc and a
+    /// bare GMT-offset string PUT to /NetSDK/System/time/timeZone. Object wrappers are
+    /// rejected with statusCode 6 on 5523-W 3.6.60, so this deliberately bypasses the
+    /// JsonObject-typed WritePlan path. Shared by every NetSDK REST adapter so a
+    /// TimeSync maintenance request works regardless of which adapter owns the device.
+    /// </summary>
+    protected async Task<MaintenanceResult> ExecuteTimeSyncAsync(DeviceIdentity device, string adapterName, MaintenanceOperation operation, CancellationToken cancellationToken)
+    {
+        var utcNow = DateTimeOffset.UtcNow;
+        var rtcRaw = utcNow.ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var rtcResponse = await SendRawAsync(device, "/NetSDK/System/time/rtc", "PUT", rtcRaw, cancellationToken);
+
+        // The 5523-W timeZone wire form is a bare JSON STRING document — the proven PUT
+        // is "GMT+08:00" (with quotes). Sending the unquoted token would be an invalid
+        // JSON document and risk statusCode 6; serialize the GMT token so the body is
+        // exactly the quoted form the firmware accepts.
+        var tzRaw = JsonSerializer.Serialize(BuildGmtOffsetString(TimeZoneInfo.Local.GetUtcOffset(utcNow)));
+        var tzResponse = await SendRawAsync(device, "/NetSDK/System/time/timeZone", "PUT", tzRaw, cancellationToken);
+
+        var rtcOk = rtcResponse is not null && IsSemanticSuccess(rtcResponse);
+        var tzOk = tzResponse is not null && IsSemanticSuccess(tzResponse);
+        return new MaintenanceResult
+        {
+            Success = rtcOk && tzOk,
+            AdapterName = adapterName,
+            Operation = operation,
+            Response = rtcResponse?.Json,
+            Message = $"rtc={rtcRaw} ({rtcResponse?.RawContent ?? "no response"}); timeZone={tzRaw} ({tzResponse?.RawContent ?? "no response"})"
+        };
+    }
+
+    internal static string BuildGmtOffsetString(TimeSpan offset)
+    {
+        var sign = offset < TimeSpan.Zero ? "-" : "+";
+        var abs = offset.Duration();
+        return $"GMT{sign}{abs.Hours:00}:{abs.Minutes:00}";
+    }
+
+    /// <summary>
+    /// Clock verification pass for firmware-proven 5523-W units. The sequence is:
+    /// 1) GET /NetSDK/System/time/rtc + /timeZone (bare unix-seconds int, bare GMT string),
+    /// 2) run TimeSync (bare-scalar PUTs of the host epoch and host GMT offset),
+    /// 3) re-read both and compute the OSD-vs-host drift in seconds.
+    /// Success requires the sync to have round-tripped AND |drift| ≤
+    /// BossCam:ClockVerifyToleranceSeconds. The timezone read-back is surfaced as a
+    /// diagnostic (<c>tzMatchesHost</c>), NOT a hard failure: the OSD epoch read-back is
+    /// the operator's stated confirmation criterion, and ExecuteTimeSyncAsync already
+    /// fails the sync unless BOTH the rtc and timeZone writes round-trip — so a tz
+    /// mismatch here means the camera normalized the zone string differently from
+    /// BuildGmtOffsetString (e.g. "GMT+8" vs "GMT+08:00"), which is worth reporting, not
+    /// failing the pass over. The structured report (before/after/host/drift/tolerance)
+    /// is returned in <see cref="MaintenanceResult.Response"/> for the service/API to surface.
+    /// </summary>
+    protected async Task<MaintenanceResult> ExecuteClockVerifyAsync(DeviceIdentity device, string adapterName, MaintenanceOperation operation, CancellationToken cancellationToken)
+    {
+        var utcNow = DateTimeOffset.UtcNow;
+        var hostEpoch = utcNow.ToUnixTimeSeconds();
+        var hostTz = BuildGmtOffsetString(TimeZoneInfo.Local.GetUtcOffset(utcNow));
+        var tolerance = Math.Max(1, Options.ClockVerifyToleranceSeconds);
+
+        // 1. Probe BEFORE the sync.
+        var rtcBeforeResponse = await SendRawAsync(device, "/NetSDK/System/time/rtc", "GET", null, cancellationToken);
+        var tzBeforeResponse = await SendRawAsync(device, "/NetSDK/System/time/timeZone", "GET", null, cancellationToken);
+        var rtcBefore = TryParseBareLong(rtcBeforeResponse);
+        var tzBefore = TryParseBareString(tzBeforeResponse);
+
+        // 2. Sync using the exact proven write forms.
+        var sync = await ExecuteTimeSyncAsync(device, adapterName, MaintenanceOperation.TimeSync, cancellationToken);
+
+        // 3. Re-read AFTER the sync and compare against the host epoch.
+        var rtcAfterResponse = await SendRawAsync(device, "/NetSDK/System/time/rtc", "GET", null, cancellationToken);
+        var tzAfterResponse = await SendRawAsync(device, "/NetSDK/System/time/timeZone", "GET", null, cancellationToken);
+        var rtcAfter = TryParseBareLong(rtcAfterResponse);
+        var tzAfter = TryParseBareString(tzAfterResponse);
+
+        var drift = rtcAfter is null ? (long?)null : rtcAfter.Value - hostEpoch;
+        var inSync = sync.Success && drift is not null && Math.Abs(drift.Value) <= tolerance;
+        // Diagnostic only — see the method doc for why this is not a hard failure.
+        var tzMatchesHost = string.Equals(tzAfter, hostTz, StringComparison.Ordinal);
+
+        var report = new JsonObject
+        {
+            ["rtcBefore"] = rtcBefore.HasValue ? JsonValue.Create(rtcBefore.Value) : null,
+            ["rtcAfter"] = rtcAfter.HasValue ? JsonValue.Create(rtcAfter.Value) : null,
+            ["hostEpoch"] = JsonValue.Create(hostEpoch),
+            ["driftSeconds"] = drift.HasValue ? JsonValue.Create(drift.Value) : null,
+            // Emit as Int64 so the service's TryGetValue<long> reader actually picks the value
+            // up instead of silently falling back to the 30s default.
+            ["toleranceSeconds"] = JsonValue.Create((long)tolerance),
+            ["timeZoneBefore"] = tzBefore is null ? null : JsonValue.Create(tzBefore),
+            ["timeZoneAfter"] = tzAfter is null ? null : JsonValue.Create(tzAfter),
+            ["hostTimeZone"] = JsonValue.Create(hostTz),
+            ["syncSucceeded"] = JsonValue.Create(sync.Success),
+            ["tzMatchesHost"] = JsonValue.Create(tzMatchesHost),
+            ["inSync"] = JsonValue.Create(inSync)
+        };
+
+        return new MaintenanceResult
+        {
+            Success = inSync,
+            AdapterName = adapterName,
+            Operation = operation,
+            Response = report,
+            Message = $"rtc {rtcBefore?.ToString() ?? "?"} → {rtcAfter?.ToString() ?? "?"} (host {hostEpoch}, |drift| {(drift.HasValue ? Math.Abs(drift.Value).ToString() : "?")}s ≤ {tolerance}s); "
+                + $"timeZone {tzBefore ?? "?"} → {tzAfter ?? "?"} (host {hostTz}); sync={(sync.Success ? "ok" : "failed")}; tzMatch={(tzMatchesHost ? "ok" : "mismatch")}"
+        };
+    }
+
+    /// <summary>Parses the bare unix-seconds int document the 5523-W returns for /time/rtc
+    /// (e.g. <c>1786493574</c>) — TryParseNode wraps non-object bodies as JSON strings, so the
+    /// numeric form must be read from the raw content directly.</summary>
+    protected static long? TryParseBareLong(HttpAdapterResponse? response)
+    {
+        var raw = response?.RawContent?.Trim().Trim('"');
+        return long.TryParse(raw, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var value) ? value : null;
+    }
+
+    /// <summary>Parses the bare JSON-string timezone document (e.g. <c>"GMT+08:00"</c>) into its
+    /// unquoted token form.</summary>
+    protected static string? TryParseBareString(HttpAdapterResponse? response)
+    {
+        var raw = response?.RawContent?.Trim();
+        if (string.IsNullOrEmpty(raw))
+        {
+            return null;
+        }
+        return raw.Length >= 2 && raw[0] == '"' && raw[^1] == '"' ? raw[1..^1] : raw;
     }
 
     protected async Task<HttpAdapterResponse?> SendMultipartAsync(DeviceIdentity device, string endpoint, MultipartFormDataContent content, CancellationToken cancellationToken)
@@ -498,7 +639,16 @@ public sealed class LanDirectNetSdkRestAdapter(
             VideoTransportKinds = [TransportKind.LanRest, TransportKind.Rtsp, TransportKind.RtspOverHttp, TransportKind.FlvOverHttp, TransportKind.Rtmp],
             SupportedSettingGroups = ReadEndpoints.Keys.ToList(),
             SupportedEndpointPaths = endpoints,
-            SupportedMaintenanceOperations = [],
+            // Advertise exactly what ExecuteMaintenanceAsync maps on this adapter so the
+            // capability map (GET /api/devices/{id}/capabilities) surfaces the 5523-W ops the
+            // operator can actually invoke — including the clock-verification pass.
+            SupportedMaintenanceOperations =
+            [
+                MaintenanceOperation.Reboot.ToString(),
+                MaintenanceOperation.FactoryReset.ToString(),
+                MaintenanceOperation.TimeSync.ToString(),
+                MaintenanceOperation.ClockVerify.ToString()
+            ],
             Notes = new Dictionary<string, string>
             {
                 ["deviceInfo"] = deviceInfo?.RawContent ?? string.Empty,
@@ -545,6 +695,8 @@ public sealed class LanDirectNetSdkRestAdapter(
         {
             MaintenanceOperation.Reboot => await ExecuteMaintenanceSimpleAsync(device, "/NetSDK/System/operation/reboot", "PUT", payload, operation, cancellationToken),
             MaintenanceOperation.FactoryReset => await ExecuteMaintenanceSimpleAsync(device, "/NetSDK/System/operation/default", "PUT", payload, operation, cancellationToken),
+            MaintenanceOperation.TimeSync => await ExecuteTimeSyncAsync(device, Name, operation, cancellationToken),
+            MaintenanceOperation.ClockVerify => await ExecuteClockVerifyAsync(device, Name, operation, cancellationToken),
             _ => new MaintenanceResult { Success = false, AdapterName = Name, Operation = operation, Message = "Maintenance operation is not mapped on the public NETSDK adapter." }
         };
     }
@@ -638,6 +790,8 @@ public sealed class LanPrivateVendorHttpAdapter(
             MaintenanceOperation.RefreshUsers => await ExecuteSimpleAsync(device, "/user/user_list.xml", "GET", null, operation, cancellationToken),
             MaintenanceOperation.PasswordReset => await ExecuteSimpleAsync(device, "/user/user_reset", "POST", payload, operation, cancellationToken),
             MaintenanceOperation.FirmwareUpload => await ExecuteFirmwareUploadAsync(device, payload, cancellationToken),
+            MaintenanceOperation.TimeSync => await ExecuteTimeSyncAsync(device, Name, operation, cancellationToken),
+            MaintenanceOperation.ClockVerify => await ExecuteClockVerifyAsync(device, Name, operation, cancellationToken),
             _ => new MaintenanceResult { Success = false, AdapterName = Name, Operation = operation, Message = "Unsupported maintenance operation." }
         };
     }

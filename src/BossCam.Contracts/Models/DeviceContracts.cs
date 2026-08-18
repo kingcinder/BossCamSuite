@@ -50,7 +50,24 @@ public enum MaintenanceOperation
     FactoryReset,
     FirmwareUpload,
     PasswordReset,
-    RefreshUsers
+    RefreshUsers,
+    /// <summary>
+    /// Syncs the camera clock to the host's current time. On the 5523-W NetSDK
+    /// REST surface this is the proven bare-scalar write: PUT the current unix
+    /// seconds to <c>/NetSDK/System/time/rtc</c> and the host GMT offset as a bare
+    /// string to <c>/NetSDK/System/time/timeZone</c> (object forms are rejected with
+    /// statusCode 6 by this firmware).
+    /// </summary>
+    TimeSync,
+    /// <summary>
+    /// Probes the camera's current <c>/NetSDK/System/time/rtc</c> epoch and
+    /// <c>/NetSDK/System/time/timeZone</c> string, runs a TimeSync, re-reads both,
+    /// and confirms the OSD epoch is within
+    /// <c>BossCam:ClockVerifyToleranceSeconds</c> of the host epoch (and the
+    /// timezone matches the host offset). Returns a structured verification report
+    /// in <see cref="MaintenanceResult.Response"/>.
+    /// </summary>
+    ClockVerify
 }
 
 public sealed record DeviceChannelMap

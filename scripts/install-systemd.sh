@@ -22,9 +22,17 @@ sudo tee "$UNIT" >/dev/null <<EOF
 Description=BossCamSuite camera control service
 After=network-online.target
 Wants=network-online.target
+# Stop thrashing when the app aborts on startup (e.g. port-bind conflict with
+# a stale manual instance): after 5 restarts in 120s the unit gives up instead
+# of spinning forever. scripts/service-lifecycle-guard.sh recovers it once the
+# port is free.
+StartLimitIntervalSec=120
+StartLimitBurst=5
 
 [Service]
-Type=notify
+# Readiness is verified by /api/health polling from the desktop and installer.
+# Type=simple avoids notify startup races that can cause a second service to bind 5317.
+Type=simple
 User=${SERVICE_USER}
 WorkingDirectory=${PREFIX}
 Environment=ASPNETCORE_ENVIRONMENT=Production

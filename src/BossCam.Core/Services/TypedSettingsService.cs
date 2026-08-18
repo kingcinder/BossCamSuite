@@ -137,6 +137,13 @@ public sealed class TypedSettingsService(
 
         await _typedControlStore.SaveNormalizedSettingFieldsAsync(deduped, cancellationToken);
         logger.LogInformation("Contract-driven normalization produced {Count} fields for {DeviceId}", deduped.Count, deviceId);
+
+        // Auto-sync the 5523-W OSD clock on every normalize so the on-screen timestamp stays
+        // correct without a manual "Sync Camera Clock" press (e.g. after a power-cycle or a
+        // clock drift during a firmware's uptime). Best-effort and never throws — an offline
+        // camera just logs a warning and the normalize result is unaffected.
+        await settingsService.AutoSyncClockAsync(device, cancellationToken);
+
         var firmware = deduped.Select(static field => field.FirmwareFingerprint).FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value));
         var constraints = await _typedControlStore.GetFieldConstraintProfilesAsync(firmware, cancellationToken);
         var dependencies = await _typedControlStore.GetDependencyMatrixProfilesAsync(firmware, cancellationToken);

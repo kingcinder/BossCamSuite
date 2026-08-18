@@ -99,6 +99,16 @@ public sealed class SettingsService(
     ProtocolValidationService protocolValidationService,
     ILogger<SettingsService> logger)
 {
+    // Per-device cooldown between automatic clock-sync attempts. NormalizeDeviceAsync is a hot
+    // path (image-truth sweeps re-normalize per field read), so without this every sweep would
+    // fire identical TimeSync writes (2 bare-scalar PUTs + an audit row + adapter-resolution
+    // probes each). The timestamp is recorded on ATTEMPT (not only success): an offline camera
+    // is not re-probed on every normalize call, at the cost that a camera recovering mid-window
+    // waits at most AutoSyncClockCooldown (5 minutes) for its next sync — acceptable for keeping
+    // the OSD clock correct without hammering the unit.
+    private static readonly TimeSpan AutoSyncClockCooldown = TimeSpan.FromMinutes(5);
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, DateTimeOffset> _lastAutoSyncClockAttempt = new();
+
     public async Task<SettingsSnapshot?> ReadAsync(Guid deviceId, CancellationToken cancellationToken)
     {
         var device = await store.GetDeviceAsync(deviceId, cancellationToken);
@@ -310,6 +320,152 @@ public sealed class SettingsService(
         }, cancellationToken);
 
         return result with { Response = SensitiveDataRedactor.Redact(result.Response) };
+    }
+
+    /// <summary>
+    /// Best-effort automatic clock sync for firmware-proven 5523-W units, invoked when a device
+    /// registers or is normalized so the OSD clock is always correct without pressing the
+    /// "Sync Camera Clock" button. Routes through <see cref="ExecuteMaintenanceAsync"/> so the
+    /// exact proven bare-scalar RTC + timeZone writes are used and the attempt is audited.
+    /// NEVER throws: a failure (offline camera, gated endpoint, no adapter) is logged and
+    /// swallowed so registration/normalization always succeed.
+    /// </summary>
+    public async Task AutoSyncClockAsync(DeviceIdentity device, CancellationToken cancellationToken)
+    {
+        if (!Is5523W(device))
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var lastAttempt = _lastAutoSyncClockAttempt.GetValueOrDefault(device.Id);
+        if (now - lastAttempt < AutoSyncClockCooldown)
+        {
+            return;
+        }
+
+        _lastAutoSyncClockAttempt[device.Id] = now;
+        try
+        {
+            // Send an explicit empty object (mirrors the SPA/desktop '{}' maintenance body) so
+            // the maintenance path always receives a well-formed JSON payload.
+            var result = await ExecuteMaintenanceAsync(device.Id, MaintenanceOperation.TimeSync, new JsonObject(), cancellationToken);
+            if (result?.Success == true)
+            {
+                logger.LogInformation("Auto clock sync OK for {Device} ({Ip})", device.DisplayName, device.IpAddress);
+            }
+            else
+            {
+                logger.LogWarning("Auto clock sync FAILED for {Device} ({Ip}): {Message}", device.DisplayName, device.IpAddress, result?.Message ?? "no maintenance response");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Auto clock sync skipped for {Device} ({Ip})", device.DisplayName, device.IpAddress);
+        }
+    }
+
+    /// <summary>True for firmware-proven 5523-W / 5523-family IPC units (case-insensitive).</summary>
+    public static bool Is5523W(DeviceIdentity device)
+        => device.HardwareModel?.Contains("5523", StringComparison.OrdinalIgnoreCase) == true;
+
+    /// <summary>
+    /// Runs a full clock-verification pass on one device: probe <c>/NetSDK/System/time/rtc</c>
+    /// + <c>/timeZone</c>, run TimeSync, re-read both, and confirm the OSD epoch is within
+    /// <c>BossCam:ClockVerifyToleranceSeconds</c> of the host epoch. Routes through
+    /// <see cref="ExecuteMaintenanceAsync"/> (ClockVerify) so the exact proven bare-document
+    /// wire forms are used and the attempt is audited. Returns null when the device is unknown;
+    /// a failed pass returns a structured result with <c>Success=false</c>, never throws.
+    /// </summary>
+    public async Task<ClockVerificationResult?> VerifyClockAsync(Guid deviceId, CancellationToken cancellationToken)
+    {
+        var device = await store.GetDeviceAsync(deviceId, cancellationToken);
+        if (device is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var result = await ExecuteMaintenanceAsync(deviceId, MaintenanceOperation.ClockVerify, new JsonObject(), cancellationToken);
+            if (result is null)
+            {
+                return new ClockVerificationResult { DeviceId = deviceId, DeviceName = device.DisplayName, Success = false, Message = "No maintenance response." };
+            }
+
+            return new ClockVerificationResult
+            {
+                DeviceId = deviceId,
+                DeviceName = device.DisplayName,
+                Success = result.Success,
+                AdapterName = result.AdapterName,
+                Message = result.Message,
+                RtcBefore = ReadReportLong(result, "rtcBefore"),
+                TimeZoneBefore = ReadReportString(result, "timeZoneBefore"),
+                HostEpoch = ReadReportLong(result, "hostEpoch") ?? 0,
+                RtcAfter = ReadReportLong(result, "rtcAfter"),
+                TimeZoneAfter = ReadReportString(result, "timeZoneAfter"),
+                DriftSeconds = ReadReportLong(result, "driftSeconds"),
+                ToleranceSeconds = (int)(ReadReportLong(result, "toleranceSeconds") ?? 30),
+                TimeZoneMatchesHost = result.Response is JsonObject timeReport && timeReport["tzMatchesHost"] is JsonValue tzNode && tzNode.TryGetValue<bool>(out var tzMatches) && tzMatches
+            };
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Clock verify failed for {Device} ({Ip})", device.DisplayName, device.IpAddress);
+            return new ClockVerificationResult { DeviceId = deviceId, DeviceName = device.DisplayName, Success = false, Message = ex.Message };
+        }
+    }
+
+    /// <summary>
+    /// Fleet-wide clock verification for every registered 5523-W: probe rtc + timeZone, run
+    /// TimeSync, and confirm each OSD epoch matches the host. Best-effort — one unreachable
+    /// camera is reported as a failed result, never aborts the sweep.
+    /// </summary>
+    public async Task<ClockFleetReport> VerifyAll5523ClocksAsync(CancellationToken cancellationToken)
+    {
+        var devices = await store.GetDevicesAsync(cancellationToken);
+        var targets = devices.Where(Is5523W).ToList();
+        var results = new List<ClockVerificationResult>(targets.Count);
+        foreach (var device in targets)
+        {
+            var result = await VerifyClockAsync(device.Id, cancellationToken);
+            if (result is not null)
+            {
+                results.Add(result);
+            }
+            else
+            {
+                // VerifyClockAsync only returns null when the device vanished from the store
+                // mid-sweep — count it as failed so Checked = Verified + Failed stays invariant.
+                results.Add(new ClockVerificationResult { DeviceId = device.Id, DeviceName = device.DisplayName, Success = false, Message = "Device disappeared during sweep." });
+            }
+        }
+
+        return new ClockFleetReport
+        {
+            GeneratedAt = DateTimeOffset.UtcNow,
+            DevicesChecked = targets.Count,
+            DevicesVerified = results.Count(static result => result.Success),
+            DevicesFailed = results.Count(static result => !result.Success),
+            Results = results
+        };
+    }
+
+    private static long? ReadReportLong(MaintenanceResult result, string key)
+        => result.Response is JsonObject report && report[key] is JsonValue value && value.TryGetValue<long>(out var number)
+            ? number
+            : null;
+
+    private static string? ReadReportString(MaintenanceResult result, string key)
+    {
+        if (result.Response is not JsonObject report || report[key] is not JsonValue value)
+        {
+            return null;
+        }
+
+        var raw = value.ToJsonString().Trim('"');
+        return raw;
     }
 
     private async Task<IControlAdapter?> ResolveAdapterAsync(DeviceIdentity device, string? requestedAdapterName, CancellationToken cancellationToken)

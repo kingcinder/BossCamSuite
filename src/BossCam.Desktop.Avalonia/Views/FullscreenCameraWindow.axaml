@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:BossCam.Desktop.Avalonia.ViewModels"
+        xmlns:views="clr-namespace:BossCam.Desktop.Avalonia.Views"
         xmlns:c="clr-namespace:BossCam.Desktop.Avalonia.Controls"
         x:Class="BossCam.Desktop.Avalonia.Views.FullscreenCameraWindow"
         Title="Camera fullscreen"
@@ -45,9 +46,12 @@
     </Grid>
 
     <!-- ── Menu sheet (opens from a banner tile) ──────────────── -->
-    <Border Grid.Row="1" Background="#ee141426" CornerRadius="10,10,0,0" Padding="16,12"
+    <!-- The sheet is a bounded Grid (MaxHeight on the Border) with the options region in the
+         * row inside a ScrollViewer, so a tall control list scrolls with one scrollbar instead
+         of clipping the bottom of the embedded FeaturesView. -->
+    <Border Grid.Row="1" Background="#ee141426" CornerRadius="10,10,0,0" Padding="16,12" MaxHeight="520"
             IsVisible="{Binding ActiveMenu, Converter={x:Static c:NotNullToBoolConverter.Instance}}">
-      <StackPanel Spacing="8">
+      <Grid RowDefinitions="Auto,Auto,Auto,*">
         <Grid ColumnDefinitions="*,Auto">
           <TextBlock Text="{Binding MenuHeading}" FontSize="15" FontWeight="Bold" Foreground="#ffb06a"
                      VerticalAlignment="Center" />
@@ -55,31 +59,114 @@
                   c:InfoExplainer.Title="Hide menus"
                   c:InfoExplainer.Explanation="Closes the menu sheet. Press Escape or Backspace, or click the video, to hide the whole banner." />
         </Grid>
-        <TextBlock Text="The full camera option set lives in the matching management section — every tile below opens the right one."
-                   FontSize="12" Foreground="#b6b6cc" TextWrapping="Wrap" />
-        <ItemsControl ItemsSource="{Binding MenuTiles}">
-          <ItemsControl.ItemsPanel>
-            <ItemsPanelTemplate>
-              <WrapPanel />
-            </ItemsPanelTemplate>
-          </ItemsControl.ItemsPanel>
-          <ItemsControl.ItemTemplate>
-            <DataTemplate>
-              <Button Command="{Binding $parent[Window].DataContext.OpenSectionCommand}"
-                      CommandParameter="{Binding Title}"
-                      Margin="0,0,8,8" Padding="12,8"
-                      Background="#2a2a44" BorderBrush="#0000" CornerRadius="8"
-                      c:InfoExplainer.Title="{Binding Title}"
-                      c:InfoExplainer.Explanation="Opens the {Binding Title} management section for this camera.">
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                  <TextBlock Text="{Binding Glyph}" FontSize="14" VerticalAlignment="Center" />
-                  <TextBlock Text="{Binding Title}" FontSize="13" VerticalAlignment="Center" />
-                </StackPanel>
-              </Button>
+
+        <!-- Audio output controls (always available; Space also toggles) -->
+        <Border Grid.Row="1" Background="#221830" CornerRadius="8" Padding="10,6" Margin="0,8,0,0">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="{Binding AudioStatus}" FontSize="12" Foreground="#9ad19a" VerticalAlignment="Center"
+                       c:InfoExplainer.Title="Audio output"
+                       c:InfoExplainer.Explanation="Toggles live audio output for this camera. Space also toggles it from the keyboard." />
+            <Button Grid.Column="1" Command="{Binding ToggleAudioCommand}" Content="{Binding AudioToggleLabel}"
+                    FontSize="12" Padding="10,5"
+                    c:InfoExplainer.Title="Audio output"
+                    c:InfoExplainer.Explanation="Toggles live audio output for this camera. Space also toggles it from the keyboard." />
+          </Grid>
+        </Border>
+
+        <TextBlock Grid.Row="2" Text="Camera options for this device — every editable parameter, applied and verified live."
+                   FontSize="12" Foreground="#b6b6cc" TextWrapping="Wrap" Margin="0,8,0,0" />
+
+        <!-- Per-tile menu content (mirror of the SPA's {#if openMenu === ...} sheet):
+             Network/Record/Advanced/Firmware embed the shell's real section surfaces;
+             Features/Settings embed the typed control points; Display/Audio/Hotspot/
+             Recovery render dedicated panels from the fullscreen VM. Each tile opens its
+             OWN panel — never the same Features surface for every tile. -->
+        <ContentControl Grid.Row="3" Content="{Binding MenuContent}" Margin="0,8,0,0">
+          <ContentControl.DataTemplates>
+            <DataTemplate DataType="{x:Type vm:FeaturesViewModel}">
+              <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <views:FeaturesView />
+              </ScrollViewer>
             </DataTemplate>
-          </ItemsControl.ItemTemplate>
-        </ItemsControl>
-      </StackPanel>
+            <DataTemplate DataType="{x:Type vm:ConnectivityViewModel}">
+              <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <views:ConnectivityView />
+              </ScrollViewer>
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:RecordingsViewModel}">
+              <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <views:RecordingsView />
+              </ScrollViewer>
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:DiagnosticsViewModel}">
+              <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <views:DiagnosticsView />
+              </ScrollViewer>
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:FirmwareViewModel}">
+              <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <views:FirmwareView />
+              </ScrollViewer>
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:FullscreenCameraViewModel}">
+              <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel Spacing="10">
+                  <!-- Display / stream -->
+                  <StackPanel IsVisible="{Binding IsDisplayMenu}" Spacing="8">
+                    <TextBlock Text="Display &amp; stream" FontSize="14" FontWeight="Bold" Foreground="#fff"
+                               c:InfoExplainer.Title="Display"
+                               c:InfoExplainer.Explanation="Stream quality and live status for this camera. HD main is always the default; sub is the low-bandwidth stream. Restart forces a fresh decode of the current quality." />
+                    <TextBlock Text="{Binding PlaybackStatus}" FontSize="12" Foreground="#9ad19a" TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <Button Command="{Binding SelectQualityCommand}" CommandParameter="main" Content="HD main"
+                              IsEnabled="{Binding IsSubQuality}" Padding="10,5"
+                              c:InfoExplainer.Title="HD main"
+                              c:InfoExplainer.Explanation="The camera's high-resolution main stream. This is always the default choice." />
+                      <Button Command="{Binding SelectQualityCommand}" CommandParameter="sub" Content="Sub stream"
+                              IsEnabled="{Binding IsMainQuality}" Padding="10,5"
+                              c:InfoExplainer.Title="Sub stream"
+                              c:InfoExplainer.Explanation="The camera's low-bandwidth sub stream, for weak Wi-Fi links." />
+                    </StackPanel>
+                    <Button Command="{Binding RestartStreamCommand}" Content="⟳ Restart stream" HorizontalAlignment="Left"
+                            c:InfoExplainer.Title="Restart stream"
+                            c:InfoExplainer.Explanation="Tears down the current decoder and starts a fresh one at the chosen quality." />
+                  </StackPanel>
+
+                  <!-- Audio output -->
+                  <StackPanel IsVisible="{Binding IsAudioMenu}" Spacing="8">
+                    <TextBlock Text="Audio output" FontSize="14" FontWeight="Bold" Foreground="#fff"
+                               c:InfoExplainer.Title="Audio output"
+                               c:InfoExplainer.Explanation="Toggles live audio for this camera through a dedicated ffplay process. Space also toggles it from the keyboard." />
+                    <TextBlock Text="{Binding AudioStatus}" FontSize="12" Foreground="#9ad19a" TextWrapping="Wrap" />
+                    <Button Command="{Binding ToggleAudioCommand}" Content="{Binding AudioToggleLabel}"
+                            HorizontalAlignment="Left" Padding="10,5"
+                            c:InfoExplainer.Title="Toggle audio"
+                            c:InfoExplainer.Explanation="Mute / unmute this camera's live audio. Space toggles it too." />
+                  </StackPanel>
+
+                  <!-- Hotspot / daisy-chain -->
+                  <StackPanel IsVisible="{Binding IsHotspotMenu}" Spacing="8">
+                    <TextBlock Text="Hotspot &amp; daisy-chain" FontSize="14" FontWeight="Bold" Foreground="#fff"
+                               c:InfoExplainer.Title="Hotspot"
+                               c:InfoExplainer.Explanation="How distant cameras link back to the AP Wi-Fi through this camera's hotspot." />
+                    <TextBlock Text="A 5523-W camera can run as a wireless AP so far-away cameras daisy-chain back to your router's Wi-Fi. This camera's wireless/AP parameters live under the Network menu (or the Features control points with a Quick Probe)."
+                               FontSize="12" Foreground="#b6b6cc" TextWrapping="Wrap" />
+                  </StackPanel>
+
+                  <!-- Recovery -->
+                  <StackPanel IsVisible="{Binding IsRecoveryMenu}" Spacing="8">
+                    <TextBlock Text="Recovery" FontSize="14" FontWeight="Bold" Foreground="#fff"
+                               c:InfoExplainer.Title="Recovery"
+                               c:InfoExplainer.Explanation="Bringing a camera back online when it stops answering." />
+                    <TextBlock Text="When a camera stops answering, the feed watchdog and camera-recovery scripts (re-enroll, re-provision Wi-Fi, factory default) bring it back. Reconnect from the Network menu to force the failover logic now."
+                               FontSize="12" Foreground="#b6b6cc" TextWrapping="Wrap" />
+                  </StackPanel>
+                </StackPanel>
+              </ScrollViewer>
+            </DataTemplate>
+          </ContentControl.DataTemplates>
+        </ContentControl>
+      </Grid>
     </Border>
 
     <!-- ── Option banner (single click) ───────────────────────── -->
@@ -99,7 +186,7 @@
                     Background="#26263f" BorderBrush="#3a3a5c" BorderThickness="1" CornerRadius="8"
                     HorizontalContentAlignment="Center"
                     c:InfoExplainer.Title="{Binding Title}"
-                    c:InfoExplainer.Explanation="Opens the {Binding Title} options for this camera.">
+                    c:InfoExplainer.Explanation="Opens the {Binding Title} options for this camera in-window.">
               <StackPanel Spacing="2">
                 <TextBlock Text="{Binding Glyph}" FontSize="16" HorizontalAlignment="Center" />
                 <TextBlock Text="{Binding Title}" FontSize="11" HorizontalAlignment="Center" Foreground="#ddd" />

@@ -248,6 +248,13 @@ export const api = {
       }
     ),
 
+  /** POST /api/devices/{id}/maintenance/TimeSync - sync the camera clock to the host */
+  syncCameraClock: (deviceId: string) =>
+    request<{ success?: boolean; message?: string; Message?: string }>(
+      `/api/devices/${deviceId}/maintenance/TimeSync`,
+      { method: 'POST', body: '{}' }
+    ),
+
   // ── Persistence Verification ──────────────────────────────────
 
   /** GET /api/devices/{id}/persistence */

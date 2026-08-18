@@ -81,7 +81,7 @@
         <StackPanel Spacing="2" VerticalAlignment="Center">
           <TextBlock Text="{Binding LivePlaybackStatus}" FontSize="12" Foreground="#ffb06a" TextWrapping="Wrap"
                      c:InfoExplainer.Title="Playback status"
-                     c:InfoExplainer.Explanation="Shows the negotiated playback mode and reconnect state. A reconnecting message means the backend stream or ffmpeg decoder is being restarted without crashing the desktop client." />
+                     c:InfoExplainer.Explanation="Shows the negotiated stream mode for the selected camera. Live video itself runs on the landing board tiles (each tile shows its own live fps) and in the fullscreen view, both decoding the camera's native stream directly." />
           <TextBlock Text="{Binding DeviceInfoText}" FontSize="11" Foreground="#9a9ab0" TextTrimming="CharacterEllipsis"
                      c:InfoExplainer.Title="Device details"
                      c:InfoExplainer.Explanation="Identity of the selected camera: model, IP, firmware version and device type." />

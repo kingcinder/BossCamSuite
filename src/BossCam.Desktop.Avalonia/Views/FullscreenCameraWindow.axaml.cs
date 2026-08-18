@@ -37,15 +37,26 @@ public partial class FullscreenCameraWindow : Window
 
     private async void OnOpened(object? sender, EventArgs e)
     {
-        if (DataContext is FullscreenCameraViewModel vm)
+        if (DataContext is not FullscreenCameraViewModel vm)
         {
-            vm.RequestClose += Close;
-            vm.RequestOpenSection += OnRequestOpenSection;
-            vm.PropertyChanged += OnViewModelPropertyChanged;
-            // Focus before the (potentially slow) manifest fetch so the window is
-            // keyboard-ready immediately and Space is reserved for the audio toggle.
-            Stage.Focus();
+            return;
+        }
+
+        vm.RequestClose += Close;
+        vm.PropertyChanged += OnViewModelPropertyChanged;
+        // Focus before the (potentially slow) manifest fetch so the window is
+        // keyboard-ready immediately and Space is reserved for the audio toggle.
+        Stage.Focus();
+        try
+        {
             await vm.StartAsync();
+        }
+        catch (Exception ex)
+        {
+            // Opened is an async-void Avalonia event. Never let a manifest/decoder
+            // startup exception escape onto the UI dispatcher and kill the fullscreen
+            // window; the VM remains usable for Retry/close and shows the failure.
+            vm.PlaybackStatus = $"Fullscreen startup failed: {ex.Message}";
         }
     }
 
@@ -55,19 +66,10 @@ public partial class FullscreenCameraWindow : Window
         if (DataContext is FullscreenCameraViewModel vm)
         {
             vm.RequestClose -= Close;
-            vm.RequestOpenSection -= OnRequestOpenSection;
             vm.PropertyChanged -= OnViewModelPropertyChanged;
             vm.Dispose();
         }
     }
-
-    /// <summary>
-    /// A menu-sheet tile click navigates the shell section without changing
-    /// BannerVisible/ActiveMenu, so it would otherwise leave focus on that Button and
-    /// let a later Space re-activate it instead of toggling audio. Return focus to the
-    /// stage after any section navigation.
-    /// </summary>
-    private void OnRequestOpenSection(string _) => Stage.Focus();
 
     /// <summary>
     /// Returns keyboard focus to the stage whenever the banner or menu sheet becomes

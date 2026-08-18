@@ -33,7 +33,7 @@ public sealed class LiveStreamService(
         var (device, rtspUrl) = await ResolveRtspAsync(deviceId, quality, cancellationToken);
         var ffmpeg = ResolveFfmpegPath()
             ?? throw new InvalidOperationException("ffmpeg not found. Install ffmpeg for live streams.");
-        // Compatibility output is deliberately bounded: ultrafast H.264, no B-frames,
+        // Compatibility output is deliberately bounded: veryfast H.264, no B-frames,
         // explicit maxrate/bufsize, and a low-latency MPEG-TS pipe.
         var args = BuildRtspH264TsArguments(rtspUrl, IsMain(quality));
         logger.LogInformation("Live MPEG-TS {Ip} q={Q}", device.IpAddress, quality);
@@ -100,35 +100,6 @@ public sealed class LiveStreamService(
     }
 
     /// <summary>
-    /// Streams RTSP as fragmented MP4 via ffmpeg for browser MSE playback.
-    /// Uses codec copy to minimize latency — the browser decodes natively.
-    /// Flags: frag_keyframe (keyframe-aligned fragments), empty_moov (immediate init),
-    /// default_base_moof (compatible moof offsets).
-    /// </summary>
-    public async Task StreamFragmentedMp4Async(
-        Guid deviceId,
-        Stream output,
-        string quality,
-        CancellationToken cancellationToken)
-    {
-        var (device, rtspUrl) = await ResolveRtspAsync(deviceId, quality, cancellationToken);
-        var ffmpeg = ResolveFfmpegPath()
-            ?? throw new InvalidOperationException("ffmpeg not found. Install ffmpeg for live streams.");
-        var args = BuildRtspFmp4Arguments(rtspUrl);
-        logger.LogInformation("Live fMP4 {Ip} q={Q}", device.IpAddress, quality);
-        try
-        {
-            await RunFfmpegCopyAsync(ffmpeg, args, output, cancellationToken);
-        }
-        catch (InvalidOperationException)
-        {
-            // One-shot fMP4 playback produced no media — the cached probe verdict is stale.
-            await InvalidateNetSdkVerdictAsync(deviceId, cancellationToken);
-            throw;
-        }
-    }
-
-    /// <summary>
     /// Compatibility fMP4 output for browsers and native clients that cannot decode the
     /// 5523-W's HEVC stream. The transcode is intentionally bounded and low-latency.
     /// </summary>
@@ -145,8 +116,7 @@ public sealed class LiveStreamService(
         var session = _fmp4Sessions.GetOrAdd(
             key,
             _ => new SharedFmp4Session(key, deviceId, device, normalizedQuality, this, logger));
-        // Browser MSE and Avalonia both consume this one bounded H.264 fMP4 session. The
-        // fallback MPEG-TS endpoint remains available for native clients that need it.
+        // Browser MSE and native fallback both consume this one bounded H.264 fMP4 session.
         try
         {
             await session.WriteToAsync(output, cancellationToken);
@@ -159,10 +129,43 @@ public sealed class LiveStreamService(
         }
     }
 
+    /// <summary>
+    /// Direct HEVC fMP4 output for native clients that decode HEVC locally (the Avalonia
+    /// desktop runs ffmpeg, which decodes the camera's native HEVC). Server-side this is a
+    /// pure codec copy — no transcode, no re-encode, no resolution loss, and no extra CPU —
+    /// so it is the fastest and highest-quality path available. One shared session per
+    /// camera fans out to every desktop viewer (single RTSP connection per camera).
+    /// </summary>
+    public async Task StreamHevcFmp4Async(
+        Guid deviceId,
+        Stream output,
+        string quality,
+        CancellationToken cancellationToken)
+    {
+        var device = await store.GetDeviceAsync(deviceId, cancellationToken)
+            ?? throw new InvalidOperationException("Device not found.");
+        var normalizedQuality = IsMain(quality) ? "main" : "sub";
+        var key = $"hevc:{deviceId:N}:{normalizedQuality}";
+        var session = _fmp4Sessions.GetOrAdd(
+            key,
+            _ => new SharedFmp4Session(key, deviceId, device, normalizedQuality, this, logger, useHevcCopy: true));
+        try
+        {
+            await session.WriteToAsync(output, cancellationToken);
+        }
+        catch (InvalidOperationException)
+        {
+            // Shared HEVC session produced no media — the cached probe verdict is stale.
+            await InvalidateNetSdkVerdictAsync(deviceId, cancellationToken);
+            throw;
+        }
+    }
+
     public async Task<LiveMediaManifest> BuildManifestAsync(
         Guid deviceId,
         string quality,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool nativeClient = false)
     {
         var device = await store.GetDeviceAsync(deviceId, cancellationToken)
             ?? throw new InvalidOperationException("Device not found.");
@@ -194,7 +197,22 @@ public sealed class LiveStreamService(
             // the endpoint remains the final authority if the camera drops between calls.
             SnapshotAvailable = decision.Snapshot is not null || !string.IsNullOrWhiteSpace(device.IpAddress)
         };
-        var negotiated = LiveMediaNegotiationPolicy.Resolve(facts, browserSupportsHevc: false);
+        // Direct RTSP is the freshest path for native clients (desktop ffmpeg decodes HEVC
+        // locally): no server HTTP hop, no fragment-alignment delay, one connection straight
+        // to the camera. Only advertised when the probe just succeeded, so a dead RTSP never
+        // leads the ladder; the negotiated HTTP modes below remain the automatic fallback.
+        // Note: this adds one RTSP connection per desktop viewer alongside the server's
+        // shared session (tile + fullscreen + a browser viewer ≈ up to 3 per camera, within
+        // the 5523-W's 4–6 slot range). If a camera ever rejects the extra connection the
+        // desktop's ladder self-heals by falling back to the server HTTP path.
+        var rtspUrl = nativeClient && rtspPlayable
+            && selected?.Kind is TransportKind.Rtsp or TransportKind.OnvifRtsp
+            && !string.IsNullOrWhiteSpace(selected.Url)
+            ? EnsureCredentials(selected.Url, device)
+            : string.Empty;
+        // Native clients (the desktop's local ffmpeg) decode HEVC directly, so they get the
+        // zero-transcode path; browsers cannot decode HEVC and negotiate H.264 instead.
+        var negotiated = LiveMediaNegotiationPolicy.Resolve(facts, browserSupportsHevc: nativeClient);
         var basePath = $"/api/devices/{deviceId}";
         return new LiveMediaManifest
         {
@@ -209,7 +227,8 @@ public sealed class LiveStreamService(
             H264Fmp4Url = $"{basePath}/live.h264.mp4?quality={Uri.EscapeDataString(quality)}",
             HevcFmp4Url = $"{basePath}/live.mp4?quality={Uri.EscapeDataString(quality)}",
             MpegTsUrl = $"{basePath}/live.ts?quality={Uri.EscapeDataString(quality)}",
-            SnapshotUrl = $"{basePath}/snapshot"
+            SnapshotUrl = $"{basePath}/snapshot",
+            RtspUrl = rtspUrl
         };
     }
 
@@ -291,6 +310,18 @@ public sealed class LiveStreamService(
         var ffmpeg = ResolveFfmpegPath()
             ?? throw new InvalidOperationException("ffmpeg not found.");
         return (ffmpeg, BuildRtspH264Fmp4Arguments(rtspUrl, IsMain(quality)));
+    }
+
+    internal async Task<(string Ffmpeg, IReadOnlyList<string> Args)> BuildRtspHevcFmp4CommandAsync(
+        Guid deviceId,
+        string quality,
+        CancellationToken cancellationToken)
+    {
+        var (_, rtspUrl) = await ResolveRtspAsync(deviceId, quality, cancellationToken);
+        var ffmpeg = ResolveFfmpegPath()
+            ?? throw new InvalidOperationException("ffmpeg not found.");
+        // Direct HEVC: codec copy into fragmented MP4 — zero transcode, native resolution.
+        return (ffmpeg, BuildRtspFmp4Arguments(rtspUrl));
     }
 
     internal async Task<(string Ffmpeg, IReadOnlyList<string> Args)> BuildRtspMjpegCommandAsync(
@@ -447,7 +478,10 @@ public sealed class LiveStreamService(
         var sources = await transportBroker.GetSourcesAsync(deviceId, cancellationToken);
         string? url;
         var decision = PlayableSourcePolicy.Resolve(sources, IsMain(quality) ? "main" : "sub");
-        url = decision.Preferred?.Url
+        // Resolve the requested quality explicitly. Using decision.Preferred here made a
+        // sub-quality request silently open the main source whenever the preferred source
+        // was the main stream, which increased decode load and could starve the live feed.
+        url = SelectManifestSource(decision, quality)?.Url
             ?? BuildJuanUrl(device, IsMain(quality) ? "ch0_0.264" : "ch0_1.264");
 
         return (device, EnsureCredentials(url!, device));
@@ -530,20 +564,73 @@ public sealed class LiveStreamService(
         }
     }
 
+    /// <summary>
+    /// Extracts the fMP4 initialization segment (all top-level boxes before the first
+    /// <c>moof</c>). A newly joined decoder must receive this <c>ftyp</c>/<c>moov</c>
+    /// prefix before media fragments; otherwise a fullscreen viewer joining an already
+    /// running shared session can remain blank indefinitely.
+    /// </summary>
+    internal static byte[]? TryExtractFmp4InitializationSegment(byte[] data)
+    {
+        ArgumentNullException.ThrowIfNull(data);
+        var offset = 0;
+        while (offset + 8 <= data.Length)
+        {
+            var size32 = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(data.AsSpan(offset, 4));
+            var type = Encoding.ASCII.GetString(data, offset + 4, 4);
+            var headerSize = 8;
+            ulong boxSize = size32;
+            if (size32 == 1)
+            {
+                if (offset + 16 > data.Length)
+                {
+                    return null;
+                }
+                boxSize = System.Buffers.Binary.BinaryPrimitives.ReadUInt64BigEndian(data.AsSpan(offset + 8, 8));
+                headerSize = 16;
+            }
+            else if (size32 == 0)
+            {
+                return null;
+            }
+
+            if (boxSize < (uint)headerSize || boxSize > (ulong)(data.Length - offset))
+            {
+                return null;
+            }
+
+            if (type == "moof")
+            {
+                return data[..offset].ToArray();
+            }
+
+            offset = checked(offset + (int)boxSize);
+        }
+
+        return null;
+    }
+
     internal static IReadOnlyList<string> BuildRtspMjpegArguments(string rtspUrl, bool isMain)
     {
         var scale = isMain ? "960:-2" : "640:-2";
-        var fps = isMain ? "10" : "12";
+        // The 5523-W main stream captures at 15 fps; the old 10/12 caps rendered
+        // below the camera's rate on every platform. Target the camera's own rate.
+        var fps = "15";
         return
         [
             "-hide_banner", "-loglevel", "warning",
             "-rtsp_transport", "tcp",
             "-rtsp_flags", "prefer_tcp",
-            "-fflags", "nobuffer+genpts",
-            "-flags", "low_delay",
+            // Preserve the HEVC reference chain on ordered TCP. Do not disable decoder
+            // frame reordering: that drops POC references on 5523-W and turns a 15 fps
+            // source into a slideshow.
+            "-fflags", "genpts+discardcorrupt",
             "-probesize", "2000000",
             "-analyzeduration", "2000000",
             "-max_delay", "500000",
+            // TCP preserves packet order, but HEVC still requires ffmpeg's normal
+            // reorder queue for reference frames. A zero queue produced POC/reference
+            // errors on 5523-W and collapsed the source into a slideshow.
             // RTSP demuxer socket I/O timeout (µs): a silent media stall (5523-W drops
             // frames but keeps the TCP socket open) must abort ffmpeg instead of serving
             // the last frame forever. Mirrors the recording pipeline's verified flag.
@@ -551,50 +638,64 @@ public sealed class LiveStreamService(
             "-i", rtspUrl,
             "-an", "-map", "0:v:0",
             "-vf", $"fps={fps},scale={scale}",
-            "-q:v", "7", "-f", "mpjpeg", "-"
+            "-q:v", "3", "-f", "mpjpeg", "-"
         ];
     }
 
-    private static IReadOnlyList<string> BuildRtspH264Fmp4Arguments(string rtspUrl, bool isMain)
+    internal static IReadOnlyList<string> BuildRtspH264Fmp4Arguments(string rtspUrl, bool isMain)
     {
-        var scale = isMain ? "1280:-2" : "960:-2";
-        var bitrate = isMain ? "2500k" : "1200k";
+        // H.264 serves only clients that cannot decode HEVC (browsers). Keep the transcode
+        // light (veryfast, no B-frames) but give it real bandwidth — 2500k was visibly
+        // soft at 1280 wide. VBV buffer sized to the bitrate so rate control stays smooth.
+        var scale = isMain ? "1920:-2" : "960:-2";
+        var bitrate = isMain ? "4000k" : "2000k";
+        var bufsize = isMain ? "8000k" : "4000k";
         return
         [
             "-hide_banner", "-loglevel", "warning",
             "-rtsp_transport", "tcp",
             "-rtsp_flags", "prefer_tcp",
-            "-fflags", "nobuffer+genpts",
-            "-flags", "low_delay",
+            // Preserve the HEVC reference chain on ordered TCP. Do not disable decoder
+            // frame reordering: that drops POC references on 5523-W and turns a 15 fps
+            // source into a slideshow.
+            "-fflags", "genpts+discardcorrupt",
             "-probesize", "2000000",
             "-analyzeduration", "2000000",
             "-max_delay", "500000",
+            // TCP preserves packet order, but HEVC still requires ffmpeg's normal
+            // reorder queue for reference frames. A zero queue produced POC/reference
+            // errors on 5523-W and collapsed the source into a slideshow.
             // RTSP demuxer socket I/O timeout (µs): a silent media stall (5523-W drops
             // frames but keeps the TCP socket open) must abort ffmpeg instead of serving
             // the last frame forever. Mirrors the recording pipeline's verified flag.
             "-timeout", "10000000",
             "-i", rtspUrl,
             "-map", "0:v:0", "-map", "0:a:0?", "-vf", $"scale={scale}",
-            "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency",
+            "-c:v", "libx264", "-preset", "veryfast", "-tune", "zerolatency",
             "-profile:v", "baseline", "-pix_fmt", "yuv420p",
-            "-b:v", bitrate, "-maxrate", bitrate, "-bufsize", "800k",
+            "-b:v", bitrate, "-maxrate", bitrate, "-bufsize", bufsize,
             "-c:a", "aac", "-b:a", "128k",
-            "-g", "30", "-bf", "0", "-f", "mp4",
+            "-g", "15", "-bf", "0", "-f", "mp4",
             "-movflags", "frag_keyframe+empty_moov+default_base_moof", "-"
         ];
     }
 
-    private static IReadOnlyList<string> BuildRtspFmp4Arguments(string rtspUrl)
+    internal static IReadOnlyList<string> BuildRtspFmp4Arguments(string rtspUrl)
         =>
         [
             "-hide_banner", "-loglevel", "warning",
             "-rtsp_transport", "tcp",
             "-rtsp_flags", "prefer_tcp",
-            "-fflags", "nobuffer+genpts",
-            "-flags", "low_delay",
+            // Preserve the HEVC reference chain on ordered TCP. Do not disable decoder
+            // frame reordering: that drops POC references on 5523-W and turns a 15 fps
+            // source into a slideshow.
+            "-fflags", "genpts+discardcorrupt",
             "-probesize", "2000000",
             "-analyzeduration", "2000000",
             "-max_delay", "500000",
+            // TCP preserves packet order, but HEVC still requires ffmpeg's normal
+            // reorder queue for reference frames. A zero queue produced POC/reference
+            // errors on 5523-W and collapsed the source into a slideshow.
             // RTSP demuxer socket I/O timeout (µs): a silent media stall (5523-W drops
             // frames but keeps the TCP socket open) must abort ffmpeg instead of serving
             // the last frame forever. Mirrors the recording pipeline's verified flag.
@@ -607,31 +708,38 @@ public sealed class LiveStreamService(
             "-"
         ];
 
-    private static IReadOnlyList<string> BuildRtspH264TsArguments(string rtspUrl, bool isMain)
+    internal static IReadOnlyList<string> BuildRtspH264TsArguments(string rtspUrl, bool isMain)
     {
-        var scale = isMain ? "1280:-2" : "960:-2";
-        var bitrate = isMain ? "2500k" : "1200k";
+        // Same quality floor as the H.264 fMP4 path (this is the native MPEG-TS fallback).
+        var scale = isMain ? "1920:-2" : "960:-2";
+        var bitrate = isMain ? "4000k" : "2000k";
+        var bufsize = isMain ? "8000k" : "4000k";
         return
         [
             "-hide_banner", "-loglevel", "warning",
             "-rtsp_transport", "tcp",
             "-rtsp_flags", "prefer_tcp",
-            "-fflags", "nobuffer+genpts",
-            "-flags", "low_delay",
+            // Preserve the HEVC reference chain on ordered TCP. Do not disable decoder
+            // frame reordering: that drops POC references on 5523-W and turns a 15 fps
+            // source into a slideshow.
+            "-fflags", "genpts+discardcorrupt",
             "-probesize", "2000000",
             "-analyzeduration", "2000000",
             "-max_delay", "500000",
+            // TCP preserves packet order, but HEVC still requires ffmpeg's normal
+            // reorder queue for reference frames. A zero queue produced POC/reference
+            // errors on 5523-W and collapsed the source into a slideshow.
             // RTSP demuxer socket I/O timeout (µs): a silent media stall (5523-W drops
             // frames but keeps the TCP socket open) must abort ffmpeg instead of serving
             // the last frame forever. Mirrors the recording pipeline's verified flag.
             "-timeout", "10000000",
             "-i", rtspUrl,
             "-map", "0:v:0", "-map", "0:a:0?", "-vf", $"scale={scale}",
-            "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency",
+            "-c:v", "libx264", "-preset", "veryfast", "-tune", "zerolatency",
             "-profile:v", "baseline", "-pix_fmt", "yuv420p",
-            "-b:v", bitrate, "-maxrate", bitrate, "-bufsize", "800k",
+            "-b:v", bitrate, "-maxrate", bitrate, "-bufsize", bufsize,
             "-c:a", "aac", "-b:a", "128k",
-            "-g", "30", "-bf", "0", "-f", "mpegts", "-flush_packets", "1", "-"
+            "-g", "15", "-bf", "0", "-f", "mpegts", "-flush_packets", "1", "-"
         ];
     }
 
@@ -718,9 +826,11 @@ public sealed class LiveStreamService(
         DeviceIdentity device,
         string quality,
         LiveStreamService owner,
-        ILogger logger) : IAsyncDisposable
+        ILogger logger,
+        bool useHevcCopy = false) : IAsyncDisposable
     {
         private readonly object _gate = new();
+        private readonly SemaphoreSlim _startupReplayGate = new(1, 1);
         private readonly ConcurrentDictionary<Guid, Channel<byte[]>> _subscribers = new();
         private Process? _process;
         private Task? _pumpTask;
@@ -728,21 +838,42 @@ public sealed class LiveStreamService(
         private int _generation;
         private CancellationTokenSource? _cts;
         private Task? _stallWatchdogTask;
+        private Task? _startupTask;
         private long _lastChunkUtcTicks;
+        private Exception? _pumpFailure;
+        private MemoryStream? _startupBuffer;
+        private byte[]? _initializationSegment;
+
+        /// <summary>Human-readable session mode for logs ("/"HEVC copy" vs "H264").</summary>
+        private string Mode => useHevcCopy ? "HEVC copy" : "H264";
 
         public async Task WriteToAsync(Stream output, CancellationToken cancellationToken)
         {
             var id = Guid.NewGuid();
-            var channel = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(16)
+            var channel = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(64)
             {
                 FullMode = BoundedChannelFullMode.Wait,
                 SingleReader = true,
                 SingleWriter = false
             });
-            lock (_gate)
+            await _startupReplayGate.WaitAsync(cancellationToken);
+            try
             {
-                _subscribers[id] = channel;
-                _generation++;
+                lock (_gate)
+                {
+                    _subscribers[id] = channel;
+                    _generation++;
+                    // A late subscriber cannot decode a fragment by itself. Replay the cached
+                    // fMP4 init segment before the pump sends its next moof/mdat bytes.
+                    if (_initializationSegment is { Length: > 0 } initialization)
+                    {
+                        channel.Writer.TryWrite(initialization);
+                    }
+                }
+            }
+            finally
+            {
+                _startupReplayGate.Release();
             }
 
             var gotBytes = false;
@@ -763,12 +894,12 @@ public sealed class LiveStreamService(
                 }
                 if (!gotBytes)
                 {
-                    throw new InvalidOperationException("Shared H.264 fMP4 session produced no media.");
+                    throw new InvalidOperationException($"Shared {Mode} fMP4 session produced no media.");
                 }
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && !gotBytes)
             {
-                throw new InvalidOperationException("Shared H.264 fMP4 session produced no media in time.");
+                throw new InvalidOperationException($"Shared {Mode} fMP4 session produced no media in time.");
             }
             finally
             {
@@ -793,24 +924,91 @@ public sealed class LiveStreamService(
 
         private async Task EnsureStartedAsync(CancellationToken cancellationToken)
         {
-            if (Interlocked.CompareExchange(ref _started, 1, 0) != 0) return;
+            Task startup;
+            lock (_gate)
+            {
+                // Every viewer awaits the same startup task. This prevents a late fullscreen
+                // viewer from observing _started=1 before ffmpeg exists, and lets idle teardown
+                // cancel the session-owned startup before an orphan process can be launched.
+                if (_startupTask is null || _startupTask.IsCompleted)
+                {
+                    _startupTask = StartProcessAsync();
+                }
+
+                startup = _startupTask;
+            }
+
+            await startup.WaitAsync(cancellationToken);
+        }
+
+        private async Task StartProcessAsync()
+        {
+            if (Interlocked.CompareExchange(ref _started, 1, 0) != 0)
+            {
+                return;
+            }
+
+            // A session may be restarted after a stalled process. The new ffmpeg process
+            // must never inherit ftyp/moov bytes from the previous process: stale init data
+            // before the new stream's moof can leave a late fullscreen decoder blank.
+            lock (_gate)
+            {
+                _initializationSegment = null;
+                _startupBuffer?.Dispose();
+                _startupBuffer = null;
+                _pumpFailure = null;
+            }
+
             try
             {
                 var cts = new CancellationTokenSource();
                 _cts = cts;
-                var (ffmpeg, args) = await owner.BuildRtspH264Fmp4CommandAsync(deviceId, quality, cancellationToken);                    logger.LogInformation("Shared H264 fMP4 session start {Ip} q={Q}", device.IpAddress, quality);
-                    _process = StartFfmpeg(ffmpeg, args);
-                    _pumpTask = Task.Run(() => PumpAsync(cts.Token), CancellationToken.None);
-                    // Baseline the stall watchdog at the fresh process (first-bytes deadline owns
-                    // the initial window).
-                    Interlocked.Exchange(ref _lastChunkUtcTicks, 0);
-                    _stallWatchdogTask = Task.Run(() => StallWatchdogLoopAsync(cts.Token), CancellationToken.None);
+                // Startup is shared by every subscriber. Do not bind process startup to the
+                // first HTTP request's cancellation token: a second viewer must not inherit a
+                // transient cancellation from the first viewer and wait on a dead channel.
+                // The session-owned token is canceled as soon as the last subscriber
+                // leaves. Propagate it through source resolution so a slow probe cannot
+                // finish and launch an orphan ffmpeg process after teardown.
+                var (ffmpeg, args) = useHevcCopy
+                    ? await owner.BuildRtspHevcFmp4CommandAsync(deviceId, quality, cts.Token)
+                    : await owner.BuildRtspH264Fmp4CommandAsync(deviceId, quality, cts.Token);
+                cts.Token.ThrowIfCancellationRequested();
+                lock (_gate)
+                {
+                    if (_subscribers.IsEmpty)
+                    {
+                        cts.Cancel();
+                        Interlocked.Exchange(ref _started, 0);
+                        return;
+                    }
+                }
+
+                logger.LogInformation(
+                    "Shared {Mode} fMP4 session start {Ip} q={Q}",
+                    Mode, device.IpAddress, quality);
+                _process = StartFfmpeg(ffmpeg, args);
+                _pumpTask = Task.Run(() => PumpAsync(cts.Token), CancellationToken.None);
+                // Baseline the stall watchdog at the fresh process (first-bytes deadline owns
+                // the initial window).
+                Interlocked.Exchange(ref _lastChunkUtcTicks, 0);
+                _stallWatchdogTask = Task.Run(() => StallWatchdogLoopAsync(cts.Token), CancellationToken.None);
             }
-            catch
+            catch (OperationCanceledException)
+            {
+                Interlocked.Exchange(ref _started, 0);
+                throw;
+            }
+            catch (Exception ex)
             {
                 Interlocked.Exchange(ref _started, 0);
                 try { _cts?.Cancel(); } catch { /* best effort */ }
                 if (_process is not null) TryKill(_process);
+                // Wake every concurrent subscriber immediately. Without this, subscribers
+                // arriving during startup remained on an uncompleted channel until timeout.
+                foreach (var channel in _subscribers.Values)
+                {
+                    channel.Writer.TryComplete(ex);
+                }
                 throw;
             }
         }
@@ -846,8 +1044,8 @@ public sealed class LiveStreamService(
                     }
 
                     logger.LogWarning(
-                        "Shared H264 fMP4 session {Key} stalled ({Seconds}s since last chunk) — killing ffmpeg for {Ip} q={Q}",
-                        key, silent / TimeSpan.TicksPerSecond, device.IpAddress, quality);
+                        "Shared {Mode} fMP4 session {Key} stalled ({Seconds}s since last chunk) — killing ffmpeg for {Ip} q={Q}",
+                        Mode, key, silent / TimeSpan.TicksPerSecond, device.IpAddress, quality);
                     if (_process is { HasExited: false })
                     {
                         TryKill(_process);
@@ -876,23 +1074,57 @@ public sealed class LiveStreamService(
                     var read = await stdout.ReadAsync(buffer.AsMemory(), cancellationToken);
                     if (read <= 0) break;
                     var chunk = buffer.AsSpan(0, read).ToArray();
-                    foreach (var pair in _subscribers.ToArray())
+                    if (_initializationSegment is null)
                     {
-                        if (!pair.Value.Writer.TryWrite(chunk))
+                        _startupBuffer ??= new MemoryStream();
+                        _startupBuffer.Write(chunk, 0, chunk.Length);
+                        var initialization = TryExtractFmp4InitializationSegment(_startupBuffer.ToArray());
+                        if (initialization is null)
                         {
-                            // Never drop bytes from a live MP4 stream. Drop only the slow
-                            // subscriber, preserving a valid stream for all other viewers.
-                            pair.Value.Writer.TryComplete(new InvalidOperationException("Viewer fell behind the live fMP4 session."));
-                            _subscribers.TryRemove(pair.Key, out _);
+                            // Hold the short init prefix until the first moof is seen so
+                            // every subscriber joining during startup receives one coherent
+                            // ftyp/moov/moof sequence rather than a partial stream.
+                            if (_startupBuffer.Length > 16 * 1024 * 1024)
+                            {
+                                throw new InvalidOperationException($"Shared {Mode} fMP4 stream has no valid initialization segment.");
+                            }
+                            continue;
                         }
+
+                        var startupBytes = _startupBuffer.ToArray();
+                        _startupBuffer.Dispose();
+                        _startupBuffer = null;
+                        // Serialize initialization publication with late-subscriber
+                        // registration. Without this gate a joiner could receive the cached
+                        // init segment and the startup buffer containing the same init boxes,
+                        // leaving MSE/ffmpeg with a duplicated ftyp/moov prefix.
+                        await _startupReplayGate.WaitAsync(cancellationToken);
+                        try
+                        {
+                            lock (_gate)
+                            {
+                                _initializationSegment = initialization;
+                            }
+                            PublishChunk(startupBytes);
+                        }
+                        finally
+                        {
+                            _startupReplayGate.Release();
+                        }
+                        continue;
                     }
-                    Interlocked.Exchange(ref _lastChunkUtcTicks, DateTime.UtcNow.Ticks);
+
+                    PublishChunk(chunk);
                 }
             }
             catch (OperationCanceledException) { }
             catch (Exception ex)
             {
-                logger.LogDebug(ex, "Shared H264 fMP4 pump ended for {Ip}", device.IpAddress);
+                // Preserve the real pump failure for subscribers. A generic "ended"
+                // exception hides whether ffmpeg exited, parsing failed, or the process
+                // was killed by the stall watchdog, making the desktop fallback opaque.
+                _pumpFailure = ex;
+                logger.LogDebug(ex, "Shared {Mode} fMP4 pump ended for {Ip}", Mode, device.IpAddress);
             }
             finally
             {
@@ -901,14 +1133,52 @@ public sealed class LiveStreamService(
                 // reconnect logic instead of treating a dead/stalled session as clean EOF.
                 foreach (var channel in _subscribers.Values)
                 {
-                    channel.Writer.TryComplete(new InvalidOperationException("Shared H.264 fMP4 session ended (stalled or dropped)."));
+                    channel.Writer.TryComplete(_pumpFailure
+                        ?? new InvalidOperationException($"Shared {Mode} fMP4 session ended (stalled or dropped)."));
                 }
                 if (_process is not null) TryKill(_process);
                 // Session is done — stop the stall watchdog immediately instead of letting it
                 // poll until the 5s idle-dispose runs.
                 try { _cts?.Cancel(); } catch { /* best effort */ }
+                lock (_gate)
+                {
+                    _initializationSegment = null;
+                    _startupBuffer?.Dispose();
+                    _startupBuffer = null;
+                }
                 Interlocked.Exchange(ref _started, 0);
             }
+        }
+
+        /// <summary>
+        /// Publishes a complete fMP4 chunk without ever blocking the shared ffmpeg pump on
+        /// one slow HTTP client. MP4 chunks cannot be dropped selectively without corrupting
+        /// that client's byte stream, so a subscriber whose bounded queue is full is removed
+        /// and its HTTP request reconnects; healthy viewers keep receiving every chunk at the
+        /// camera cadence instead of all viewers stalling behind one slow socket.
+        /// </summary>
+        private void PublishChunk(byte[] chunk)
+        {
+            foreach (var pair in _subscribers.ToArray())
+            {
+                if (pair.Value.Writer.TryWrite(chunk))
+                {
+                    continue;
+                }
+
+                logger.LogWarning(
+                    "Dropping stalled {Mode} fMP4 viewer {ViewerId} for {Ip} q={Q}; queued chunks exceeded {Capacity}",
+                    Mode,
+                    pair.Key,
+                    device.IpAddress,
+                    quality,
+                    64);
+                pair.Value.Writer.TryComplete(
+                    new InvalidOperationException("Viewer fell behind the live fMP4 session."));
+                _subscribers.TryRemove(pair.Key, out _);
+            }
+
+            Interlocked.Exchange(ref _lastChunkUtcTicks, DateTime.UtcNow.Ticks);
         }
 
         private void DisposeIfStillIdle(int generation)
@@ -930,8 +1200,14 @@ public sealed class LiveStreamService(
         {
             try { _cts?.Cancel(); } catch { /* best effort */ }
             if (_process is not null) TryKill(_process);
+            _initializationSegment = null;
+            _startupBuffer?.Dispose();
+            _startupBuffer = null;
             foreach (var channel in _subscribers.Values) channel.Writer.TryComplete();
             _subscribers.Clear();
+            // Do not dispose the gate here: a late request or the pump may still be leaving
+            // a wait after idle teardown. The session is removed from the owner dictionary,
+            // so the gate becomes unreachable with the session and is reclaimed safely.
             Interlocked.Exchange(ref _started, 0);
         }
     }
@@ -959,33 +1235,23 @@ public sealed class LiveStreamService(
         private int _subscriberGeneration;
         private CancellationTokenSource? _cts;
         private Task? _stallWatchdogTask;
+        private Task? _startupTask;
         private long _lastFrameUtcTicks;
 
         public async Task EnsureStartedAsync(CancellationToken cancellationToken)
         {
-            if (Interlocked.CompareExchange(ref _started, 1, 0) == 0)
+            Task startup;
+            lock (_gate)
             {
-                try
+                if (_startupTask is null || _startupTask.IsCompleted)
                 {
-                    var cts = new CancellationTokenSource();
-                    _cts = cts;
-                    var (ffmpeg, args) = await owner.BuildRtspMjpegCommandAsync(deviceId, quality, cancellationToken);
-                    logger.LogInformation("Shared RTSP session start {Ip} q={Q}", device.IpAddress, quality);
-                    _process = StartFfmpeg(ffmpeg, args);
-                    _pumpTask = Task.Run(() => PumpAsync(cts.Token), CancellationToken.None);
-                    // Baseline the stall watchdog at the fresh process: no frames yet is the
-                    // first-frame window's job (14s deadline), not a stall.
-                    Interlocked.Exchange(ref _lastFrameUtcTicks, 0);
-                    _stallWatchdogTask = Task.Run(() => StallWatchdogLoopAsync(cts.Token), CancellationToken.None);
+                    _startupTask = StartProcessAsync();
                 }
-                catch
-                {
-                    Interlocked.Exchange(ref _started, 0);
-                    try { _cts?.Cancel(); } catch { /* best effort */ }
-                    if (_process is not null) TryKill(_process);
-                    throw;
-                }
+
+                startup = _startupTask;
             }
+
+            await startup.WaitAsync(cancellationToken);
 
             // Wait briefly for first frame so clients don't hang on black.
             var deadline = DateTime.UtcNow.AddSeconds(8);
@@ -996,13 +1262,65 @@ public sealed class LiveStreamService(
                     break;
                 }
 
-                // session is up once pump is running
+                // Session is up once the pump is running.
                 if (_pumpTask is not null)
                 {
                     break;
                 }
 
                 await Task.Delay(50, cancellationToken);
+            }
+        }
+
+        private async Task StartProcessAsync()
+        {
+            if (Interlocked.CompareExchange(ref _started, 1, 0) != 0)
+            {
+                return;
+            }
+
+            try
+            {
+                var cts = new CancellationTokenSource();
+                _cts = cts;
+                // Cancel source resolution with the session token too; otherwise a slow
+                // transport probe can start an orphan process after the final subscriber
+                // has already disconnected.
+                var (ffmpeg, args) = await owner.BuildRtspMjpegCommandAsync(deviceId, quality, cts.Token);
+                cts.Token.ThrowIfCancellationRequested();
+                lock (_gate)
+                {
+                    if (_subscribers.IsEmpty)
+                    {
+                        cts.Cancel();
+                        Interlocked.Exchange(ref _started, 0);
+                        return;
+                    }
+                }
+
+                logger.LogInformation("Shared RTSP session start {Ip} q={Q}", device.IpAddress, quality);
+                _process = StartFfmpeg(ffmpeg, args);
+                _pumpTask = Task.Run(() => PumpAsync(cts.Token), CancellationToken.None);
+                // Baseline the stall watchdog at the fresh process: no frames yet is the
+                // first-frame window's job (14s deadline), not a stall.
+                Interlocked.Exchange(ref _lastFrameUtcTicks, 0);
+                _stallWatchdogTask = Task.Run(() => StallWatchdogLoopAsync(cts.Token), CancellationToken.None);
+            }
+            catch (OperationCanceledException)
+            {
+                Interlocked.Exchange(ref _started, 0);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                Interlocked.Exchange(ref _started, 0);
+                try { _cts?.Cancel(); } catch { /* best effort */ }
+                if (_process is not null) TryKill(_process);
+                foreach (var channel in _subscribers.Values)
+                {
+                    channel.Writer.TryComplete(ex);
+                }
+                throw;
             }
         }
 
@@ -1142,6 +1460,8 @@ public sealed class LiveStreamService(
             try
             {
                 // Parse multipart MJPEG from ffmpeg stdout and fan-out complete JPEG frames.
+                // Scans the accumulator's backing buffer in place — no per-read ToArray copy
+                // of the whole accumulator (which was O(n²) memory traffic as it grew).
                 var stdout = _process.StandardOutput.BaseStream;
                 var buffer = new byte[64 * 1024];
                 var acc = new MemoryStream();
@@ -1191,24 +1511,30 @@ public sealed class LiveStreamService(
 
         private void ExtractAndPublishJpegs(MemoryStream acc)
         {
-            var data = acc.ToArray();
+            // Work directly on the backing buffer (GetBuffer) bounded by Length — the
+            // buffer is reused across reads, so no per-read allocation. Complete frames
+            // are extracted into fresh arrays (subscribers each need an independent copy);
+            // a partial trailing frame is kept in place for the next read.
+            var data = acc.GetBuffer();
+            var length = (int)acc.Length;
             var searchFrom = 0;
+            var partialFrom = -1;
+            var partialLen = 0;
             while (true)
             {
-                var soi = IndexOf(data, [0xFF, 0xD8], searchFrom);
+                var soi = IndexOf(data, [0xFF, 0xD8], searchFrom, length);
                 if (soi < 0)
                 {
                     break;
                 }
 
-                var eoi = IndexOf(data, [0xFF, 0xD9], soi + 2);
+                var eoi = IndexOf(data, [0xFF, 0xD9], soi + 2, length);
                 if (eoi < 0)
                 {
-                    // incomplete frame — keep from SOI
-                    var keep = data.AsSpan(soi).ToArray();
-                    acc.SetLength(0);
-                    acc.Write(keep, 0, keep.Length);
-                    return;
+                    // incomplete frame — keep from SOI (SOI at 0 is a valid, common case)
+                    partialFrom = soi;
+                    partialLen = length - soi;
+                    break;
                 }
 
                 var len = eoi + 2 - soi;
@@ -1223,26 +1549,37 @@ public sealed class LiveStreamService(
                 searchFrom = eoi + 2;
             }
 
-            if (searchFrom > 0 && searchFrom < data.Length)
+            // Trim consumed bytes. If a partial frame remains, slide it to the front so
+            // the next read appends directly after it (avoids unbounded growth).
+            if (partialFrom >= 0)
             {
-                var keep = data.AsSpan(searchFrom).ToArray();
-                acc.SetLength(0);
-                acc.Write(keep, 0, keep.Length);
+                // incomplete frame from SOI — keep the tail regardless of its position
+                Buffer.BlockCopy(data, partialFrom, data, 0, partialLen);
+                acc.SetLength(partialLen);
             }
-            else if (searchFrom >= data.Length)
+            else if (searchFrom > 0 && searchFrom < length)
             {
+                // consumed frames, partial tail remains — keep from searchFrom
+                var keepLen = length - searchFrom;
+                Buffer.BlockCopy(data, searchFrom, data, 0, keepLen);
+                acc.SetLength(keepLen);
+            }
+            else if (searchFrom >= length)
+            {
+                // everything consumed — clear
                 acc.SetLength(0);
             }
-            else if (data.Length > 2 * 1024 * 1024)
+            else if (length > 2 * 1024 * 1024)
             {
                 // avoid unbounded growth if stream is garbage
                 acc.SetLength(0);
             }
+            // else: no SOI yet and the buffer is small — keep everything for the next read
         }
 
-        private static int IndexOf(byte[] haystack, byte[] needle, int start)
+        private static int IndexOf(byte[] haystack, byte[] needle, int start, int length)
         {
-            for (var i = start; i <= haystack.Length - needle.Length; i++)
+            for (var i = start; i <= length - needle.Length; i++)
             {
                 var ok = true;
                 for (var j = 0; j < needle.Length; j++)
